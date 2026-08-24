@@ -1,0 +1,20 @@
+node_modules
+dist
+dist-ssr
+*.local
+.env
+.env.*
+!.env.example
+.DS_Store
+.vscode/*
+!.vscode/extensions.json
+test-results
+playwright-report
+playwright/.cache
+PRD_extracted.txt
+dev.log
+
+# tsc -b composite build artifacts
+vite.config.js
+vite.config.d.ts
+*.tsbuildinfo

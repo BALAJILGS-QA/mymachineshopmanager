@@ -1,0 +1,111 @@
+# CNC Machine Shop Management System
+
+A compact, responsive web app for a small CNC machine shop to manage
+company-wise **job orders, raw-material stock, production progress, invoices,
+payments and shop-floor expenses** — with a single operational view of what is
+pending, in production, completed, invoiced, paid and spent.
+
+Built to the PRD v1.0 (`CNC_Machine_Shop_Management_PRD_v1.0`).
+
+## Tech stack
+
+| Layer | Choice |
+|-------|--------|
+| Frontend | React 18 + TypeScript + Vite |
+| UI | Tailwind CSS, Lucide icons |
+| Data (server-state) | TanStack Query provider + reactive local store |
+| Forms/validation | React Hook Form pattern + Zod available |
+| Charts | Recharts |
+| Persistence (MVP) | Browser `localStorage` via a repository abstraction |
+| Persistence (production) | Supabase / PostgreSQL — see `docs/supabase-schema.sql` |
+| Hosting | Netlify (static SPA, free tier) |
+| E2E tests | Playwright (desktop + mobile) |
+
+### Why a local store for the MVP?
+The PRD requires a **zero-cost, immediately-deployable** first release. The app
+ships with a `localStorage`-backed repository (`src/data/`) that implements every
+business rule (uniqueness, non-negative stock, outstanding calculation, audit
+logging). This runs as a pure static SPA on Netlify with **no backend and no
+running cost**. All data access goes through `src/data/repo.ts`, so switching to
+Supabase later is a repository swap — the UI is untouched. The full Postgres
+schema (constraints, triggers, RLS) is in `docs/supabase-schema.sql`.
+
+> Data is stored per-browser. Use **Settings → Data & Backup** to export/restore
+> JSON backups, or migrate to Supabase for multi-user/hosted use.
+
+## Getting started
+
+```bash
+npm install
+npm run dev        # http://localhost:5173
+```
+
+Default login: **admin / admin123** (change it in Settings after first sign-in).
+In **Settings → Data & Backup** you can **Load demo data** for a populated example.
+
+## Scripts
+
+| Command | Description |
+|---------|-------------|
+| `npm run dev` | Start the dev server |
+| `npm run build` | Type-check + production build to `dist/` |
+| `npm run preview` | Preview the production build |
+| `npm run lint` | Type-check only |
+| `npm run test:e2e` | Run Playwright smoke tests |
+
+## Features (MVP scope)
+
+- **Dashboard** — KPI cards, cash-flow & expense charts, priority jobs, low-stock
+  alerts, recent payments/expenses. All values computed from transactional data.
+- **Companies** — customer master with codes, GSTIN, active/inactive.
+- **Job Orders** — create/edit, status, priority, due dates, quantities, overdue flag.
+- **Production** — job queue by priority, start/hold/complete/deliver with history.
+- **Materials & Stock** — material master, receipts, issues (with stock guard),
+  adjustments, company-wise + overall balances, low/negative stock validation.
+- **Invoices** — build from completed jobs or manually, line items, discount/tax,
+  status lifecycle, print-friendly view.
+- **Payments** — full/partial/advance, method, auto-recalculated outstanding.
+- **Expenses** — categorised shop-floor expenses with company/job allocation.
+- **Reports** — job, stock, movement, invoice, payment, expense, outstanding —
+  all filterable with **CSV export**.
+- **Settings** — master data (units, material types, expense categories),
+  document numbering, shop profile, currency/tax, backup/restore, password.
+
+## Project structure
+
+```
+src/
+  data/            repository, computations, local store, seed & demo data
+  components/       ui primitives, layout (sidebar/topbar/bottom-nav), common
+  features/         auth, dashboard, companies, jobs, production, materials,
+                    invoices, payments, expenses, reports, settings
+  lib/              formatting, csv, id/number helpers
+  types/            domain model (PRD §7)
+docs/
+  supabase-schema.sql   production Postgres schema (constraints, triggers, RLS)
+e2e/                Playwright smoke tests
+```
+
+## Deployment (Netlify)
+
+The repo includes `netlify.toml` (build `npm run build`, publish `dist`, SPA
+redirect). Connect the GitHub repo in Netlify or deploy via CLI:
+
+```bash
+npm run build
+netlify deploy --prod --dir=dist
+```
+
+## Business rules enforced
+
+Job/invoice/receipt/payment numbers unique · companies with transactions can't be
+deleted (inactivate instead) · stock never silently negative · invoice totals &
+outstanding are system-calculated · positive payment amounts · completed qty ≤
+ordered (unless overproduction enabled) · cancelled financial docs kept in
+history · configurable INR currency.
+
+## Roadmap (PRD Phase 2)
+
+Machine scheduling · operator/utilisation · operation routing · job costing &
+profitability · purchase/supplier management · delivery challans · invoice PDF &
+WhatsApp/email · barcode/QR · multi-branch · payment reminders · PWA/offline.
