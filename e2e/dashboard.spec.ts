@@ -6,7 +6,7 @@ const EMAIL = process.env.APP_EMAIL || 'admin@sreebalajiindustries.com'
 const PASS = process.env.APP_PASS || 'Balaji@2026'
 
 async function login(page: Page) {
-  await page.goto('/login')
+  await page.goto('/')
   const email = page.getByPlaceholder('you@example.com')
   if (!(await email.isVisible().catch(() => false))) test.skip(true, 'not a Supabase build')
   await email.fill(EMAIL)
@@ -18,7 +18,7 @@ async function login(page: Page) {
 test('dashboard company filter partitions KPIs correctly', async ({ page }) => {
   await login(page)
 
-  const unpaidCard = page.getByRole('link').filter({ hasText: 'Unpaid Invoices' })
+  const unpaidCard = page.getByRole('link').filter({ hasText: 'Pending Payments' })
   const filter = page.getByLabel('Filter dashboard by company')
 
   async function readUnpaid(): Promise<number> {
@@ -50,7 +50,8 @@ test('dashboard company filter partitions KPIs correctly', async ({ page }) => {
   expect(nirmal).toBeGreaterThan(0)
   expect(Math.abs(all - (flowra + vahinie + nirmal))).toBeLessThan(50)
 
-  // Chart + records still present under a company scope.
-  await expect(page.getByText('Cash flow (last 6 months)')).toBeVisible()
+  // New chart set + records present under a company scope.
+  await expect(page.getByText('Invoices raised vs Payments received (6 months)')).toBeVisible()
+  await expect(page.getByText('Cash flow: Payments vs Expenses (6 months)')).toBeVisible()
   await expect(page.getByText('Priority jobs')).toBeVisible()
 })

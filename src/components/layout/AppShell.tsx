@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { NavLink, useLocation } from 'react-router-dom'
 import { Cog, LogOut, Menu, MoreHorizontal, X } from 'lucide-react'
 import { clsx } from 'clsx'
@@ -39,7 +39,7 @@ function Brand() {
         <Cog size={20} />
       </div>
       <div className="leading-tight">
-        <p className="text-sm font-bold text-slate-900">CNC Shop</p>
+        <p className="text-sm font-bold text-slate-900">Machine Shop</p>
         <p className="text-2xs text-slate-400">Management System</p>
       </div>
     </div>
@@ -51,6 +51,16 @@ export function AppShell({ children }: { children: ReactNode }) {
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [moreOpen, setMoreOpen] = useState(false)
   const location = useLocation()
+
+  const currentLabel =
+    NAV_ITEMS.find((n) =>
+      n.to === '/app' ? location.pathname === '/app' : location.pathname.startsWith(n.to),
+    )?.label ?? 'Portal'
+
+  // Unique document title per app page.
+  useEffect(() => {
+    document.title = `${currentLabel} · Sree Balaji Industries`
+  }, [currentLabel])
 
   return (
     <div className="min-h-screen">
@@ -102,22 +112,34 @@ export function AppShell({ children }: { children: ReactNode }) {
         </div>
       )}
 
-      {/* Top bar (mobile/tablet) */}
-      <header className="sticky top-0 z-20 flex items-center justify-between border-b border-slate-200 bg-white/90 px-4 py-2.5 backdrop-blur lg:hidden">
-        <button
-          className="rounded-lg p-1.5 text-slate-600 hover:bg-slate-100"
-          onClick={() => setDrawerOpen(true)}
-          aria-label="Open menu"
-        >
-          <Menu size={22} />
-        </button>
-        <span className="text-sm font-semibold text-slate-800">
-          {NAV_ITEMS.find((n) =>
-            n.to === '/app' ? location.pathname === '/app' : location.pathname.startsWith(n.to),
-          )?.label ?? 'CNC Shop'}
-        </span>
-        <div className="h-8 w-8 rounded-full bg-brand-100 text-center text-sm font-semibold leading-8 text-brand-700">
-          {session?.username?.[0]?.toUpperCase() ?? 'A'}
+      {/* Top bar — visible on all sizes; logout sits at the right end */}
+      <header className="sticky top-0 z-20 flex items-center justify-between border-b border-slate-200 bg-white/80 px-4 py-2.5 backdrop-blur lg:ml-60 lg:px-8">
+        <div className="flex items-center gap-2">
+          <button
+            className="rounded-lg p-1.5 text-slate-600 hover:bg-slate-100 lg:hidden"
+            onClick={() => setDrawerOpen(true)}
+            aria-label="Open menu"
+          >
+            <Menu size={22} />
+          </button>
+          <span className="text-sm font-semibold text-slate-800">{currentLabel}</span>
+        </div>
+        <div className="flex items-center gap-2.5">
+          <div className="hidden text-right leading-tight sm:block">
+            <p className="text-xs font-semibold text-slate-700">{session?.username}</p>
+            <p className="text-2xs text-slate-400">{session?.role}</p>
+          </div>
+          <div className="h-8 w-8 rounded-full bg-brand-100 text-center text-sm font-semibold leading-8 text-brand-700">
+            {session?.username?.[0]?.toUpperCase() ?? 'A'}
+          </div>
+          <button
+            onClick={logout}
+            className="btn-secondary btn-sm"
+            title="Sign out"
+          >
+            <LogOut size={15} />
+            <span className="hidden sm:inline">Sign out</span>
+          </button>
         </div>
       </header>
 

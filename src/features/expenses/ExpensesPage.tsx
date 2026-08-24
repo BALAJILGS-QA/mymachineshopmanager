@@ -15,6 +15,7 @@ import {
   inRange,
 } from '@/components/common/Filters'
 import { Modal } from '@/components/ui/Modal'
+import { Pagination, usePagination } from '@/components/common/Pagination'
 import { useToast } from '@/components/ui/Toast'
 import { useConfirm } from '@/components/ui/ConfirmDialog'
 import { useCompanyName, useJobNo } from '@/features/shared/lookups'
@@ -51,6 +52,7 @@ export function ExpensesPage() {
   }, [expenses, company, category, from, to, search])
 
   const total = rows.reduce((s, e) => s + e.amount, 0)
+  const pg = usePagination(rows)
 
   async function del(e: Expense) {
     const ok = await confirm({ message: `Delete expense ${e.expenseNo}?`, danger: true })
@@ -122,7 +124,7 @@ export function ExpensesPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-50">
-              {rows.map((e) => (
+              {pg.pageItems.map((e) => (
                 <tr key={e.id} className="hover:bg-slate-50/60">
                   <td className="td font-mono text-xs text-slate-500">{e.expenseNo}</td>
                   <td className="td">{fmtDate(e.date)}</td>
@@ -150,6 +152,7 @@ export function ExpensesPage() {
             </tbody>
           </ResponsiveTable>
         )}
+        <Pagination pg={pg} />
       </Card>
 
       {editing !== undefined && (

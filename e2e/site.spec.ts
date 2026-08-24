@@ -2,19 +2,19 @@ import { test, expect } from '@playwright/test'
 
 // Public marketing site + SEO. No auth, so this runs in any build mode.
 
-test('landing page renders with SEO metadata and auth CTAs', async ({ page }) => {
+test('landing page renders with merged auth and SEO metadata', async ({ page }) => {
   await page.goto('/')
   await expect(page).toHaveTitle(/Sree Balaji Industries/)
   await expect(page.getByRole('heading', { level: 1 })).toContainText(/tolerance/i)
-  // Sign in / sign up are the primary actions.
-  await expect(page.getByRole('link', { name: 'Create Account' })).toBeVisible()
-  await expect(page.getByRole('link', { name: 'Sign In' }).first()).toBeVisible()
+  // Login is merged into the landing: the auth card and toggle are present.
+  await expect(page.getByRole('button', { name: 'Sign in', exact: true })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Sign Up', exact: true })).toBeVisible()
 
   const desc = page.locator('meta[name="description"]')
   await expect(desc).toHaveAttribute('content', /CNC/)
+  await expect(page.locator('meta[name="keywords"]')).toHaveAttribute('content', /machining/i)
   await expect(page.locator('link[rel="canonical"]')).toHaveAttribute('href', /sreebalajiindustries/)
   await expect(page.locator('meta[property="og:title"]')).toHaveCount(1)
-  // Structured data present.
   await expect(page.locator('script#route-jsonld')).toHaveCount(1)
 })
 

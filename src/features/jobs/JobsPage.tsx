@@ -16,6 +16,7 @@ import {
   DateRangeFilter,
 } from '@/components/common/Filters'
 import { JobStatusBadge, PriorityBadge } from '@/components/common/status'
+import { Pagination, usePagination } from '@/components/common/Pagination'
 import { useToast } from '@/components/ui/Toast'
 import { useConfirm } from '@/components/ui/ConfirmDialog'
 import { useCompanyName } from '@/features/shared/lookups'
@@ -60,6 +61,7 @@ export function JobsPage() {
       .sort((a, b) => (a.orderDate < b.orderDate ? 1 : -1))
   }, [jobs, company, status, from, to, search])
 
+  const pg = usePagination(filtered)
   const today = new Date().toISOString().slice(0, 10)
 
   async function onDelete(j: JobOrder) {
@@ -150,7 +152,7 @@ export function JobsPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-50">
-              {filtered.map((j) => {
+              {pg.pageItems.map((j) => {
                 const overdue =
                   j.dueDate &&
                   j.dueDate < today &&
@@ -197,6 +199,7 @@ export function JobsPage() {
             </tbody>
           </ResponsiveTable>
         )}
+        <Pagination pg={pg} />
       </Card>
 
       {editing !== undefined && <JobForm job={editing} onClose={() => setEditing(undefined)} />}

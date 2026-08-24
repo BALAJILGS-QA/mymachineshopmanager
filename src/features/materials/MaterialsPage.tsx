@@ -19,6 +19,7 @@ import { currency, fmtDate, qty } from '@/lib/format'
 import { downloadCsv } from '@/lib/csv'
 import { PageHeader, ResponsiveTable } from '@/components/common/PageHeader'
 import { Badge, Card, EmptyState } from '@/components/ui/primitives'
+import { Pagination, usePagination } from '@/components/common/Pagination'
 import { useToast } from '@/components/ui/Toast'
 import { useConfirm } from '@/components/ui/ConfirmDialog'
 import { useCompanyName, useJobNo, useMaterialName } from '@/features/shared/lookups'
@@ -315,6 +316,7 @@ function ReceiptsTab() {
   const companyName = useCompanyName()
   const confirm = useConfirm()
   const toast = useToast()
+  const pg = usePagination(receipts)
 
   async function del(id: string) {
     const ok = await confirm({ message: 'Delete this receipt? Stock will be reduced.', danger: true })
@@ -343,7 +345,7 @@ function ReceiptsTab() {
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-50">
-            {receipts.map((r) => (
+            {pg.pageItems.map((r) => (
               <tr key={r.id} className="hover:bg-slate-50/60">
                 <td className="td font-mono text-xs text-slate-500">{r.receiptNo}</td>
                 <td className="td">{fmtDate(r.date)}</td>
@@ -367,6 +369,7 @@ function ReceiptsTab() {
           </tbody>
         </ResponsiveTable>
       )}
+      <Pagination pg={pg} />
     </Card>
   )
 }
@@ -379,6 +382,7 @@ function IssuesTab() {
   const companyName = useCompanyName()
   const confirm = useConfirm()
   const toast = useToast()
+  const pg = usePagination(issues)
 
   async function del(id: string) {
     const ok = await confirm({ message: 'Delete this issue? Stock will be restored.', danger: true })
@@ -405,7 +409,7 @@ function IssuesTab() {
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-50">
-            {issues.map((i) => (
+            {pg.pageItems.map((i) => (
               <tr key={i.id} className="hover:bg-slate-50/60">
                 <td className="td font-mono text-xs text-slate-500">{i.issueNo}</td>
                 <td className="td">{fmtDate(i.date)}</td>
@@ -425,6 +429,7 @@ function IssuesTab() {
           </tbody>
         </ResponsiveTable>
       )}
+      <Pagination pg={pg} />
     </Card>
   )
 }
@@ -434,6 +439,7 @@ function AdjustmentsTab() {
   const adjustments = useDb((db) => db.adjustments)
   const materialName = useMaterialName()
   const companyName = useCompanyName()
+  const pg = usePagination(adjustments)
 
   return (
     <Card>
@@ -452,7 +458,7 @@ function AdjustmentsTab() {
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-50">
-            {adjustments.map((a) => (
+            {pg.pageItems.map((a) => (
               <tr key={a.id} className="hover:bg-slate-50/60">
                 <td className="td font-mono text-xs text-slate-500">{a.adjNo}</td>
                 <td className="td">{fmtDate(a.date)}</td>
@@ -470,6 +476,7 @@ function AdjustmentsTab() {
           </tbody>
         </ResponsiveTable>
       )}
+      <Pagination pg={pg} />
     </Card>
   )
 }

@@ -5,9 +5,11 @@ import {
   ArrowRight,
   ClipboardList,
   Factory,
+  FileText,
   IndianRupee,
   PackageX,
   Receipt,
+  Send,
   Wallet,
   CheckCircle2,
 } from 'lucide-react'
@@ -24,12 +26,13 @@ import { currency, fmtDate, qty } from '@/lib/format'
 import { Card, Select } from '@/components/ui/primitives'
 import { PageHeader } from '@/components/common/PageHeader'
 import { JobStatusBadge, PriorityBadge } from '@/components/common/status'
-import { useCompanyName } from '@/features/shared/lookups'
+import { useCompanyName, useMaterialName } from '@/features/shared/lookups'
 import {
   Bar,
   BarChart,
   CartesianGrid,
   Cell,
+  Legend,
   Pie,
   PieChart,
   ResponsiveContainer,
@@ -38,59 +41,107 @@ import {
   YAxis,
 } from 'recharts'
 
-const PIE_COLORS = ['#f59e0b', '#3b82f6', '#8b5cf6', '#10b981', '#64748b', '#ef4444', '#0ea5e9']
+const PIE_COLORS = ['#0d9488', '#0ea5e9', '#8b5cf6', '#f59e0b', '#ef4444', '#64748b', '#22c55e']
+
+function lastMonths(n: number) {
+  const months: { key: string; label: string }[] = []
+  const now = new Date()
+  for (let i = n - 1; i >= 0; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1)
+    months.push({ key: format(d, 'yyyy-MM'), label: format(d, 'MMM') })
+  }
+  return months
+}
 
 export function DashboardPage() {
   const jobs = useDb((db) => db.jobs)
   const invoices = useDb((db) => db.invoices)
   const payments = useDb((db) => db.payments)
   const expenses = useDb((db) => db.expenses)
+  const issues = useDb((db) => db.issues)
   const materials = useDb((db) => db.materials)
   const companies = useDb((db) => db.companies)
   const stamp = useDb((db) => db.receipts.length + db.issues.length + db.adjustments.length)
   const companyName = useCompanyName()
+  const materialName = useMaterialName()
 
-  // '' = all companies. Drives every KPI, chart and list below.
   const [company, setCompany] = useState('')
   const monthStart = format(startOfMonth(new Date()), 'yyyy-MM-dd')
 
-  const jobsF = useMemo(
-    () => (company ? jobs.filter((j) => j.companyId === company) : jobs),
-    [jobs, company],
-  )
-  const invoicesF = useMemo(
-    () => (company ? invoices.filter((i) => i.companyId === company) : invoices),
-    [invoices, company],
-  )
-  const paymentsF = useMemo(
-    () => (company ? payments.filter((p) => p.companyId === company) : payments),
-    [payments, company],
-  )
-  const expensesF = useMemo(
-    () => (company ? expenses.filter((e) => e.companyId === company) : expenses),
-    [expenses, company],
-  )
+  const jobsF = useMemo(() => (company ? jobs.filter((j) => j.companyId === company) : jobs), [jobs, company])
+  const invoicesF = useMemo(() => (company ? invoices.filter((i) => i.companyId === company) : invoices), [invoices, company])
+  const paymentsF = useMemo(() => (company ? payments.filter((p) => p.companyId === company) : payments), [payments, company])
+  const expensesF = useMemo(() => (company ? expenses.filter((e) => e.companyId === company) : expenses), [expenses, company])
+  const issuesF = useMemo(() => (company ? issues.filter((i) => i.companyId === company) : issues), [issues, company])
 
   const kpi = useMemo(() => {
     const db = getDb()
     const open = jobsF.filter((j) => ['Pending', 'Draft'].includes(j.status)).length
     const inProd = jobsF.filter((j) => j.status === 'In Progress').length
-    const completedThisPeriod = jobsF.filter(
-      (j) => j.completedAt && j.completedAt.slice(0, 10) >= monthStart,
-    ).length
+    const invoicedThisMonth = invoicesF
+      .filter((i) => i.status !== 'Cancelled' && i.date >= monthStart)
+      .reduce((s, i) => s + computeInvoice(i, payments).total, 0)
     const rawValue = company ? companyMaterialValue(db, company) : totalRawMaterialValue(db)
-    const unpaid = invoicesF
+    const pending = invoicesF
       .filter((i) => i.status !== 'Cancelled')
       .reduce((s, i) => s + computeInvoice(i, payments).outstanding, 0)
-    const paymentsThisMonth = paymentsF
-      .filter((p) => p.date >= monthStart)
-      .reduce((s, p) => s + p.amount, 0)
-    const expensesThisMonth = expensesF
-      .filter((e) => e.date >= monthStart)
-      .reduce((s, e) => s + e.amount, 0)
-    return { open, inProd, completedThisPeriod, rawValue, unpaid, paymentsThisMonth, expensesThisMonth }
+    const paymentsThisMonth = paymentsF.filter((p) => p.date >= monthStart).reduce((s, p) => s + p.amount, 0)
+    const expensesThisMonth = expensesF.filter((e) => e.date >= monthStart).reduce((s, e) => s + e.amount, 0)
+    return { open, inProd, invoicedThisMonth, rawValue, pending, paymentsThisMonth, expensesThisMonth }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [jobsF, invoicesF, paymentsF, expensesF, payments, stamp, monthStart, company])
+
+  // Invoices raised vs Payments received — last 6 months.
+  const invVsPay = useMemo(() => {
+    const months = lastMonths(6).map((m) => ({ ...m, invoiced: 0, received: 0 }))
+    const idx = new Map(months.map((m, i) => [m.key, i]))
+    invoicesF
+      .filter((i) => i.status !== 'Cancelled')
+      .forEach((i) => {
+        const k = i.date.slice(0, 7)
+        if (idx.has(k)) months[idx.get(k)!].invoiced += computeInvoice(i, payments).total
+      })
+    paymentsF.forEach((p) => {
+      const k = p.date.slice(0, 7)
+      if (idx.has(k)) months[idx.get(k)!].received += p.amount
+    })
+    return months
+  }, [invoicesF, paymentsF, payments])
+
+  // Cash flow: payments vs expenses — last 6 months.
+  const cashFlow = useMemo(() => {
+    const months = lastMonths(6).map((m) => ({ ...m, payments: 0, expenses: 0 }))
+    const idx = new Map(months.map((m, i) => [m.key, i]))
+    paymentsF.forEach((p) => {
+      const k = p.date.slice(0, 7)
+      if (idx.has(k)) months[idx.get(k)!].payments += p.amount
+    })
+    expensesF.forEach((e) => {
+      const k = e.date.slice(0, 7)
+      if (idx.has(k)) months[idx.get(k)!].expenses += e.amount
+    })
+    return months
+  }, [paymentsF, expensesF])
+
+  // Materials dispatched (issued to jobs) — last 6 months.
+  const dispatched = useMemo(() => {
+    const months = lastMonths(6).map((m) => ({ ...m, qty: 0, count: 0 }))
+    const idx = new Map(months.map((m, i) => [m.key, i]))
+    issuesF.forEach((it) => {
+      const k = it.date.slice(0, 7)
+      if (idx.has(k)) {
+        months[idx.get(k)!].qty += it.quantity
+        months[idx.get(k)!].count += 1
+      }
+    })
+    return months
+  }, [issuesF])
+
+  const expenseByCategory = useMemo(() => {
+    const map = new Map<string, number>()
+    expensesF.filter((e) => e.date >= monthStart).forEach((e) => map.set(e.category, (map.get(e.category) ?? 0) + e.amount))
+    return [...map.entries()].map(([name, value]) => ({ name, value }))
+  }, [expensesF, monthStart])
 
   const pendingJobs = useMemo(
     () =>
@@ -113,42 +164,8 @@ export function DashboardPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [materials, stamp, company])
 
-  const recentPayments = useMemo(
-    () => [...paymentsF].sort((a, b) => (a.date < b.date ? 1 : -1)).slice(0, 5),
-    [paymentsF],
-  )
-  const recentExpenses = useMemo(
-    () => [...expensesF].sort((a, b) => (a.date < b.date ? 1 : -1)).slice(0, 5),
-    [expensesF],
-  )
-
-  const expenseByCategory = useMemo(() => {
-    const map = new Map<string, number>()
-    expensesF
-      .filter((e) => e.date >= monthStart)
-      .forEach((e) => map.set(e.category, (map.get(e.category) ?? 0) + e.amount))
-    return [...map.entries()].map(([name, value]) => ({ name, value }))
-  }, [expensesF, monthStart])
-
-  const cashFlow = useMemo(() => {
-    // last 6 months payments vs expenses
-    const months: { key: string; label: string; payments: number; expenses: number }[] = []
-    const now = new Date()
-    for (let i = 5; i >= 0; i--) {
-      const d = new Date(now.getFullYear(), now.getMonth() - i, 1)
-      months.push({ key: format(d, 'yyyy-MM'), label: format(d, 'MMM'), payments: 0, expenses: 0 })
-    }
-    const idx = new Map(months.map((m, i) => [m.key, i]))
-    paymentsF.forEach((p) => {
-      const k = p.date.slice(0, 7)
-      if (idx.has(k)) months[idx.get(k)!].payments += p.amount
-    })
-    expensesF.forEach((e) => {
-      const k = e.date.slice(0, 7)
-      if (idx.has(k)) months[idx.get(k)!].expenses += e.amount
-    })
-    return months
-  }, [paymentsF, expensesF])
+  const recentPayments = useMemo(() => [...paymentsF].sort((a, b) => (a.date < b.date ? 1 : -1)).slice(0, 5), [paymentsF])
+  const recentIssues = useMemo(() => [...issuesF].sort((a, b) => (a.date < b.date ? 1 : -1)).slice(0, 5), [issuesF])
 
   const scopeLabel = company ? companyName(company) : 'All companies'
 
@@ -158,119 +175,81 @@ export function DashboardPage() {
         title="Dashboard"
         subtitle={`${fmtDate(format(new Date(), 'yyyy-MM-dd'))} · ${scopeLabel}`}
         actions={
-          <div>
-            <label className="label sr-only" htmlFor="dash-company">
-              Company
-            </label>
-            <Select
-              id="dash-company"
-              value={company}
-              onChange={(e) => setCompany(e.target.value)}
-              className="min-w-[12rem]"
-              aria-label="Filter dashboard by company"
-            >
-              <option value="">All companies</option>
-              {companies.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                </option>
-              ))}
-            </Select>
-          </div>
+          <Select
+            value={company}
+            onChange={(e) => setCompany(e.target.value)}
+            className="min-w-[12rem]"
+            aria-label="Filter dashboard by company"
+          >
+            <option value="">All companies</option>
+            {companies.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
+            ))}
+          </Select>
         }
       />
 
       {/* KPI cards */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-4">
+        <Kpi icon={FileText} tone="blue" label="Invoiced (month)" value={currency(kpi.invoicedThisMonth)} to="/app/invoices" />
+        <Kpi icon={Wallet} tone="green" label="Payments (month)" value={currency(kpi.paymentsThisMonth)} to="/app/payments" />
+        <Kpi icon={IndianRupee} tone="red" label="Pending Payments" value={currency(kpi.pending)} to="/app/invoices" />
+        <Kpi icon={Receipt} tone="amber" label="Expenses (month)" value={currency(kpi.expensesThisMonth)} to="/app/expenses" />
         <Kpi icon={ClipboardList} tone="amber" label="Open Job Orders" value={String(kpi.open)} to="/app/jobs" />
         <Kpi icon={Factory} tone="blue" label="In Production" value={String(kpi.inProd)} to="/app/production" />
-        <Kpi
-          icon={CheckCircle2}
-          tone="green"
-          label="Completed (month)"
-          value={String(kpi.completedThisPeriod)}
-          to="/app/jobs"
-        />
-        <Kpi
-          icon={PackageX}
-          tone="violet"
-          label="Raw Material Value"
-          value={currency(kpi.rawValue)}
-          to="/app/materials"
-        />
-        <Kpi
-          icon={IndianRupee}
-          tone="red"
-          label="Unpaid Invoices"
-          value={currency(kpi.unpaid)}
-          to="/app/invoices"
-        />
-        <Kpi
-          icon={Wallet}
-          tone="green"
-          label="Payments (month)"
-          value={currency(kpi.paymentsThisMonth)}
-          to="/app/payments"
-        />
-        <Kpi
-          icon={Receipt}
-          tone="slate"
-          label="Expenses (month)"
-          value={currency(kpi.expensesThisMonth)}
-          to="/app/expenses"
-        />
-        <Kpi
-          icon={IndianRupee}
-          tone="blue"
-          label="Net (month)"
-          value={currency(kpi.paymentsThisMonth - kpi.expensesThisMonth)}
-          to="/app/reports"
-        />
+        <Kpi icon={PackageX} tone="violet" label="Raw Material Value" value={currency(kpi.rawValue)} to="/app/materials" />
+        <Kpi icon={CheckCircle2} tone="green" label="Net (month)" value={currency(kpi.paymentsThisMonth - kpi.expensesThisMonth)} to="/app/reports" />
       </div>
 
-      {/* Charts */}
+      {/* Charts row 1 */}
       <div className="mt-4 grid grid-cols-1 gap-3 lg:grid-cols-3">
-        <Card className="p-4 lg:col-span-2">
-          <h3 className="mb-3 text-sm font-semibold text-slate-800">Cash flow (last 6 months)</h3>
-          <div className="h-56">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={cashFlow} barGap={2}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#eef2f7" />
-                <XAxis dataKey="label" tick={{ fontSize: 11 }} tickLine={false} axisLine={false} />
-                <YAxis tick={{ fontSize: 11 }} tickLine={false} axisLine={false} width={44} />
-                <Tooltip formatter={(v: number) => currency(v)} />
-                <Bar dataKey="payments" name="Payments" fill="#10b981" radius={[3, 3, 0, 0]} />
-                <Bar dataKey="expenses" name="Expenses" fill="#f59e0b" radius={[3, 3, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </Card>
-        <Card className="p-4">
-          <h3 className="mb-3 text-sm font-semibold text-slate-800">Expenses by category (month)</h3>
-          {expenseByCategory.length === 0 ? (
-            <p className="py-16 text-center text-xs text-slate-400">No expenses this month</p>
-          ) : (
-            <div className="h-56">
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie
-                    data={expenseByCategory}
-                    dataKey="value"
-                    nameKey="name"
-                    innerRadius={40}
-                    outerRadius={72}
-                    paddingAngle={2}
-                  >
-                    {expenseByCategory.map((_, i) => (
-                      <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
-                    ))}
-                  </Pie>
-                  <Tooltip formatter={(v: number) => currency(v)} />
-                </PieChart>
-              </ResponsiveContainer>
-            </div>
-          )}
-        </Card>
+        <ChartCard title="Invoices raised vs Payments received (6 months)" className="lg:col-span-2">
+          <BarChart data={invVsPay} barGap={2}>
+            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#eef2f7" />
+            <XAxis dataKey="label" tick={{ fontSize: 11 }} tickLine={false} axisLine={false} />
+            <YAxis tick={{ fontSize: 11 }} tickLine={false} axisLine={false} width={48} />
+            <Tooltip formatter={(v: number) => currency(v)} />
+            <Legend wrapperStyle={{ fontSize: 12 }} />
+            <Bar dataKey="invoiced" name="Invoiced" fill="#0ea5e9" radius={[3, 3, 0, 0]} />
+            <Bar dataKey="received" name="Received" fill="#0d9488" radius={[3, 3, 0, 0]} />
+          </BarChart>
+        </ChartCard>
+        <ChartCard title="Expenses by category (month)" empty={expenseByCategory.length === 0} emptyText="No expenses this month">
+          <PieChart>
+            <Pie data={expenseByCategory} dataKey="value" nameKey="name" innerRadius={40} outerRadius={72} paddingAngle={2}>
+              {expenseByCategory.map((_, i) => (
+                <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
+              ))}
+            </Pie>
+            <Tooltip formatter={(v: number) => currency(v)} />
+          </PieChart>
+        </ChartCard>
+      </div>
+
+      {/* Charts row 2 */}
+      <div className="mt-3 grid grid-cols-1 gap-3 lg:grid-cols-2">
+        <ChartCard title="Materials dispatched per month (qty issued)" empty={dispatched.every((d) => d.qty === 0)} emptyText="No material issues in this period">
+          <BarChart data={dispatched}>
+            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#eef2f7" />
+            <XAxis dataKey="label" tick={{ fontSize: 11 }} tickLine={false} axisLine={false} />
+            <YAxis tick={{ fontSize: 11 }} tickLine={false} axisLine={false} width={44} />
+            <Tooltip formatter={(v: number) => qty(v)} />
+            <Bar dataKey="qty" name="Dispatched" fill="#8b5cf6" radius={[3, 3, 0, 0]} />
+          </BarChart>
+        </ChartCard>
+        <ChartCard title="Cash flow: Payments vs Expenses (6 months)">
+          <BarChart data={cashFlow} barGap={2}>
+            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#eef2f7" />
+            <XAxis dataKey="label" tick={{ fontSize: 11 }} tickLine={false} axisLine={false} />
+            <YAxis tick={{ fontSize: 11 }} tickLine={false} axisLine={false} width={48} />
+            <Tooltip formatter={(v: number) => currency(v)} />
+            <Legend wrapperStyle={{ fontSize: 12 }} />
+            <Bar dataKey="payments" name="Payments" fill="#10b981" radius={[3, 3, 0, 0]} />
+            <Bar dataKey="expenses" name="Expenses" fill="#f59e0b" radius={[3, 3, 0, 0]} />
+          </BarChart>
+        </ChartCard>
       </div>
 
       {/* Lists */}
@@ -309,9 +288,7 @@ export function DashboardPage() {
                 <div key={m.id} className="flex items-center justify-between py-2">
                   <div>
                     <p className="text-sm font-medium text-slate-800">{m.name}</p>
-                    <p className="text-2xs text-slate-400">
-                      Reorder at {m.reorderLevel ?? 0} {m.unit}
-                    </p>
+                    <p className="text-2xs text-slate-400">Reorder at {m.reorderLevel ?? 0} {m.unit}</p>
                   </div>
                   <span className={`text-sm font-semibold ${bal < 0 ? 'text-red-600' : 'text-amber-600'}`}>
                     {qty(bal)} {m.unit}
@@ -332,9 +309,7 @@ export function DashboardPage() {
                 <div key={p.id} className="flex items-center justify-between py-2">
                   <div>
                     <p className="text-sm font-medium text-slate-800">{companyName(p.companyId)}</p>
-                    <p className="text-2xs text-slate-400">
-                      {fmtDate(p.date)} · {p.method}
-                    </p>
+                    <p className="text-2xs text-slate-400">{fmtDate(p.date)} · {p.method}</p>
                   </div>
                   <span className="text-sm font-semibold text-emerald-600">{currency(p.amount)}</span>
                 </div>
@@ -344,20 +319,18 @@ export function DashboardPage() {
         </Card>
 
         <Card className="p-4">
-          <ListHeader title="Recent expenses" to="/app/expenses" />
-          {recentExpenses.length === 0 ? (
-            <Empty text="No expenses yet" />
+          <ListHeader title="Recent material dispatches" to="/app/materials" icon={<Send size={15} className="text-violet-500" />} />
+          {recentIssues.length === 0 ? (
+            <Empty text="No material issues yet" />
           ) : (
             <div className="mt-2 divide-y divide-slate-50">
-              {recentExpenses.map((e) => (
-                <div key={e.id} className="flex items-center justify-between py-2">
+              {recentIssues.map((it) => (
+                <div key={it.id} className="flex items-center justify-between py-2">
                   <div>
-                    <p className="text-sm font-medium text-slate-800">{e.category}</p>
-                    <p className="text-2xs text-slate-400">
-                      {fmtDate(e.date)} · {e.vendor || e.method}
-                    </p>
+                    <p className="text-sm font-medium text-slate-800">{materialName(it.materialId)}</p>
+                    <p className="text-2xs text-slate-400">{fmtDate(it.date)} · {it.issueNo}</p>
                   </div>
-                  <span className="text-sm font-semibold text-slate-700">{currency(e.amount)}</span>
+                  <span className="text-sm font-semibold text-slate-700">{qty(it.quantity)} {it.unit}</span>
                 </div>
               ))}
             </div>
@@ -370,7 +343,7 @@ export function DashboardPage() {
 
 const TONES: Record<string, string> = {
   amber: 'bg-amber-50 text-amber-600',
-  blue: 'bg-blue-50 text-blue-600',
+  blue: 'bg-sky-50 text-sky-600',
   green: 'bg-emerald-50 text-emerald-600',
   violet: 'bg-violet-50 text-violet-600',
   red: 'bg-red-50 text-red-600',
@@ -401,6 +374,35 @@ function Kpi({
   )
 }
 
+function ChartCard({
+  title,
+  children,
+  className,
+  empty,
+  emptyText,
+}: {
+  title: string
+  children: React.ReactElement
+  className?: string
+  empty?: boolean
+  emptyText?: string
+}) {
+  return (
+    <Card className={`p-4 ${className ?? ''}`}>
+      <h3 className="mb-3 text-sm font-semibold text-slate-800">{title}</h3>
+      <div className="h-56">
+        {empty ? (
+          <Empty text={emptyText ?? 'No data'} tall />
+        ) : (
+          <ResponsiveContainer width="100%" height="100%">
+            {children}
+          </ResponsiveContainer>
+        )}
+      </div>
+    </Card>
+  )
+}
+
 function ListHeader({ title, to, icon }: { title: string; to: string; icon?: React.ReactNode }) {
   return (
     <div className="flex items-center justify-between">
@@ -415,6 +417,6 @@ function ListHeader({ title, to, icon }: { title: string; to: string; icon?: Rea
   )
 }
 
-function Empty({ text }: { text: string }) {
-  return <p className="py-8 text-center text-xs text-slate-400">{text}</p>
+function Empty({ text, tall }: { text: string; tall?: boolean }) {
+  return <p className={`text-center text-xs text-slate-400 ${tall ? 'py-20' : 'py-8'}`}>{text}</p>
 }

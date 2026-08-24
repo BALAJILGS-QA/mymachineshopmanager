@@ -13,6 +13,7 @@ import {
   FilterBar,
   inRange,
 } from '@/components/common/Filters'
+import { Pagination, usePagination } from '@/components/common/Pagination'
 import { useCompanyName, useMaterialName } from '@/features/shared/lookups'
 
 type ReportKey =
@@ -166,6 +167,8 @@ export function ReportsPage() {
     }
   }, [report, company, from, to, db, companyName, materialName])
 
+  const pg = usePagination(rows as unknown[])
+
   function isMoney(header: string) {
     return ['Total', 'Paid', 'Outstanding', 'Amount', 'Value'].includes(header)
   }
@@ -226,7 +229,7 @@ export function ReportsPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-50">
-              {(rows as never[]).map((row, i) => (
+              {(pg.pageItems as never[]).map((row, i) => (
                 <tr key={i} className="hover:bg-slate-50/60">
                   {columns.map((c) => {
                     const raw = c.value(row)
@@ -248,6 +251,7 @@ export function ReportsPage() {
             </tbody>
           </ResponsiveTable>
         )}
+        <Pagination pg={pg} />
       </Card>
     </div>
   )

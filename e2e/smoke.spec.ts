@@ -5,7 +5,8 @@ import { test, expect, type Page } from '@playwright/test'
 // complete job, invoice, payment, expense, and dashboard/report sanity.
 
 async function login(page: Page) {
-  await page.goto('/login')
+  // Login is merged into the landing page.
+  await page.goto('/')
   await page.getByPlaceholder('••••••••').fill('admin123')
   await page.getByRole('button', { name: 'Sign in', exact: true }).click()
   await expect(page.getByRole('heading', { name: 'Dashboard' })).toBeVisible()
@@ -30,10 +31,11 @@ test('login shows the dashboard', async ({ page }) => {
 
 test('sign up creates an account and enters the app (local mode)', async ({ page, viewport }) => {
   test.skip((viewport?.width ?? 0) < 1024, 'desktop only')
-  await page.goto('/signup')
+  await page.goto('/')
   // Local build shows a username field (Supabase build would show email).
   const isSupabase = await page.getByPlaceholder('you@example.com').isVisible().catch(() => false)
   test.skip(isSupabase, 'local-mode sign-up test')
+  await page.getByRole('button', { name: 'Sign Up', exact: true }).click()
   await page.getByLabel('Username').fill('owner')
   await page.getByLabel('Password').fill('secret123')
   await page.getByRole('button', { name: 'Create account' }).click()

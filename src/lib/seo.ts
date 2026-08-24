@@ -8,6 +8,7 @@ export interface SeoInput {
   title: string
   description: string
   path: string // e.g. '/', '/blog', '/blog/slug'
+  keywords?: string
   image?: string
   type?: 'website' | 'article'
   jsonLd?: Record<string, unknown> | Record<string, unknown>[]
@@ -42,6 +43,7 @@ export function useSeo(input: SeoInput): void {
     title,
     description,
     path,
+    keywords,
     image = DEFAULT_IMAGE,
     type = 'website',
     jsonLd,
@@ -54,6 +56,7 @@ export function useSeo(input: SeoInput): void {
     document.title = fullTitle
 
     upsertMeta('name', 'description', description)
+    if (keywords) upsertMeta('name', 'keywords', keywords)
     upsertMeta('name', 'robots', noindex ? 'noindex,nofollow' : 'index,follow')
     upsertLink('canonical', url)
 
@@ -78,7 +81,7 @@ export function useSeo(input: SeoInput): void {
       script.text = JSON.stringify(jsonLd)
       document.head.appendChild(script)
     }
-  }, [title, description, path, image, type, noindex, JSON.stringify(jsonLd)])
+  }, [title, description, path, keywords, image, type, noindex, JSON.stringify(jsonLd)])
 }
 
 export const SITE = { SITE_NAME, BASE_URL, DEFAULT_IMAGE }

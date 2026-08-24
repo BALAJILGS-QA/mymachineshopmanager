@@ -5,7 +5,7 @@ const EMAIL = process.env.APP_EMAIL || 'admin@sreebalajiindustries.com'
 const PASS = process.env.APP_PASS || 'Balaji@2026'
 
 test('imported invoices and payments render', async ({ page }) => {
-  await page.goto('/login')
+  await page.goto('/')
   const email = page.getByPlaceholder('you@example.com')
   if (!(await email.isVisible().catch(() => false))) test.skip(true, 'not Supabase build')
   await email.fill(EMAIL)

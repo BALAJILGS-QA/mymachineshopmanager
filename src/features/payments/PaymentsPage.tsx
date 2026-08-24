@@ -13,6 +13,7 @@ import {
   SearchBox,
   inRange,
 } from '@/components/common/Filters'
+import { Pagination, usePagination } from '@/components/common/Pagination'
 import { useToast } from '@/components/ui/Toast'
 import { useConfirm } from '@/components/ui/ConfirmDialog'
 import { useCompanyName } from '@/features/shared/lookups'
@@ -48,6 +49,7 @@ export function PaymentsPage() {
   }, [payments, company, from, to, search])
 
   const total = rows.reduce((s, p) => s + p.amount, 0)
+  const pg = usePagination(rows)
 
   async function del(id: string) {
     const ok = await confirm({
@@ -113,7 +115,7 @@ export function PaymentsPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-50">
-              {rows.map((p) => (
+              {pg.pageItems.map((p) => (
                 <tr key={p.id} className="hover:bg-slate-50/60">
                   <td className="td font-mono text-xs text-slate-500">{p.paymentNo}</td>
                   <td className="td">{fmtDate(p.date)}</td>
@@ -136,6 +138,7 @@ export function PaymentsPage() {
             </tbody>
           </ResponsiveTable>
         )}
+        <Pagination pg={pg} />
       </Card>
 
       {show && <PaymentForm onClose={() => setShow(false)} />}

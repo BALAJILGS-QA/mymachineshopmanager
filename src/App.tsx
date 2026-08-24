@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react'
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { Loader2 } from 'lucide-react'
 import { useAuth } from './features/auth/auth'
-import { AuthPage } from './features/auth/LoginPage'
 import { AppShell } from './components/layout/AppShell'
 import { hydrateFromRemote } from './data/store'
 import { setSyncErrorHandler } from './data/backend'
@@ -37,19 +36,13 @@ export default function App() {
       <Route path="/" element={<LandingPage />} />
       <Route path="/blog" element={<BlogListPage />} />
       <Route path="/blog/:slug" element={<BlogPostPage />} />
-      <Route path="/login" element={<AuthGate mode="signin" />} />
-      <Route path="/signup" element={<AuthGate mode="signup" />} />
+      {/* Login is merged into the landing page. */}
+      <Route path="/login" element={<Navigate to="/" replace />} />
+      <Route path="/signup" element={<Navigate to="/" replace />} />
       <Route path="/app/*" element={<Portal />} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   )
-}
-
-function AuthGate({ mode }: { mode: 'signin' | 'signup' }) {
-  const { session, loading } = useAuth()
-  if (loading) return <FullScreenLoader label="Starting…" />
-  if (session) return <Navigate to="/app" replace />
-  return <AuthPage mode={mode} />
 }
 
 // The authenticated management portal — gates on auth, hydrates the store
@@ -77,7 +70,7 @@ function Portal() {
   }, [supabaseMode, session, hydrated, toast])
 
   if (loading) return <FullScreenLoader label="Starting…" />
-  if (!session) return <Navigate to="/login" replace />
+  if (!session) return <Navigate to="/" replace />
   if (!hydrated) return <FullScreenLoader label="Loading your shop data…" />
 
   return (

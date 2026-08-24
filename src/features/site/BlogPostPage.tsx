@@ -52,6 +52,7 @@ export function BlogPostPage() {
     path: `/blog/${slug ?? ''}`,
     title: post?.title ?? 'Article',
     description: post?.excerpt ?? '',
+    keywords: post ? `${post.tags.join(', ')}, CNC, machine shop, Sree Balaji Industries` : undefined,
     type: 'article',
     noindex: !post,
     jsonLd: post

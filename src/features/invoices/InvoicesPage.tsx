@@ -21,6 +21,7 @@ import { PageHeader, ResponsiveTable } from '@/components/common/PageHeader'
 import { Card, EmptyState, Select } from '@/components/ui/primitives'
 import { CompanyFilter, FilterBar, SearchBox } from '@/components/common/Filters'
 import { InvoiceStatusBadge } from '@/components/common/status'
+import { Pagination, usePagination } from '@/components/common/Pagination'
 import { useToast } from '@/components/ui/Toast'
 import { useConfirm } from '@/components/ui/ConfirmDialog'
 import { useCompanyName } from '@/features/shared/lookups'
@@ -55,6 +56,8 @@ export function InvoicesPage() {
       .map((inv) => ({ inv, c: computeInvoice(inv, payments) }))
       .sort((a, b) => (a.inv.date < b.inv.date ? 1 : -1))
   }, [invoices, payments, company, status, search])
+
+  const pg = usePagination(rows)
 
   async function cancel(inv: Invoice) {
     const ok = await confirm({
@@ -137,7 +140,7 @@ export function InvoicesPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-50">
-              {rows.map(({ inv, c }) => (
+              {pg.pageItems.map(({ inv, c }) => (
                 <tr key={inv.id} className="hover:bg-slate-50/60">
                   <td className="td font-mono text-xs font-semibold text-slate-700">
                     {inv.invoiceNo}
@@ -202,6 +205,7 @@ export function InvoicesPage() {
             </tbody>
           </ResponsiveTable>
         )}
+        <Pagination pg={pg} />
       </Card>
 
       {editing !== undefined && (

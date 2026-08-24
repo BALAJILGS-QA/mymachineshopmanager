@@ -1,22 +1,29 @@
-/* Marketing site — "Industrial Precision" theme. Scoped under .site so it never
-   touches the internal app's light UI. */
+/* Marketing / auth site — light gradient theme. Scoped under .site so it never
+   touches the internal app's own styling. Blog & landing read these variables,
+   so re-theming happens centrally here. */
 
 .site {
-  --ink: #e7ebf2;
-  --ink-dim: #9aa6b6;
-  --ink-faint: #5f6b7c;
-  --bg: #0a0d12;
-  --bg-2: #0f141b;
-  --surface: #141b24;
-  --line: #232c38;
-  --amber: #ff7a1a;
-  --amber-soft: #ffb37a;
-  --steel: #4cc4f0;
+  --ink: #14231f;
+  --ink-dim: #4b5b57;
+  --ink-faint: #8ea09b;
+  --bg: #f4faf8;
+  --bg-2: #eaf3f0;
+  --surface: #ffffff;
+  --line: #dcebe6;
+  --amber: #0f766e; /* teal accent, readable on light */
+  --amber-soft: #0d9488;
+  --steel: #0891b2;
+  --brand: #0d9488;
 
-  background-color: var(--bg);
   color: var(--ink);
   font-family: 'IBM Plex Sans', system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
+  background:
+    radial-gradient(52% 42% at 12% -4%, rgba(20, 184, 166, 0.16), transparent 60%),
+    radial-gradient(48% 40% at 104% 6%, rgba(16, 185, 129, 0.14), transparent 60%),
+    radial-gradient(60% 50% at 50% 108%, rgba(8, 145, 178, 0.1), transparent 60%),
+    linear-gradient(180deg, #f6fbfa 0%, #e9f4f1 100%);
+  background-attachment: fixed;
 }
 
 .site .display {
@@ -34,23 +41,26 @@
   color: var(--amber);
 }
 
-/* Blueprint grid + radial glow atmosphere */
+/* Gradient text accent for key words */
+.site .grad {
+  background: linear-gradient(100deg, #0f766e, #14b8a6 50%, #10b981);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* Faint precision grid on light */
 .blueprint {
   background-image:
-    linear-gradient(rgba(76, 196, 240, 0.05) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(76, 196, 240, 0.05) 1px, transparent 1px);
+    linear-gradient(rgba(13, 148, 136, 0.06) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(13, 148, 136, 0.06) 1px, transparent 1px);
   background-size: 34px 34px;
 }
 .glow-amber {
-  background: radial-gradient(60% 60% at 50% 0%, rgba(255, 122, 26, 0.18), transparent 70%);
+  background: radial-gradient(60% 60% at 50% 0%, rgba(20, 184, 166, 0.14), transparent 70%);
 }
 .grain::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  opacity: 0.035;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='3'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  content: none;
 }
 
 /* Entrance animation with stagger */
@@ -69,18 +79,13 @@
 .site .d5 { animation-delay: 0.45s; }
 .site .d6 { animation-delay: 0.55s; }
 
-/* Reveal on scroll */
 .reveal {
   opacity: 0;
   transform: translateY(22px);
   transition: opacity 0.6s ease, transform 0.6s cubic-bezier(0.22, 1, 0.36, 1);
 }
-.reveal.in {
-  opacity: 1;
-  transform: none;
-}
+.reveal.in { opacity: 1; transform: none; }
 
-/* Slow rotating precision gear */
 @keyframes spin-slow { to { transform: rotate(360deg); } }
 .spin-slow { animation: spin-slow 26s linear infinite; }
 
@@ -90,24 +95,25 @@
   display: inline-flex;
   align-items: center;
   gap: 0.5rem;
-  border-radius: 9px;
-  padding: 0.7rem 1.15rem;
+  border-radius: 10px;
+  padding: 0.72rem 1.2rem;
   font-weight: 600;
   font-size: 0.92rem;
-  transition: transform 0.15s ease, background 0.2s ease, border-color 0.2s ease;
+  transition: transform 0.15s ease, box-shadow 0.2s ease, background 0.2s ease, border-color 0.2s ease;
 }
 .site-btn:active { transform: translateY(1px); }
 .site-btn-primary {
-  background: var(--amber);
-  color: #1a0e04;
-  box-shadow: 0 10px 30px -12px rgba(255, 122, 26, 0.6);
+  background: linear-gradient(135deg, #14b8a6, #0d9488 55%, #10b981);
+  color: #fff;
+  box-shadow: 0 12px 28px -12px rgba(13, 148, 136, 0.6);
 }
-.site-btn-primary:hover { background: #ff8c38; }
+.site-btn-primary:hover { box-shadow: 0 16px 34px -12px rgba(13, 148, 136, 0.75); }
 .site-btn-ghost {
   border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.7);
   color: var(--ink);
 }
-.site-btn-ghost:hover { border-color: var(--amber); color: var(--amber-soft); }
+.site-btn-ghost:hover { border-color: var(--amber); color: var(--amber); }
 
 .hair { border-color: var(--line); }
 

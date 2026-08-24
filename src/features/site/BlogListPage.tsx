@@ -12,7 +12,9 @@ export function BlogListPage() {
     path: '/blog',
     title: 'CNC Machining Insights & Guides',
     description:
-      'Practical guides on CNC machining, turning, milling, materials, tolerances and reducing machining costs — from the Sree Balaji Industries workshop.',
+      'Practical guides on CNC machining, turning, materials, tolerances and reducing machining costs — from the Sree Balaji Industries workshop.',
+    keywords:
+      'CNC machining blog, CNC turning guide, machining tolerances, material selection, machine shop tips, Sree Balaji Industries',
     jsonLd: {
       '@context': 'https://schema.org',
       '@type': 'Blog',
@@ -51,7 +53,7 @@ export function BlogListPage() {
         >
           <div
             className="relative min-h-52 overflow-hidden"
-            style={{ background: `linear-gradient(135deg, ${lead.accent}25, transparent 70%), #0e141c` }}
+            style={{ background: `linear-gradient(135deg, ${lead.accent}25, transparent 70%), #eef4f3` }}
           >
             <div className="blueprint absolute inset-0 opacity-60" />
             <Cog size={160} className="spin-slow absolute -right-10 -bottom-10 opacity-10" style={{ color: lead.accent }} />
@@ -81,7 +83,7 @@ export function BlogListPage() {
             >
               <div
                 className="relative h-32 overflow-hidden"
-                style={{ background: `linear-gradient(135deg, ${p.accent}22, transparent 70%), #0e141c` }}
+                style={{ background: `linear-gradient(135deg, ${p.accent}22, transparent 70%), #eef4f3` }}
               >
                 <div className="blueprint absolute inset-0 opacity-60" />
                 <span className="mono absolute left-4 top-4 text-[10px] uppercase tracking-widest" style={{ color: p.accent }}>

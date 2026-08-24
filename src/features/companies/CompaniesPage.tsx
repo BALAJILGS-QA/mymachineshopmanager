@@ -6,6 +6,7 @@ import { useDb } from '@/data/store'
 import { PageHeader, ResponsiveTable } from '@/components/common/PageHeader'
 import { Badge, Card, EmptyState, Field, Input, Textarea } from '@/components/ui/primitives'
 import { Modal } from '@/components/ui/Modal'
+import { Pagination, usePagination } from '@/components/common/Pagination'
 import { useToast } from '@/components/ui/Toast'
 import { useConfirm } from '@/components/ui/ConfirmDialog'
 
@@ -27,6 +28,8 @@ export function CompaniesPage() {
       ),
     [companies, search],
   )
+
+  const pg = usePagination(filtered)
 
   const txnCount = (id: string) =>
     jobs.filter((j) => j.companyId === id).length +
@@ -93,7 +96,7 @@ export function CompaniesPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-50">
-              {filtered.map((c) => (
+              {pg.pageItems.map((c) => (
                 <tr key={c.id} className="hover:bg-slate-50/60">
                   <td className="td font-mono text-xs text-slate-500">{c.code}</td>
                   <td className="td font-semibold text-slate-800">{c.name}</td>
@@ -130,6 +133,7 @@ export function CompaniesPage() {
             </tbody>
           </ResponsiveTable>
         )}
+        <Pagination pg={pg} />
       </Card>
 
       {editing !== undefined && (
