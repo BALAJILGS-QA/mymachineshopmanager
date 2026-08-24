@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
   AlertTriangle,
@@ -15,12 +15,13 @@ import { format, startOfMonth } from 'date-fns'
 import { useDb } from '@/data/store'
 import { getDb } from '@/data/db'
 import {
+  companyMaterialValue,
   computeInvoice,
   materialStock,
   totalRawMaterialValue,
 } from '@/data/computations'
 import { currency, fmtDate, qty } from '@/lib/format'
-import { Card } from '@/components/ui/primitives'
+import { Card, Select } from '@/components/ui/primitives'
 import { PageHeader } from '@/components/common/PageHeader'
 import { JobStatusBadge, PriorityBadge } from '@/components/common/status'
 import { useCompanyName } from '@/features/shared/lookups'
@@ -45,63 +46,89 @@ export function DashboardPage() {
   const payments = useDb((db) => db.payments)
   const expenses = useDb((db) => db.expenses)
   const materials = useDb((db) => db.materials)
+  const companies = useDb((db) => db.companies)
   const stamp = useDb((db) => db.receipts.length + db.issues.length + db.adjustments.length)
   const companyName = useCompanyName()
 
+  // '' = all companies. Drives every KPI, chart and list below.
+  const [company, setCompany] = useState('')
   const monthStart = format(startOfMonth(new Date()), 'yyyy-MM-dd')
+
+  const jobsF = useMemo(
+    () => (company ? jobs.filter((j) => j.companyId === company) : jobs),
+    [jobs, company],
+  )
+  const invoicesF = useMemo(
+    () => (company ? invoices.filter((i) => i.companyId === company) : invoices),
+    [invoices, company],
+  )
+  const paymentsF = useMemo(
+    () => (company ? payments.filter((p) => p.companyId === company) : payments),
+    [payments, company],
+  )
+  const expensesF = useMemo(
+    () => (company ? expenses.filter((e) => e.companyId === company) : expenses),
+    [expenses, company],
+  )
 
   const kpi = useMemo(() => {
     const db = getDb()
-    const open = jobs.filter((j) => ['Pending', 'Draft'].includes(j.status)).length
-    const inProd = jobs.filter((j) => j.status === 'In Progress').length
-    const completedThisPeriod = jobs.filter(
+    const open = jobsF.filter((j) => ['Pending', 'Draft'].includes(j.status)).length
+    const inProd = jobsF.filter((j) => j.status === 'In Progress').length
+    const completedThisPeriod = jobsF.filter(
       (j) => j.completedAt && j.completedAt.slice(0, 10) >= monthStart,
     ).length
-    const rawValue = totalRawMaterialValue(db)
-    const unpaid = invoices
+    const rawValue = company ? companyMaterialValue(db, company) : totalRawMaterialValue(db)
+    const unpaid = invoicesF
       .filter((i) => i.status !== 'Cancelled')
       .reduce((s, i) => s + computeInvoice(i, payments).outstanding, 0)
-    const paymentsThisMonth = payments
+    const paymentsThisMonth = paymentsF
       .filter((p) => p.date >= monthStart)
       .reduce((s, p) => s + p.amount, 0)
-    const expensesThisMonth = expenses
+    const expensesThisMonth = expensesF
       .filter((e) => e.date >= monthStart)
       .reduce((s, e) => s + e.amount, 0)
     return { open, inProd, completedThisPeriod, rawValue, unpaid, paymentsThisMonth, expensesThisMonth }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [jobs, invoices, payments, expenses, stamp, monthStart])
+  }, [jobsF, invoicesF, paymentsF, expensesF, payments, stamp, monthStart, company])
 
   const pendingJobs = useMemo(
     () =>
-      jobs
+      jobsF
         .filter((j) => ['Pending', 'In Progress', 'On Hold'].includes(j.status))
         .sort((a, b) => {
           const rank = { Urgent: 0, High: 1, Normal: 2, Low: 3 }
           return rank[a.priority] - rank[b.priority]
         })
         .slice(0, 6),
-    [jobs],
+    [jobsF],
   )
 
   const lowStock = useMemo(() => {
     const db = getDb()
     return materials
-      .map((m) => ({ m, bal: materialStock(db, m.id).balance }))
+      .map((m) => ({ m, bal: materialStock(db, m.id, company || undefined).balance }))
       .filter(({ m, bal }) => bal < 0 || (m.reorderLevel !== undefined && bal <= m.reorderLevel))
       .slice(0, 6)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [materials, stamp])
+  }, [materials, stamp, company])
 
-  const recentPayments = payments.slice(0, 5)
-  const recentExpenses = expenses.slice(0, 5)
+  const recentPayments = useMemo(
+    () => [...paymentsF].sort((a, b) => (a.date < b.date ? 1 : -1)).slice(0, 5),
+    [paymentsF],
+  )
+  const recentExpenses = useMemo(
+    () => [...expensesF].sort((a, b) => (a.date < b.date ? 1 : -1)).slice(0, 5),
+    [expensesF],
+  )
 
   const expenseByCategory = useMemo(() => {
     const map = new Map<string, number>()
-    expenses
+    expensesF
       .filter((e) => e.date >= monthStart)
       .forEach((e) => map.set(e.category, (map.get(e.category) ?? 0) + e.amount))
     return [...map.entries()].map(([name, value]) => ({ name, value }))
-  }, [expenses, monthStart])
+  }, [expensesF, monthStart])
 
   const cashFlow = useMemo(() => {
     // last 6 months payments vs expenses
@@ -112,20 +139,46 @@ export function DashboardPage() {
       months.push({ key: format(d, 'yyyy-MM'), label: format(d, 'MMM'), payments: 0, expenses: 0 })
     }
     const idx = new Map(months.map((m, i) => [m.key, i]))
-    payments.forEach((p) => {
+    paymentsF.forEach((p) => {
       const k = p.date.slice(0, 7)
       if (idx.has(k)) months[idx.get(k)!].payments += p.amount
     })
-    expenses.forEach((e) => {
+    expensesF.forEach((e) => {
       const k = e.date.slice(0, 7)
       if (idx.has(k)) months[idx.get(k)!].expenses += e.amount
     })
     return months
-  }, [payments, expenses])
+  }, [paymentsF, expensesF])
+
+  const scopeLabel = company ? companyName(company) : 'All companies'
 
   return (
     <div>
-      <PageHeader title="Dashboard" subtitle={fmtDate(format(new Date(), 'yyyy-MM-dd'))} />
+      <PageHeader
+        title="Dashboard"
+        subtitle={`${fmtDate(format(new Date(), 'yyyy-MM-dd'))} · ${scopeLabel}`}
+        actions={
+          <div>
+            <label className="label sr-only" htmlFor="dash-company">
+              Company
+            </label>
+            <Select
+              id="dash-company"
+              value={company}
+              onChange={(e) => setCompany(e.target.value)}
+              className="min-w-[12rem]"
+              aria-label="Filter dashboard by company"
+            >
+              <option value="">All companies</option>
+              {companies.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </Select>
+          </div>
+        }
+      />
 
       {/* KPI cards */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-4">

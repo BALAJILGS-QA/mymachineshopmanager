@@ -104,6 +104,23 @@ export function totalRawMaterialValue(db: Database): number {
   )
 }
 
+// Value of on-hand stock owned by a specific company, using that company's
+// weighted-average receipt rate per material.
+export function companyMaterialValue(db: Database, companyId: string): number {
+  let total = 0
+  for (const m of db.materials) {
+    const receipts = db.receipts.filter(
+      (r) => r.materialId === m.id && r.companyId === companyId,
+    )
+    const qtyIn = receipts.reduce((s, r) => s + r.quantity, 0)
+    if (qtyIn === 0) continue
+    const avg = receipts.reduce((s, r) => s + r.quantity * (r.rate ?? 0), 0) / qtyIn
+    const balance = materialStock(db, m.id, companyId).balance
+    total += balance * avg
+  }
+  return roundMoney(total)
+}
+
 export function jobPendingQty(orderedQty: number, completedQty: number): number {
   return roundMoney(Math.max(0, orderedQty - completedQty))
 }
