@@ -68,21 +68,6 @@ export function AppShell({ children }: { children: ReactNode }) {
       <aside className="fixed inset-y-0 left-0 z-30 hidden w-60 flex-col border-r border-slate-200 bg-white lg:flex">
         <Brand />
         <SidebarLinks />
-        <div className="border-t border-slate-100 p-3">
-          <div className="flex items-center justify-between rounded-lg bg-slate-50 px-3 py-2">
-            <div className="leading-tight">
-              <p className="text-xs font-semibold text-slate-700">{session?.username}</p>
-              <p className="text-2xs text-slate-400">{session?.role}</p>
-            </div>
-            <button
-              onClick={logout}
-              className="rounded-md p-1.5 text-slate-400 hover:bg-slate-200 hover:text-slate-700"
-              title="Sign out"
-            >
-              <LogOut size={16} />
-            </button>
-          </div>
-        </div>
       </aside>
 
       {/* Mobile drawer */}

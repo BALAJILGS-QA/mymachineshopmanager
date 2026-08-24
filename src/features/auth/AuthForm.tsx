@@ -86,7 +86,7 @@ export function AuthForm() {
           <LogIn size={16} />
         </span>
         <h2 className="text-lg font-bold text-slate-900">
-          {isSignup ? 'Create your account' : 'Client Portal'}
+          {isSignup ? 'Create your account' : 'Welcome back'}
         </h2>
       </div>
       <p className="mb-4 text-sm text-slate-500">
