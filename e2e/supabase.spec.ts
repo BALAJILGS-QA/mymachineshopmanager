@@ -11,7 +11,7 @@ const NAME = `E2E ${Date.now()}` // unique per run to avoid leftover collisions
 test('supabase: login, persist, re-hydrate from cloud', async ({ page, viewport }) => {
   test.skip((viewport?.width ?? 0) < 1024, 'desktop navigation only')
 
-  await page.goto('/')
+  await page.goto('/login')
   // Only meaningful against a Supabase build (email login). Skip in local mode.
   const emailField = page.getByPlaceholder('you@example.com')
   if (!(await emailField.isVisible().catch(() => false))) {

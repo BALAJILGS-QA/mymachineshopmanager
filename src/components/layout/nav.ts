@@ -19,19 +19,20 @@ export interface NavItem {
   short: string
 }
 
-// PRD 14 — MVP navigation order.
+// PRD 14 — MVP navigation order. Routes live under /app (the public marketing
+// site owns the root).
 export const NAV_ITEMS: NavItem[] = [
-  { to: '/', label: 'Dashboard', icon: LayoutDashboard, short: 'Home' },
-  { to: '/jobs', label: 'Job Orders', icon: ClipboardList, short: 'Jobs' },
-  { to: '/production', label: 'Production', icon: Factory, short: 'Floor' },
-  { to: '/materials', label: 'Materials & Stock', icon: Boxes, short: 'Stock' },
-  { to: '/invoices', label: 'Invoices', icon: FileText, short: 'Invoices' },
-  { to: '/payments', label: 'Payments', icon: Wallet, short: 'Pay' },
-  { to: '/expenses', label: 'Expenses', icon: Receipt, short: 'Expense' },
-  { to: '/reports', label: 'Reports', icon: BarChart3, short: 'Reports' },
-  { to: '/companies', label: 'Companies', icon: Building2, short: 'Company' },
-  { to: '/settings', label: 'Settings', icon: SettingsIcon, short: 'Settings' },
+  { to: '/app', label: 'Dashboard', icon: LayoutDashboard, short: 'Home' },
+  { to: '/app/jobs', label: 'Job Orders', icon: ClipboardList, short: 'Jobs' },
+  { to: '/app/production', label: 'Production', icon: Factory, short: 'Floor' },
+  { to: '/app/materials', label: 'Materials & Stock', icon: Boxes, short: 'Stock' },
+  { to: '/app/invoices', label: 'Invoices', icon: FileText, short: 'Invoices' },
+  { to: '/app/payments', label: 'Payments', icon: Wallet, short: 'Pay' },
+  { to: '/app/expenses', label: 'Expenses', icon: Receipt, short: 'Expense' },
+  { to: '/app/reports', label: 'Reports', icon: BarChart3, short: 'Reports' },
+  { to: '/app/companies', label: 'Companies', icon: Building2, short: 'Company' },
+  { to: '/app/settings', label: 'Settings', icon: SettingsIcon, short: 'Settings' },
 ]
 
 // Items shown in the mobile bottom bar (most-used); rest live in the drawer.
-export const MOBILE_PRIMARY = ['/', '/jobs', '/materials', '/invoices']
+export const MOBILE_PRIMARY = ['/app', '/app/jobs', '/app/materials', '/app/invoices']

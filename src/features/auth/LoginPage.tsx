@@ -1,5 +1,6 @@
 import { useState } from 'react'
-import { Cog, Loader2, Lock, User } from 'lucide-react'
+import { Link } from 'react-router-dom'
+import { ArrowLeft, Cog, Loader2, Lock, User } from 'lucide-react'
 import { useAuth } from './auth'
 import { useToast } from '@/components/ui/Toast'
 
@@ -34,6 +35,12 @@ export function LoginPage() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-slate-100 via-slate-100 to-brand-50 px-4">
       <div className="w-full max-w-sm">
+        <Link
+          to="/"
+          className="mb-4 inline-flex items-center gap-1.5 text-xs font-medium text-slate-500 hover:text-brand-600"
+        >
+          <ArrowLeft size={14} /> Back to website
+        </Link>
         <div className="mb-6 flex flex-col items-center text-center">
           <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-brand-600 text-white shadow-lg shadow-brand-600/30">
             <Cog size={26} />

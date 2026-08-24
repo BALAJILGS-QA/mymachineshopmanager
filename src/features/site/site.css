@@ -1,0 +1,116 @@
+/* Marketing site — "Industrial Precision" theme. Scoped under .site so it never
+   touches the internal app's light UI. */
+
+.site {
+  --ink: #e7ebf2;
+  --ink-dim: #9aa6b6;
+  --ink-faint: #5f6b7c;
+  --bg: #0a0d12;
+  --bg-2: #0f141b;
+  --surface: #141b24;
+  --line: #232c38;
+  --amber: #ff7a1a;
+  --amber-soft: #ffb37a;
+  --steel: #4cc4f0;
+
+  background-color: var(--bg);
+  color: var(--ink);
+  font-family: 'IBM Plex Sans', system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+.site .display {
+  font-family: 'Saira', system-ui, sans-serif;
+  letter-spacing: -0.01em;
+}
+.site .mono {
+  font-family: 'IBM Plex Mono', ui-monospace, monospace;
+}
+.site .kicker {
+  font-family: 'IBM Plex Mono', monospace;
+  text-transform: uppercase;
+  letter-spacing: 0.28em;
+  font-size: 0.7rem;
+  color: var(--amber);
+}
+
+/* Blueprint grid + radial glow atmosphere */
+.blueprint {
+  background-image:
+    linear-gradient(rgba(76, 196, 240, 0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(76, 196, 240, 0.05) 1px, transparent 1px);
+  background-size: 34px 34px;
+}
+.glow-amber {
+  background: radial-gradient(60% 60% at 50% 0%, rgba(255, 122, 26, 0.18), transparent 70%);
+}
+.grain::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.035;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='3'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+/* Entrance animation with stagger */
+@keyframes rise {
+  from { opacity: 0; transform: translateY(18px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.site .rise {
+  opacity: 0;
+  animation: rise 0.7s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+.site .d1 { animation-delay: 0.05s; }
+.site .d2 { animation-delay: 0.15s; }
+.site .d3 { animation-delay: 0.25s; }
+.site .d4 { animation-delay: 0.35s; }
+.site .d5 { animation-delay: 0.45s; }
+.site .d6 { animation-delay: 0.55s; }
+
+/* Reveal on scroll */
+.reveal {
+  opacity: 0;
+  transform: translateY(22px);
+  transition: opacity 0.6s ease, transform 0.6s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.reveal.in {
+  opacity: 1;
+  transform: none;
+}
+
+/* Slow rotating precision gear */
+@keyframes spin-slow { to { transform: rotate(360deg); } }
+.spin-slow { animation: spin-slow 26s linear infinite; }
+
+.site a { color: inherit; }
+
+.site-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  border-radius: 9px;
+  padding: 0.7rem 1.15rem;
+  font-weight: 600;
+  font-size: 0.92rem;
+  transition: transform 0.15s ease, background 0.2s ease, border-color 0.2s ease;
+}
+.site-btn:active { transform: translateY(1px); }
+.site-btn-primary {
+  background: var(--amber);
+  color: #1a0e04;
+  box-shadow: 0 10px 30px -12px rgba(255, 122, 26, 0.6);
+}
+.site-btn-primary:hover { background: #ff8c38; }
+.site-btn-ghost {
+  border: 1px solid var(--line);
+  color: var(--ink);
+}
+.site-btn-ghost:hover { border-color: var(--amber); color: var(--amber-soft); }
+
+.hair { border-color: var(--line); }
+
+@media (prefers-reduced-motion: reduce) {
+  .site .rise, .reveal, .spin-slow { animation: none !important; transition: none !important; opacity: 1 !important; transform: none !important; }
+}

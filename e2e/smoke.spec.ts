@@ -5,7 +5,7 @@ import { test, expect, type Page } from '@playwright/test'
 // complete job, invoice, payment, expense, and dashboard/report sanity.
 
 async function login(page: Page) {
-  await page.goto('/')
+  await page.goto('/login')
   await page.getByPlaceholder('••••••••').fill('admin123')
   await page.getByRole('button', { name: 'Sign in' }).click()
   await expect(page.getByRole('heading', { name: 'Dashboard' })).toBeVisible()
@@ -57,6 +57,25 @@ test('full operational workflow', async ({ page, viewport }) => {
   // Reports render and outstanding report has data.
   await nav(page, 'Reports')
   await expect(page.getByRole('heading', { name: 'Reports' })).toBeVisible()
+})
+
+test('invoice PDF downloads', async ({ page, viewport }) => {
+  test.skip((viewport?.width ?? 0) < 1024, 'desktop sidebar navigation only')
+  await login(page)
+
+  // Populate demo data (which includes invoices) then download a PDF.
+  await nav(page, 'Settings')
+  await page.getByRole('button', { name: 'Load demo data' }).click()
+  await page.getByRole('button', { name: 'Load demo', exact: true }).click()
+  await page.waitForLoadState('load')
+
+  await nav(page, 'Invoices')
+  await expect(page.getByText(/INV-/).first()).toBeVisible()
+  const [download] = await Promise.all([
+    page.waitForEvent('download'),
+    page.getByRole('button', { name: 'Download PDF' }).first().click(),
+  ])
+  expect(download.suggestedFilename()).toMatch(/^INV-.*\.pdf$/)
 })
 
 test('create a company and a job order', async ({ page, viewport }) => {

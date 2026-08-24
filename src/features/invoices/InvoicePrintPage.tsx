@@ -1,9 +1,10 @@
 import { useParams, useNavigate } from 'react-router-dom'
-import { ArrowLeft, Printer } from 'lucide-react'
+import { ArrowLeft, Download, Printer } from 'lucide-react'
 import { useDb } from '@/data/store'
 import { computeInvoice } from '@/data/computations'
 import { currency, fmtDate, qty } from '@/lib/format'
 import { InvoiceStatusBadge } from '@/components/common/status'
+import { downloadInvoicePdf } from './invoicePdf'
 
 export function InvoicePrintPage() {
   const { id } = useParams()
@@ -17,7 +18,7 @@ export function InvoicePrintPage() {
     return (
       <div className="py-16 text-center text-slate-500">
         Invoice not found.{' '}
-        <button className="text-brand-600 underline" onClick={() => navigate('/invoices')}>
+        <button className="text-brand-600 underline" onClick={() => navigate('/app/invoices')}>
           Back to invoices
         </button>
       </div>
@@ -29,12 +30,17 @@ export function InvoicePrintPage() {
   return (
     <div>
       <div className="no-print mb-4 flex items-center justify-between">
-        <button className="btn-secondary" onClick={() => navigate('/invoices')}>
+        <button className="btn-secondary" onClick={() => navigate('/app/invoices')}>
           <ArrowLeft size={16} /> Back
         </button>
-        <button className="btn-primary" onClick={() => window.print()}>
-          <Printer size={16} /> Print / Save PDF
-        </button>
+        <div className="flex gap-2">
+          <button className="btn-secondary" onClick={() => window.print()}>
+            <Printer size={16} /> Print
+          </button>
+          <button className="btn-primary" onClick={() => downloadInvoicePdf(invoice.id)}>
+            <Download size={16} /> Download PDF
+          </button>
+        </div>
       </div>
 
       <div className="mx-auto max-w-3xl rounded-xl border border-slate-200 bg-white p-8 shadow-sm print:border-0 print:shadow-none">

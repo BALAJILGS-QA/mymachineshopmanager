@@ -3,12 +3,14 @@ import { useNavigate } from 'react-router-dom'
 import {
   Ban,
   Download,
+  FileDown,
   FileText,
   Pencil,
   Plus,
   Printer,
   Wallet,
 } from 'lucide-react'
+import { downloadInvoicePdf } from './invoicePdf'
 import type { Invoice, InvoiceStatus } from '@/types'
 import { invoiceRepo, BusinessRuleError } from '@/data/repo'
 import { useDb } from '@/data/store'
@@ -163,8 +165,15 @@ export function InvoicesPage() {
                       )}
                       <button
                         className="btn-ghost btn-sm"
+                        title="Download PDF"
+                        onClick={() => downloadInvoicePdf(inv.id)}
+                      >
+                        <FileDown size={15} />
+                      </button>
+                      <button
+                        className="btn-ghost btn-sm"
                         title="Print"
-                        onClick={() => navigate(`/invoices/${inv.id}/print`)}
+                        onClick={() => navigate(`/app/invoices/${inv.id}/print`)}
                       >
                         <Printer size={15} />
                       </button>

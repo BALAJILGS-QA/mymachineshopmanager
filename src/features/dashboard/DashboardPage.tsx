@@ -129,49 +129,49 @@ export function DashboardPage() {
 
       {/* KPI cards */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-4">
-        <Kpi icon={ClipboardList} tone="amber" label="Open Job Orders" value={String(kpi.open)} to="/jobs" />
-        <Kpi icon={Factory} tone="blue" label="In Production" value={String(kpi.inProd)} to="/production" />
+        <Kpi icon={ClipboardList} tone="amber" label="Open Job Orders" value={String(kpi.open)} to="/app/jobs" />
+        <Kpi icon={Factory} tone="blue" label="In Production" value={String(kpi.inProd)} to="/app/production" />
         <Kpi
           icon={CheckCircle2}
           tone="green"
           label="Completed (month)"
           value={String(kpi.completedThisPeriod)}
-          to="/jobs"
+          to="/app/jobs"
         />
         <Kpi
           icon={PackageX}
           tone="violet"
           label="Raw Material Value"
           value={currency(kpi.rawValue)}
-          to="/materials"
+          to="/app/materials"
         />
         <Kpi
           icon={IndianRupee}
           tone="red"
           label="Unpaid Invoices"
           value={currency(kpi.unpaid)}
-          to="/invoices"
+          to="/app/invoices"
         />
         <Kpi
           icon={Wallet}
           tone="green"
           label="Payments (month)"
           value={currency(kpi.paymentsThisMonth)}
-          to="/payments"
+          to="/app/payments"
         />
         <Kpi
           icon={Receipt}
           tone="slate"
           label="Expenses (month)"
           value={currency(kpi.expensesThisMonth)}
-          to="/expenses"
+          to="/app/expenses"
         />
         <Kpi
           icon={IndianRupee}
           tone="blue"
           label="Net (month)"
           value={currency(kpi.paymentsThisMonth - kpi.expensesThisMonth)}
-          to="/reports"
+          to="/app/reports"
         />
       </div>
 
@@ -223,7 +223,7 @@ export function DashboardPage() {
       {/* Lists */}
       <div className="mt-4 grid grid-cols-1 gap-3 lg:grid-cols-2">
         <Card className="p-4">
-          <ListHeader title="Priority jobs" to="/jobs" />
+          <ListHeader title="Priority jobs" to="/app/jobs" />
           {pendingJobs.length === 0 ? (
             <Empty text="No pending jobs" />
           ) : (
@@ -247,7 +247,7 @@ export function DashboardPage() {
         </Card>
 
         <Card className="p-4">
-          <ListHeader title="Low / negative stock" to="/materials" icon={<AlertTriangle size={15} className="text-amber-500" />} />
+          <ListHeader title="Low / negative stock" to="/app/materials" icon={<AlertTriangle size={15} className="text-amber-500" />} />
           {lowStock.length === 0 ? (
             <Empty text="All stock above reorder levels" />
           ) : (
@@ -270,7 +270,7 @@ export function DashboardPage() {
         </Card>
 
         <Card className="p-4">
-          <ListHeader title="Recent payments" to="/payments" />
+          <ListHeader title="Recent payments" to="/app/payments" />
           {recentPayments.length === 0 ? (
             <Empty text="No payments yet" />
           ) : (
@@ -291,7 +291,7 @@ export function DashboardPage() {
         </Card>
 
         <Card className="p-4">
-          <ListHeader title="Recent expenses" to="/expenses" />
+          <ListHeader title="Recent expenses" to="/app/expenses" />
           {recentExpenses.length === 0 ? (
             <Empty text="No expenses yet" />
           ) : (

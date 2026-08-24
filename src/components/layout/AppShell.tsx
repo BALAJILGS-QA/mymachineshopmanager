@@ -13,7 +13,7 @@ function SidebarLinks({ onNavigate }: { onNavigate?: () => void }) {
         <NavLink
           key={item.to}
           to={item.to}
-          end={item.to === '/'}
+          end={item.to === '/app'}
           onClick={onNavigate}
           className={({ isActive }) =>
             clsx(
@@ -113,7 +113,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         </button>
         <span className="text-sm font-semibold text-slate-800">
           {NAV_ITEMS.find((n) =>
-            n.to === '/' ? location.pathname === '/' : location.pathname.startsWith(n.to),
+            n.to === '/app' ? location.pathname === '/app' : location.pathname.startsWith(n.to),
           )?.label ?? 'CNC Shop'}
         </span>
         <div className="h-8 w-8 rounded-full bg-brand-100 text-center text-sm font-semibold leading-8 text-brand-700">
@@ -132,7 +132,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           <NavLink
             key={item.to}
             to={item.to}
-            end={item.to === '/'}
+            end={item.to === '/app'}
             className={({ isActive }) =>
               clsx(
                 'flex flex-1 flex-col items-center gap-0.5 py-2 text-2xs font-medium',
