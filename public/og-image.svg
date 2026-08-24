@@ -23,11 +23,11 @@
       <path d="M0 -16v6M0 16v-6M-16 0h6M16 0h-6M-11 -11l4 4M11 11l-4 -4M11 -11l-4 4M-11 11l4 -4"/>
     </g>
     <text x="80" y="26" font-family="'Saira',sans-serif" font-size="26" font-weight="700" fill="#e7ebf2">SREE BALAJI</text>
-    <text x="80" y="52" font-family="monospace" font-size="15" letter-spacing="6" fill="#9aa6b6">INDUSTRIES · CNC</text>
+    <text x="80" y="52" font-family="monospace" font-size="15" letter-spacing="6" fill="#9aa6b6">INDUSTRIES</text>
   </g>
 
-  <text x="90" y="330" font-family="'Saira',sans-serif" font-size="82" font-weight="800" fill="#e7ebf2">Precision CNC Machining</text>
-  <text x="90" y="410" font-family="'Saira',sans-serif" font-size="82" font-weight="800" fill="#ff7a1a">Turning &amp; Milling</text>
+  <text x="90" y="330" font-family="'Saira',sans-serif" font-size="82" font-weight="800" fill="#e7ebf2">Precision CNC</text>
+  <text x="90" y="410" font-family="'Saira',sans-serif" font-size="82" font-weight="800" fill="#ff7a1a">Turning</text>
 
   <text x="92" y="470" font-family="'IBM Plex Sans',sans-serif" font-size="26" fill="#9aa6b6">Tight tolerances · Company-wise job tracking · Full traceability</text>
 

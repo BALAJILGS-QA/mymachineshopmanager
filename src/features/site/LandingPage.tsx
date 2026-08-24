@@ -8,14 +8,14 @@ export function LandingPage() {
     path: '/',
     title: 'Sree Balaji Industries — Precision CNC Machining & Turning',
     description:
-      'Precision CNC turning and milling for pumps, engineering and industrial components. Company-wise job tracking, tight tolerances and full traceability. Sign in to the client portal.',
+      'Precision CNC turning for pumps, engineering and industrial components. Company-wise job tracking, tight tolerances and full traceability. Sign in to the client portal.',
     type: 'website',
     jsonLd: {
       '@context': 'https://schema.org',
       '@type': 'LocalBusiness',
       name: 'Sree Balaji Industries',
       description:
-        'Precision CNC machining, turning and milling services for pumps, engineering and industrial components.',
+        'Precision CNC machining and turning services for pumps, engineering and industrial components.',
       url: SITE.BASE_URL,
       image: SITE.DEFAULT_IMAGE,
       email: 'contact@sreebalajiindustries.com',
@@ -37,13 +37,13 @@ function Hero() {
       <div className="glow-amber pointer-events-none absolute inset-x-0 top-0 h-[560px]" />
       <div className="mx-auto grid min-h-[calc(100vh-64px)] max-w-6xl items-center gap-10 px-5 py-20 md:grid-cols-[1.15fr_0.85fr]">
         <div>
-          <p className="kicker rise d1">Precision CNC Machining · Since 2016</p>
+          <p className="kicker rise d1">Precision CNC Machining · Since 1996</p>
           <h1 className="display rise d2 mt-4 text-4xl font-bold leading-[1.02] sm:text-5xl md:text-6xl">
             Metal, machined to
             <span className="text-[var(--amber)]"> exact tolerance.</span>
           </h1>
           <p className="rise d3 mt-5 max-w-xl text-base leading-relaxed text-[var(--ink-dim)]">
-            Sree Balaji Industries delivers CNC turning and milling for pumps, engineering and
+            Sree Balaji Industries delivers precision CNC turning for pumps, engineering and
             industrial components — with company-wise job tracking from raw material to dispatch.
           </p>
 

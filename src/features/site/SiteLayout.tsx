@@ -14,7 +14,7 @@ function Wordmark() {
       </span>
       <span className="leading-none">
         <span className="display block text-[15px] font-bold tracking-tight">SREE BALAJI</span>
-        <span className="mono block text-[9px] tracking-[0.3em] text-[var(--ink-dim)]">INDUSTRIES · CNC</span>
+        <span className="mono block text-[9px] tracking-[0.3em] text-[var(--ink-dim)]">INDUSTRIES</span>
       </span>
     </Link>
   )
