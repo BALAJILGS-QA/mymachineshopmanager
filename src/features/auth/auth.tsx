@@ -21,11 +21,17 @@ interface Session {
   role: Role
 }
 
+interface AuthResult {
+  ok: boolean
+  message?: string
+}
+
 interface AuthApi {
   session: Session | null
   loading: boolean
   supabaseMode: boolean
   login: (username: string, password: string) => Promise<boolean>
+  register: (username: string, password: string) => Promise<AuthResult>
   logout: () => void
   changePassword: (current: string, next: string) => Promise<boolean>
 }
@@ -130,6 +136,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           return true
         }
         return false
+      },
+      async register(username, password) {
+        if (supabaseMode) {
+          const email = username.trim()
+          const { data, error } = await supabase!.auth.signUp({ email, password })
+          if (error) return { ok: false, message: error.message }
+          if (data.session) return { ok: true }
+          // No session returned — new users are auto-confirmed by a DB trigger,
+          // so sign in immediately to establish the session.
+          const { error: e2 } = await supabase!.auth.signInWithPassword({ email, password })
+          if (e2) return { ok: false, message: 'Account created. Please sign in.' }
+          return { ok: true }
+        }
+        // Local mode: create/replace the single admin credential and sign in.
+        const cred: Credential = {
+          username: username.trim() || DEFAULT_USER,
+          hash: await sha256(password),
+          role: 'Admin',
+        }
+        localStorage.setItem(AUTH_KEY, JSON.stringify(cred))
+        const next: Session = { username: cred.username, role: cred.role }
+        localStorage.setItem(SESSION_KEY, JSON.stringify(next))
+        setSession(next)
+        return { ok: true }
       },
       logout() {
         if (supabaseMode) {

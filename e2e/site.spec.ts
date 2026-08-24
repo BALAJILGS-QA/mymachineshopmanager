@@ -2,11 +2,13 @@ import { test, expect } from '@playwright/test'
 
 // Public marketing site + SEO. No auth, so this runs in any build mode.
 
-test('landing page renders with SEO metadata', async ({ page }) => {
+test('landing page renders with SEO metadata and auth CTAs', async ({ page }) => {
   await page.goto('/')
   await expect(page).toHaveTitle(/Sree Balaji Industries/)
   await expect(page.getByRole('heading', { level: 1 })).toContainText(/tolerance/i)
-  await expect(page.getByRole('heading', { name: 'What we machine' })).toBeVisible()
+  // Sign in / sign up are the primary actions.
+  await expect(page.getByRole('link', { name: 'Create Account' })).toBeVisible()
+  await expect(page.getByRole('link', { name: 'Sign In' }).first()).toBeVisible()
 
   const desc = page.locator('meta[name="description"]')
   await expect(desc).toHaveAttribute('content', /CNC/)

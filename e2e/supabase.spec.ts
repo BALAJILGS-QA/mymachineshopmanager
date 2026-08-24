@@ -19,7 +19,7 @@ test('supabase: login, persist, re-hydrate from cloud', async ({ page, viewport 
   }
   await emailField.fill(EMAIL)
   await page.getByPlaceholder('••••••••').fill(PASS)
-  await page.getByRole('button', { name: 'Sign in' }).click()
+  await page.getByRole('button', { name: 'Sign in', exact: true }).click()
   await expect(page.getByRole('heading', { name: 'Dashboard' })).toBeVisible({ timeout: 20000 })
 
   const companies = () =>

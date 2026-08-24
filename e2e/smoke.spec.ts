@@ -7,7 +7,7 @@ import { test, expect, type Page } from '@playwright/test'
 async function login(page: Page) {
   await page.goto('/login')
   await page.getByPlaceholder('••••••••').fill('admin123')
-  await page.getByRole('button', { name: 'Sign in' }).click()
+  await page.getByRole('button', { name: 'Sign in', exact: true }).click()
   await expect(page.getByRole('heading', { name: 'Dashboard' })).toBeVisible()
 }
 
@@ -26,6 +26,18 @@ test.beforeEach(async ({ page }) => {
 test('login shows the dashboard', async ({ page }) => {
   await login(page)
   await expect(page.getByText('Open Job Orders')).toBeVisible()
+})
+
+test('sign up creates an account and enters the app (local mode)', async ({ page, viewport }) => {
+  test.skip((viewport?.width ?? 0) < 1024, 'desktop only')
+  await page.goto('/signup')
+  // Local build shows a username field (Supabase build would show email).
+  const isSupabase = await page.getByPlaceholder('you@example.com').isVisible().catch(() => false)
+  test.skip(isSupabase, 'local-mode sign-up test')
+  await page.getByLabel('Username').fill('owner')
+  await page.getByLabel('Password').fill('secret123')
+  await page.getByRole('button', { name: 'Create account' }).click()
+  await expect(page.getByRole('heading', { name: 'Dashboard' })).toBeVisible()
 })
 
 test('mobile shows bottom navigation', async ({ page, viewport }) => {

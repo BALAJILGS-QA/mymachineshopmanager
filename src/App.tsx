@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { Loader2 } from 'lucide-react'
 import { useAuth } from './features/auth/auth'
-import { LoginPage } from './features/auth/LoginPage'
+import { AuthPage } from './features/auth/LoginPage'
 import { AppShell } from './components/layout/AppShell'
 import { hydrateFromRemote } from './data/store'
 import { setSyncErrorHandler } from './data/backend'
@@ -37,18 +37,19 @@ export default function App() {
       <Route path="/" element={<LandingPage />} />
       <Route path="/blog" element={<BlogListPage />} />
       <Route path="/blog/:slug" element={<BlogPostPage />} />
-      <Route path="/login" element={<LoginGate />} />
+      <Route path="/login" element={<AuthGate mode="signin" />} />
+      <Route path="/signup" element={<AuthGate mode="signup" />} />
       <Route path="/app/*" element={<Portal />} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   )
 }
 
-function LoginGate() {
+function AuthGate({ mode }: { mode: 'signin' | 'signup' }) {
   const { session, loading } = useAuth()
   if (loading) return <FullScreenLoader label="Starting…" />
   if (session) return <Navigate to="/app" replace />
-  return <LoginPage />
+  return <AuthPage mode={mode} />
 }
 
 // The authenticated management portal — gates on auth, hydrates the store

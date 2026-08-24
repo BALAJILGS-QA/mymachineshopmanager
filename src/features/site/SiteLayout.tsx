@@ -4,13 +4,7 @@ import { Cog, Menu, X, ArrowUpRight } from 'lucide-react'
 import { clsx } from 'clsx'
 import './site.css'
 
-const NAV = [
-  { to: '/#capabilities', label: 'Capabilities' },
-  { to: '/#process', label: 'Process' },
-  { to: '/#industries', label: 'Industries' },
-  { to: '/blog', label: 'Blog' },
-  { to: '/#contact', label: 'Contact' },
-]
+const NAV = [{ to: '/blog', label: 'Blog' }]
 
 function Wordmark() {
   return (
@@ -26,7 +20,13 @@ function Wordmark() {
   )
 }
 
-export function SiteLayout({ children }: { children: ReactNode }) {
+export function SiteLayout({
+  children,
+  showFooter = true,
+}: {
+  children: ReactNode
+  showFooter?: boolean
+}) {
   const [open, setOpen] = useState(false)
   const [scrolled, setScrolled] = useState(false)
 
@@ -49,18 +49,18 @@ export function SiteLayout({ children }: { children: ReactNode }) {
           <Wordmark />
           <nav className="hidden items-center gap-7 md:flex">
             {NAV.map((n) => (
-              <a key={n.to} href={n.to} className="text-sm text-[var(--ink-dim)] transition hover:text-[var(--ink)]">
+              <Link key={n.to} to={n.to} className="text-sm text-[var(--ink-dim)] transition hover:text-[var(--ink)]">
                 {n.label}
-              </a>
+              </Link>
             ))}
           </nav>
           <div className="hidden items-center gap-3 md:flex">
             <Link to="/login" className="site-btn site-btn-ghost">
-              Client Portal
+              Sign In
             </Link>
-            <a href="/#contact" className="site-btn site-btn-primary">
-              Request a Quote <ArrowUpRight size={16} />
-            </a>
+            <Link to="/signup" className="site-btn site-btn-primary">
+              Sign Up <ArrowUpRight size={16} />
+            </Link>
           </div>
           <button
             className="rounded-lg p-2 text-[var(--ink)] md:hidden"
@@ -83,22 +83,22 @@ export function SiteLayout({ children }: { children: ReactNode }) {
               </button>
             </div>
             {NAV.map((n) => (
-              <a
+              <Link
                 key={n.to}
-                href={n.to}
+                to={n.to}
                 onClick={() => setOpen(false)}
                 className="rounded-lg px-3 py-2.5 text-[var(--ink-dim)] hover:bg-white/5 hover:text-[var(--ink)]"
               >
                 {n.label}
-              </a>
+              </Link>
             ))}
             <div className="mt-4 flex flex-col gap-2">
               <Link to="/login" className="site-btn site-btn-ghost justify-center" onClick={() => setOpen(false)}>
-                Client Portal
+                Sign In
               </Link>
-              <a href="/#contact" className="site-btn site-btn-primary justify-center" onClick={() => setOpen(false)}>
-                Request a Quote
-              </a>
+              <Link to="/signup" className="site-btn site-btn-primary justify-center" onClick={() => setOpen(false)}>
+                Sign Up
+              </Link>
             </div>
           </div>
         </div>
@@ -106,7 +106,7 @@ export function SiteLayout({ children }: { children: ReactNode }) {
 
       {children}
 
-      <Footer />
+      {showFooter && <Footer />}
     </div>
   )
 }
