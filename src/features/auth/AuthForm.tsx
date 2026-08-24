@@ -63,7 +63,7 @@ export function AuthForm() {
 
   if (session) {
     return (
-      <div className="rounded-2xl border border-[var(--line)] bg-white/90 p-8 text-center shadow-xl shadow-teal-900/5 backdrop-blur">
+      <div className="rounded-2xl border border-[var(--line)] bg-white/90 p-8 text-center shadow-xl shadow-lime-900/10 backdrop-blur">
         <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-xl bg-brand-600 text-white">
           <LogIn size={22} />
         </div>
@@ -79,7 +79,7 @@ export function AuthForm() {
   return (
     <div
       id="access"
-      className="rounded-2xl border border-[var(--line)] bg-white/90 p-6 shadow-xl shadow-teal-900/5 backdrop-blur sm:p-7"
+      className="rounded-2xl border border-[var(--line)] bg-white/90 p-6 shadow-xl shadow-lime-900/10 backdrop-blur sm:p-7"
     >
       <div className="mb-1 flex items-center gap-2">
         <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-brand-500 to-brand-700 text-white">

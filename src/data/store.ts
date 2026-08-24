@@ -14,7 +14,7 @@ import {
   setPersistHook,
 } from './db'
 import type { Database } from './db'
-import { buildInitialDb } from './seed'
+import { buildInitialDb, DEFAULT_SETTINGS } from './seed'
 import { setCurrency } from '@/lib/format'
 import { isSupabaseEnabled } from './supabase'
 import { loadAll, primeSyncBaseline, syncThrough } from './backend'
@@ -25,8 +25,18 @@ export function ensureDb(): void {
   if (!hasDb()) {
     saveDb(buildInitialDb())
   }
-  const s = getDb().settings
-  setCurrency(s.currencySymbol, s.currency)
+  // Migrate older local datasets: backfill any settings keys added since the
+  // stored DB was created (e.g. numbering.dc) so nothing reads undefined.
+  const db = getDb()
+  const before = JSON.stringify(db.settings)
+  db.settings = {
+    ...DEFAULT_SETTINGS,
+    ...db.settings,
+    numbering: { ...DEFAULT_SETTINGS.numbering, ...db.settings.numbering },
+    company: { ...DEFAULT_SETTINGS.company, ...db.settings.company },
+  }
+  if (JSON.stringify(db.settings) !== before) replaceLocal(db)
+  setCurrency(db.settings.currencySymbol, db.settings.currency)
 }
 
 // After a Supabase session exists, pull the full dataset, replace the local

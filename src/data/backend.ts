@@ -242,7 +242,16 @@ export async function loadAll(): Promise<Database | null> {
   if (stateErr) throw stateErr
   if (state?.data) {
     const parsed = state.data as { settings?: Database['settings']; sequences?: Database['sequences'] }
-    if (parsed.settings) db.settings = { ...DEFAULT_SETTINGS, ...parsed.settings }
+    if (parsed.settings) {
+      // Deep-merge so newly-added nested keys (e.g. numbering.dc) keep their
+      // defaults when the stored settings predate them.
+      db.settings = {
+        ...DEFAULT_SETTINGS,
+        ...parsed.settings,
+        numbering: { ...DEFAULT_SETTINGS.numbering, ...(parsed.settings.numbering ?? {}) },
+        company: { ...DEFAULT_SETTINGS.company, ...(parsed.settings.company ?? {}) },
+      }
+    }
     if (parsed.sequences) db.sequences = { ...db.sequences, ...parsed.sequences }
   } else {
     // Fresh DB seeded via SQL: align code sequences with existing rows.

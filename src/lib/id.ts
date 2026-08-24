@@ -9,6 +9,7 @@ export function uid(prefix = ''): string {
 // Format a running document number, e.g. formatDocNo('JOB-{FY}-{####}', 12)
 // Supported tokens: {FY} financial year (Apr-Mar), {YYYY}, {YY}, {MM}, {####}
 export function formatDocNo(pattern: string, seq: number, date = new Date()): string {
+  if (!pattern) return String(seq) // defensive: missing numbering pattern
   const year = date.getFullYear()
   const month = date.getMonth() // 0-based
   // Indian financial year Apr(3)-Mar(2)

@@ -14,12 +14,13 @@
   body {
     @apply text-slate-800 antialiased;
     font-feature-settings: 'cv11', 'ss01';
-    /* Soft mint light gradient behind the whole app */
-    background-color: #f2f7f6;
+    /* Rich apple-green light gradient behind the whole app */
+    background-color: #f3f8e7;
     background-image:
-      radial-gradient(50% 40% at 12% 0%, rgba(20, 184, 166, 0.1), transparent 60%),
-      radial-gradient(46% 38% at 100% 4%, rgba(16, 185, 129, 0.08), transparent 60%),
-      linear-gradient(180deg, #f5faf9 0%, #eef4f3 100%);
+      radial-gradient(52% 42% at 10% -2%, rgba(141, 182, 0, 0.18), transparent 60%),
+      radial-gradient(48% 40% at 102% 4%, rgba(115, 148, 0, 0.14), transparent 60%),
+      radial-gradient(60% 50% at 50% 110%, rgba(164, 209, 58, 0.12), transparent 60%),
+      linear-gradient(180deg, #f7fbec 0%, #edf4dd 100%);
     background-attachment: fixed;
   }
   * {

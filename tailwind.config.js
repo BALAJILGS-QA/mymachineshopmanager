@@ -4,19 +4,19 @@ export default {
   theme: {
     extend: {
       colors: {
-        // Teal / emerald brand — drives the whole app (buttons, active nav,
+        // Apple-green brand — drives the whole app (buttons, active nav,
         // focus rings) plus the marketing site accents.
         brand: {
-          50: '#effefb',
-          100: '#c9fdf1',
-          200: '#96f6e5',
-          300: '#5ce8d5',
-          400: '#2dd0bf',
-          500: '#14b8a6',
-          600: '#0d9488',
-          700: '#0f766e',
-          800: '#115e59',
-          900: '#134e4a',
+          50: '#f5fbe7',
+          100: '#e8f6c6',
+          200: '#d3ec97',
+          300: '#bbe063',
+          400: '#a4d13a',
+          500: '#8db600',
+          600: '#739400',
+          700: '#587200',
+          800: '#465a09',
+          900: '#3a4b10',
         },
       },
       fontFamily: {
