@@ -1,11 +1,11 @@
 import { useRef, useState } from 'react'
-import { Database, Download, KeyRound, Save, Upload, Wand2, Trash2 } from 'lucide-react'
-import { settingsRepo } from '@/data/repo'
+import { Database, Download, KeyRound, Plus, Save, Upload, Wand2, Trash2 } from 'lucide-react'
+import { settingsRepo, productRepo, BusinessRuleError } from '@/data/repo'
 import { useDb } from '@/data/store'
 import { exportDb, importDb, resetDb, saveDb } from '@/data/db'
 import { buildInitialDb } from '@/data/seed'
 import { loadDemoData } from '@/data/demo'
-import { setCurrency } from '@/lib/format'
+import { currency, setCurrency } from '@/lib/format'
 import { PageHeader } from '@/components/common/PageHeader'
 import { Card, Field, Input, SectionTitle } from '@/components/ui/primitives'
 import { useToast } from '@/components/ui/Toast'
@@ -51,11 +51,99 @@ export function SettingsPage() {
             toast.success('Expense categories updated')
           }}
         />
+        <ProductsCard />
         <NumberingSettings />
         <ChangePassword />
         <DataManagement toast={toast} confirm={confirm} />
       </div>
     </div>
+  )
+}
+
+// Machining rate list — e.g. "Open Well Bracket" ₹16.00. Used to prefill
+// invoice and delivery-challan line items.
+function ProductsCard() {
+  const products = useDb((db) => db.products)
+  const units = useDb((db) => db.settings.units)
+  const toast = useToast()
+  const confirm = useConfirm()
+  const [name, setName] = useState('')
+  const [rate, setRate] = useState('')
+  const [unit, setUnit] = useState(units[0] ?? 'Nos')
+
+  function add() {
+    try {
+      productRepo.create({ name, rate: Number(rate) || 0, unit, active: true })
+      setName('')
+      setRate('')
+      toast.success('Product added')
+    } catch (e) {
+      toast.error(e instanceof BusinessRuleError ? e.message : 'Add failed')
+    }
+  }
+  async function remove(id: string, label: string) {
+    const ok = await confirm({ message: `Remove "${label}" from the rate list?`, danger: true })
+    if (!ok) return
+    productRepo.remove(id)
+    toast.success('Removed')
+  }
+
+  return (
+    <Card className="p-4 lg:col-span-2">
+      <SectionTitle
+        title="Machining Rate List"
+        subtitle="Parts and their machining cost (e.g. Open Well Bracket ₹16.00). Used to prefill invoices and challans."
+      />
+      <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-end">
+        <Field label="Part / Product" className="flex-1">
+          <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Open Well Bracket" />
+        </Field>
+        <Field label="Rate (₹)" className="w-28">
+          <Input type="number" step="0.01" value={rate} onChange={(e) => setRate(e.target.value)} placeholder="16.00" />
+        </Field>
+        <Field label="Unit" className="w-24">
+          <select className="input" value={unit} onChange={(e) => setUnit(e.target.value)}>
+            {units.map((u) => (
+              <option key={u}>{u}</option>
+            ))}
+          </select>
+        </Field>
+        <button className="btn-primary mb-0.5" onClick={add}>
+          <Plus size={16} /> Add
+        </button>
+      </div>
+
+      {products.length > 0 && (
+        <div className="mt-3 overflow-x-auto rounded-lg border border-slate-200">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="bg-slate-50 text-left">
+                <th className="th">Code</th>
+                <th className="th">Part / Product</th>
+                <th className="th">Unit</th>
+                <th className="th text-right">Rate</th>
+                <th className="th"></th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {products.map((p) => (
+                <tr key={p.id}>
+                  <td className="td font-mono text-xs text-slate-500">{p.code}</td>
+                  <td className="td font-medium text-slate-800">{p.name}</td>
+                  <td className="td">{p.unit || '—'}</td>
+                  <td className="td text-right">{currency(p.rate)}</td>
+                  <td className="td text-right">
+                    <button className="btn-ghost btn-sm text-red-500" onClick={() => remove(p.id, p.name)}>
+                      <Trash2 size={15} />
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </Card>
   )
 }
 
@@ -181,6 +269,7 @@ function NumberingSettings() {
     { key: 'adjustment', label: 'Adjustment' },
     { key: 'payment', label: 'Payment' },
     { key: 'expense', label: 'Expense' },
+    { key: 'dc', label: 'Delivery Challan' },
   ]
 
   return (

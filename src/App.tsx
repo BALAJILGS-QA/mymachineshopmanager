@@ -13,6 +13,7 @@ import { DashboardPage } from './features/dashboard/DashboardPage'
 import { JobsPage } from './features/jobs/JobsPage'
 import { ProductionPage } from './features/production/ProductionPage'
 import { MaterialsPage } from './features/materials/MaterialsPage'
+import { DeliveriesPage } from './features/deliveries/DeliveriesPage'
 import { InvoicesPage } from './features/invoices/InvoicesPage'
 import { InvoicePrintPage } from './features/invoices/InvoicePrintPage'
 import { PaymentsPage } from './features/payments/PaymentsPage'
@@ -80,6 +81,7 @@ function Portal() {
         <Route path="jobs" element={<JobsPage />} />
         <Route path="production" element={<ProductionPage />} />
         <Route path="materials" element={<MaterialsPage />} />
+        <Route path="deliveries" element={<DeliveriesPage />} />
         <Route path="invoices" element={<InvoicesPage />} />
         <Route path="invoices/:id/print" element={<InvoicePrintPage />} />
         <Route path="payments" element={<PaymentsPage />} />

@@ -7,6 +7,7 @@
 import type {
   AuditLog,
   Company,
+  DeliveryChallan,
   Expense,
   Invoice,
   JobOrder,
@@ -14,6 +15,7 @@ import type {
   MaterialIssue,
   MaterialReceipt,
   Payment,
+  Product,
   ProductionEvent,
   Settings,
   StockAdjustment,
@@ -27,8 +29,10 @@ export interface Sequences {
   adjustment: number
   payment: number
   expense: number
+  dc: number
   companyCode: number
   materialCode: number
+  productCode: number
 }
 
 export interface Database {
@@ -37,11 +41,13 @@ export interface Database {
   sequences: Sequences
   companies: Company[]
   materials: Material[]
+  products: Product[]
   jobs: JobOrder[]
   productionEvents: ProductionEvent[]
   receipts: MaterialReceipt[]
   issues: MaterialIssue[]
   adjustments: StockAdjustment[]
+  deliveryChallans: DeliveryChallan[]
   invoices: Invoice[]
   payments: Payment[]
   expenses: Expense[]
@@ -140,11 +146,13 @@ export function mutate<T>(fn: (db: Database) => T): T {
     sequences: { ...db.sequences },
     companies: [...db.companies],
     materials: [...db.materials],
+    products: [...db.products],
     jobs: [...db.jobs],
     productionEvents: [...db.productionEvents],
     receipts: [...db.receipts],
     issues: [...db.issues],
     adjustments: [...db.adjustments],
+    deliveryChallans: [...db.deliveryChallans],
     invoices: [...db.invoices],
     payments: [...db.payments],
     expenses: [...db.expenses],

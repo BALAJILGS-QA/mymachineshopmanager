@@ -42,6 +42,15 @@ const M: Mapping[] = [
     },
   },
   {
+    table: 'products',
+    collection: 'products',
+    numeric: ['rate'],
+    fields: {
+      id: 'id', code: 'code', name: 'name', rate: 'rate', unit: 'unit',
+      hsn: 'hsn', active: 'active', createdAt: 'created_at', updatedAt: 'updated_at',
+    },
+  },
+  {
     table: 'job_orders',
     collection: 'jobs',
     numeric: ['orderedQty', 'completedQty', 'rate'],
@@ -95,6 +104,16 @@ const M: Mapping[] = [
       id: 'id', adjNo: 'adj_no', date: 'date', materialId: 'material_id',
       companyId: 'company_id', quantity: 'quantity', unit: 'unit', reason: 'reason',
       createdAt: 'created_at', updatedAt: 'updated_at',
+    },
+  },
+  {
+    table: 'delivery_challans',
+    collection: 'deliveryChallans',
+    numeric: [],
+    fields: {
+      id: 'id', dcNo: 'dc_no', date: 'date', companyId: 'company_id', jobId: 'job_id',
+      reference: 'reference', vehicleNo: 'vehicle_no', lines: 'lines', notes: 'notes',
+      status: 'status', invoiceId: 'invoice_id', createdAt: 'created_at', updatedAt: 'updated_at',
     },
   },
   {
@@ -179,10 +198,10 @@ export async function loadAll(): Promise<Database | null> {
     settings: DEFAULT_SETTINGS,
     sequences: {
       job: 0, invoice: 0, receipt: 0, issue: 0, adjustment: 0, payment: 0,
-      expense: 0, companyCode: 0, materialCode: 0,
+      expense: 0, dc: 0, companyCode: 0, materialCode: 0, productCode: 0,
     },
-    companies: [], materials: [], jobs: [], productionEvents: [], receipts: [],
-    issues: [], adjustments: [], invoices: [], payments: [], expenses: [], auditLog: [],
+    companies: [], materials: [], products: [], jobs: [], productionEvents: [], receipts: [],
+    issues: [], adjustments: [], deliveryChallans: [], invoices: [], payments: [], expenses: [], auditLog: [],
   }
 
   for (const m of M) {
@@ -351,8 +370,8 @@ export function syncThrough(next: Database): void {
 function emptyDb(): Database {
   return {
     version: DB_VERSION, settings: DEFAULT_SETTINGS,
-    sequences: { job: 0, invoice: 0, receipt: 0, issue: 0, adjustment: 0, payment: 0, expense: 0, companyCode: 0, materialCode: 0 },
-    companies: [], materials: [], jobs: [], productionEvents: [], receipts: [],
-    issues: [], adjustments: [], invoices: [], payments: [], expenses: [], auditLog: [],
+    sequences: { job: 0, invoice: 0, receipt: 0, issue: 0, adjustment: 0, payment: 0, expense: 0, dc: 0, companyCode: 0, materialCode: 0, productCode: 0 },
+    companies: [], materials: [], products: [], jobs: [], productionEvents: [], receipts: [],
+    issues: [], adjustments: [], deliveryChallans: [], invoices: [], payments: [], expenses: [], auditLog: [],
   }
 }

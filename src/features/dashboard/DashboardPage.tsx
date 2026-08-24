@@ -8,6 +8,7 @@ import {
   FileText,
   IndianRupee,
   PackageX,
+  Percent,
   Receipt,
   Send,
   Wallet,
@@ -78,16 +79,16 @@ export function DashboardPage() {
     const db = getDb()
     const open = jobsF.filter((j) => ['Pending', 'Draft'].includes(j.status)).length
     const inProd = jobsF.filter((j) => j.status === 'In Progress').length
-    const invoicedThisMonth = invoicesF
-      .filter((i) => i.status !== 'Cancelled' && i.date >= monthStart)
-      .reduce((s, i) => s + computeInvoice(i, payments).total, 0)
+    const monthInvoices = invoicesF.filter((i) => i.status !== 'Cancelled' && i.date >= monthStart)
+    const invoicedThisMonth = monthInvoices.reduce((s, i) => s + computeInvoice(i, payments).total, 0)
+    const gstThisMonth = monthInvoices.reduce((s, i) => s + computeInvoice(i, payments).taxAmount, 0)
     const rawValue = company ? companyMaterialValue(db, company) : totalRawMaterialValue(db)
     const pending = invoicesF
       .filter((i) => i.status !== 'Cancelled')
       .reduce((s, i) => s + computeInvoice(i, payments).outstanding, 0)
     const paymentsThisMonth = paymentsF.filter((p) => p.date >= monthStart).reduce((s, p) => s + p.amount, 0)
     const expensesThisMonth = expensesF.filter((e) => e.date >= monthStart).reduce((s, e) => s + e.amount, 0)
-    return { open, inProd, invoicedThisMonth, rawValue, pending, paymentsThisMonth, expensesThisMonth }
+    return { open, inProd, invoicedThisMonth, gstThisMonth, rawValue, pending, paymentsThisMonth, expensesThisMonth }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [jobsF, invoicesF, paymentsF, expensesF, payments, stamp, monthStart, company])
 
@@ -194,6 +195,7 @@ export function DashboardPage() {
       {/* KPI cards */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-4">
         <Kpi icon={FileText} tone="blue" label="Invoiced (month)" value={currency(kpi.invoicedThisMonth)} to="/app/invoices" />
+        <Kpi icon={Percent} tone="violet" label="GST (month)" value={currency(kpi.gstThisMonth)} to="/app/reports" />
         <Kpi icon={Wallet} tone="green" label="Payments (month)" value={currency(kpi.paymentsThisMonth)} to="/app/payments" />
         <Kpi icon={IndianRupee} tone="red" label="Pending Payments" value={currency(kpi.pending)} to="/app/invoices" />
         <Kpi icon={Receipt} tone="amber" label="Expenses (month)" value={currency(kpi.expensesThisMonth)} to="/app/expenses" />

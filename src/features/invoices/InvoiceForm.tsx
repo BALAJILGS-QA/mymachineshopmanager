@@ -13,25 +13,31 @@ import { useToast } from '@/components/ui/Toast'
 export function InvoiceForm({
   invoice,
   onClose,
+  prefill,
+  onCreated,
 }: {
   invoice: Invoice | null
   onClose: () => void
+  prefill?: { companyId?: string; reference?: string; lines?: InvoiceLine[] }
+  onCreated?: (invoiceId: string) => void
 }) {
   const toast = useToast()
   const companies = useDb((db) => db.companies.filter((c) => c.active || c.id === invoice?.companyId))
   const jobs = useDb((db) => db.jobs)
+  const products = useDb((db) => db.products.filter((p) => p.active))
   const settings = useDb((db) => db.settings)
 
-  const [companyId, setCompanyId] = useState(invoice?.companyId ?? companies[0]?.id ?? '')
+  const [companyId, setCompanyId] = useState(invoice?.companyId ?? prefill?.companyId ?? companies[0]?.id ?? '')
   const [date, setDate] = useState(invoice?.date ?? todayISO())
-  const [reference, setReference] = useState(invoice?.reference ?? '')
+  const [reference, setReference] = useState(invoice?.reference ?? prefill?.reference ?? '')
   const [discount, setDiscount] = useState(String(invoice?.discount ?? 0))
   const [taxPercent, setTaxPercent] = useState(
     String(invoice?.taxPercent ?? settings.defaultTaxPercent),
   )
   const [notes, setNotes] = useState(invoice?.notes ?? '')
   const [lines, setLines] = useState<InvoiceLine[]>(
-    invoice?.lines ?? [{ id: uid('l_'), description: '', quantity: 1, rate: 0 }],
+    invoice?.lines ??
+      prefill?.lines ?? [{ id: uid('l_'), description: '', quantity: 1, rate: 0 }],
   )
 
   // Eligible jobs: completed/delivered for the selected company, not fully invoiced.
@@ -67,6 +73,14 @@ export function InvoiceForm({
         quantity: job.completedQty || job.orderedQty,
         rate: job.rate ?? 0,
       },
+    ])
+  }
+  function addProductLine(productId: string) {
+    const p = products.find((x) => x.id === productId)
+    if (!p) return
+    setLines((ls) => [
+      ...ls.filter((l) => l.description || l.rate),
+      { id: uid('l_'), description: p.name, quantity: 1, rate: p.rate },
     ])
   }
 
@@ -108,8 +122,9 @@ export function InvoiceForm({
         invoiceRepo.update(invoice.id, payload)
         toast.success('Invoice updated')
       } else {
-        invoiceRepo.create(payload)
+        const created = invoiceRepo.create(payload)
         toast.success('Invoice created')
+        onCreated?.(created.id)
       }
       onClose()
     } catch (e) {
@@ -181,11 +196,31 @@ export function InvoiceForm({
       )}
 
       <div className="mt-4">
-        <div className="mb-1 flex items-center justify-between">
+        <div className="mb-1 flex items-center justify-between gap-2">
           <label className="label mb-0">Line Items</label>
-          <button className="btn-ghost btn-sm text-brand-600" onClick={addLine}>
-            <Plus size={14} /> Add line
-          </button>
+          <div className="flex items-center gap-2">
+            {products.length > 0 && (
+              <Select
+                value=""
+                onChange={(e) => {
+                  if (e.target.value) addProductLine(e.target.value)
+                  e.target.value = ''
+                }}
+                className="h-8 py-1 text-xs"
+                aria-label="Add from rate list"
+              >
+                <option value="">+ Add from rate list…</option>
+                {products.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name} — {p.rate}
+                  </option>
+                ))}
+              </Select>
+            )}
+            <button className="btn-ghost btn-sm text-brand-600" onClick={addLine}>
+              <Plus size={14} /> Add line
+            </button>
+          </div>
         </div>
         <div className="overflow-x-auto rounded-lg border border-slate-200">
           <table className="w-full min-w-[36rem]">

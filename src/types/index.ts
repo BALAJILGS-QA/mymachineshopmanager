@@ -60,6 +60,17 @@ export interface Material extends AuditFields {
   active: boolean
 }
 
+// Rate list / price master for machined parts (e.g. "Open Well Bracket" ₹16.00).
+export interface Product extends AuditFields {
+  id: ID
+  code: string
+  name: string
+  rate: number
+  unit?: string
+  hsn?: string
+  active: boolean
+}
+
 export interface JobOrder extends AuditFields {
   id: ID
   jobNo: string
@@ -143,6 +154,30 @@ export interface InvoiceLine {
   // amount is derived: quantity * rate
 }
 
+export type DcStatus = 'Open' | 'Invoiced' | 'Cancelled'
+
+export interface DcLine {
+  id: ID
+  jobId?: ID
+  description: string
+  quantity: number
+  unit: string
+}
+
+export interface DeliveryChallan extends AuditFields {
+  id: ID
+  dcNo: string
+  date: ISODate
+  companyId: ID
+  jobId?: ID
+  reference?: string // customer PO / reference
+  vehicleNo?: string
+  lines: DcLine[]
+  notes?: string
+  status: DcStatus
+  invoiceId?: ID // set when an invoice is raised against this DC
+}
+
 export interface Invoice extends AuditFields {
   id: ID
   invoiceNo: string
@@ -213,6 +248,7 @@ export interface Settings {
     adjustment: string
     payment: string
     expense: string
+    dc: string
   }
   company: {
     name: string

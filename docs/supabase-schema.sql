@@ -270,6 +270,48 @@ begin
   end loop;
 end $$;
 
+-- ---------- Rate list (machining cost per part) -----------------------------
+create table if not exists products (
+  id text primary key,
+  code text not null unique,
+  name text not null,
+  rate numeric(14,2) not null default 0 check (rate >= 0),
+  unit text,
+  hsn text,
+  active boolean not null default true,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+-- ---------- Delivery challans (invoice raised against a challan) -------------
+create table if not exists delivery_challans (
+  id text primary key,
+  dc_no text not null unique,
+  date date not null,
+  company_id text not null references companies(id),
+  job_id text references job_orders(id),
+  reference text,
+  vehicle_no text,
+  lines jsonb not null default '[]',
+  notes text,
+  status text not null default 'Open',
+  invoice_id text references invoices(id),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+create index if not exists idx_dc_company on delivery_challans (company_id);
+
+do $$
+declare t text;
+begin
+  foreach t in array array['products','delivery_challans']
+  loop
+    execute format('alter table %I enable row level security;', t);
+    execute format('drop policy if exists auth_all on %I;', t);
+    execute format('create policy auth_all on %I for all to authenticated using (true) with check (true);', t);
+  end loop;
+end $$;
+
 -- ---------- Seed initial companies (PRD 18) ---------------------------------
 insert into companies (id, code, name) values
   ('cmp_seed_flowra','C001','Flowra Global'),

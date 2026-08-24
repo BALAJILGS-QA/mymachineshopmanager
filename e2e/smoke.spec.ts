@@ -58,7 +58,8 @@ test('full operational workflow', async ({ page, viewport }) => {
   await nav(page, 'Settings')
   await page.getByRole('button', { name: 'Load demo data' }).click()
   await page.getByRole('button', { name: 'Load demo', exact: true }).click()
-  await page.waitForLoadState('load')
+  // The loader reloads the page ~400ms later; wait for that to settle.
+  await page.waitForTimeout(1500)
 
   // Jobs list should be populated.
   await nav(page, 'Job Orders')
@@ -90,6 +91,26 @@ test('invoice PDF downloads', async ({ page, viewport }) => {
     page.getByRole('button', { name: 'Download PDF' }).first().click(),
   ])
   expect(download.suggestedFilename()).toMatch(/^INV-.*\.pdf$/)
+})
+
+test('delivery challan can be created and invoiced', async ({ page, viewport }) => {
+  test.skip((viewport?.width ?? 0) < 1024, 'desktop sidebar navigation only')
+  await login(page)
+
+  await nav(page, 'Delivery Challan')
+  await page.getByRole('button', { name: 'New Challan' }).click()
+  await page.getByPlaceholder('Item').fill('Open Well Bracket')
+  await page.getByRole('button', { name: 'Create challan' }).click()
+  await expect(page.getByText(/DC-/).first()).toBeVisible()
+  await expect(page.getByText('Open', { exact: true }).first()).toBeVisible()
+
+  // Raise an invoice against the challan (prefilled from its items).
+  await page.getByRole('button', { name: 'Create invoice' }).first().click()
+  const dialog = page.getByRole('dialog')
+  await expect(dialog.getByRole('heading', { name: 'New Invoice' })).toBeVisible()
+  await dialog.getByRole('button', { name: 'Create invoice' }).click()
+  // Challan flips to Invoiced.
+  await expect(page.getByText('Invoiced').first()).toBeVisible()
 })
 
 test('create a company and a job order', async ({ page, viewport }) => {

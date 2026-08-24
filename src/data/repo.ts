@@ -5,6 +5,7 @@
 
 import type {
   Company,
+  DeliveryChallan,
   Expense,
   Invoice,
   JobOrder,
@@ -13,6 +14,7 @@ import type {
   MaterialIssue,
   MaterialReceipt,
   Payment,
+  Product,
   ProductionEvent,
   Settings,
   StockAdjustment,
@@ -192,6 +194,55 @@ export const materialRepo = {
       }
       db.materials = db.materials.filter((m) => m.id !== id)
       audit(db, 'Material', id, 'delete', 'Deleted material')
+    }),
+}
+
+// -------------------------------------------------- Products (rate list)
+export const productRepo = {
+  list: (): Product[] => getDb().products,
+  get: (id: string) => getDb().products.find((p) => p.id === id),
+  create: (
+    input: Omit<Product, 'id' | 'code' | 'createdAt' | 'updatedAt'> & { code?: string },
+  ): Product =>
+    mutate((db) => {
+      if (!input.name.trim()) throw new BusinessRuleError('Product name is required')
+      if (input.rate < 0) throw new BusinessRuleError('Rate cannot be negative')
+      let code = input.code?.trim()
+      if (code && db.products.some((p) => p.code === code)) {
+        throw new BusinessRuleError(`Product code "${code}" already exists`)
+      }
+      if (!code) {
+        db.sequences.productCode += 1
+        code = `P${String(db.sequences.productCode).padStart(3, '0')}`
+      }
+      const ts = nowISO()
+      const product: Product = {
+        ...input,
+        name: input.name.trim(),
+        code,
+        id: uid('prd_'),
+        createdAt: ts,
+        updatedAt: ts,
+      }
+      db.products.push(product)
+      audit(db, 'Product', product.id, 'create', `Added product ${product.name}`)
+      return product
+    }),
+  update: (id: string, patch: Partial<Product>): Product =>
+    mutate((db) => {
+      const product = db.products.find((p) => p.id === id)
+      if (!product) throw new BusinessRuleError('Product not found')
+      if (patch.rate !== undefined && patch.rate < 0) {
+        throw new BusinessRuleError('Rate cannot be negative')
+      }
+      Object.assign(product, patch, { updatedAt: nowISO() })
+      audit(db, 'Product', id, 'update', `Updated product ${product.name}`)
+      return product
+    }),
+  remove: (id: string): void =>
+    mutate((db) => {
+      db.products = db.products.filter((p) => p.id !== id)
+      audit(db, 'Product', id, 'delete', 'Deleted product')
     }),
 }
 
@@ -446,6 +497,69 @@ export const stockRepo = {
     mutate((db) => {
       db.issues = db.issues.filter((i) => i.id !== id)
       audit(db, 'MaterialIssue', id, 'delete', 'Deleted issue')
+    }),
+}
+
+// ----------------------------------------------------- Delivery Challans
+export const dcRepo = {
+  list: (): DeliveryChallan[] => getDb().deliveryChallans,
+  get: (id: string) => getDb().deliveryChallans.find((d) => d.id === id),
+
+  create: (
+    input: Omit<DeliveryChallan, 'id' | 'dcNo' | 'createdAt' | 'updatedAt'>,
+  ): DeliveryChallan =>
+    mutate((db) => {
+      if (!db.companies.some((c) => c.id === input.companyId)) {
+        throw new BusinessRuleError('Select a valid company')
+      }
+      if (!input.lines.length) throw new BusinessRuleError('Add at least one item')
+      for (const l of input.lines) {
+        if (l.quantity <= 0) throw new BusinessRuleError('Item quantity must be greater than zero')
+      }
+      const ts = nowISO()
+      const dc: DeliveryChallan = {
+        ...input,
+        id: uid('dc_'),
+        dcNo: nextNo(db, 'dc', db.settings.numbering.dc),
+        createdAt: ts,
+        updatedAt: ts,
+      }
+      db.deliveryChallans.unshift(dc)
+      audit(db, 'DeliveryChallan', dc.id, 'create', `Created challan ${dc.dcNo}`)
+      return dc
+    }),
+
+  update: (id: string, patch: Partial<DeliveryChallan>): DeliveryChallan =>
+    mutate((db) => {
+      const dc = db.deliveryChallans.find((d) => d.id === id)
+      if (!dc) throw new BusinessRuleError('Delivery challan not found')
+      if (dc.status === 'Invoiced' && patch.lines) {
+        throw new BusinessRuleError('Cannot edit items on an invoiced challan')
+      }
+      Object.assign(dc, patch, { updatedAt: nowISO() })
+      audit(db, 'DeliveryChallan', id, 'update', `Updated challan ${dc.dcNo}`)
+      return dc
+    }),
+
+  setStatus: (id: string, status: DeliveryChallan['status'], invoiceId?: string): DeliveryChallan =>
+    mutate((db) => {
+      const dc = db.deliveryChallans.find((d) => d.id === id)
+      if (!dc) throw new BusinessRuleError('Delivery challan not found')
+      dc.status = status
+      if (invoiceId !== undefined) dc.invoiceId = invoiceId
+      dc.updatedAt = nowISO()
+      audit(db, 'DeliveryChallan', id, 'status', `${dc.dcNo} → ${status}`)
+      return dc
+    }),
+
+  remove: (id: string): void =>
+    mutate((db) => {
+      const dc = db.deliveryChallans.find((d) => d.id === id)
+      if (dc?.status === 'Invoiced') {
+        throw new BusinessRuleError('Challan is invoiced. Cancel it instead of deleting.')
+      }
+      db.deliveryChallans = db.deliveryChallans.filter((d) => d.id !== id)
+      audit(db, 'DeliveryChallan', id, 'delete', 'Deleted challan')
     }),
 }
 
