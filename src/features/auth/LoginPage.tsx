@@ -4,9 +4,9 @@ import { useAuth } from './auth'
 import { useToast } from '@/components/ui/Toast'
 
 export function LoginPage() {
-  const { login } = useAuth()
+  const { login, supabaseMode } = useAuth()
   const toast = useToast()
-  const [username, setUsername] = useState('admin')
+  const [username, setUsername] = useState(supabaseMode ? '' : 'admin')
   const [password, setPassword] = useState('')
   const [busy, setBusy] = useState(false)
 
@@ -15,7 +15,7 @@ export function LoginPage() {
     setBusy(true)
     const ok = await login(username, password)
     setBusy(false)
-    if (!ok) toast.error('Invalid username or password')
+    if (!ok) toast.error(supabaseMode ? 'Invalid email or password' : 'Invalid username or password')
   }
 
   return (
@@ -31,7 +31,7 @@ export function LoginPage() {
 
         <form onSubmit={onSubmit} className="card space-y-4 p-6">
           <div>
-            <label className="label">Username</label>
+            <label className="label">{supabaseMode ? 'Email' : 'Username'}</label>
             <div className="relative">
               <User
                 size={16}
@@ -39,9 +39,11 @@ export function LoginPage() {
               />
               <input
                 className="input pl-9"
+                type={supabaseMode ? 'email' : 'text'}
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
                 autoComplete="username"
+                placeholder={supabaseMode ? 'you@example.com' : ''}
                 autoFocus
               />
             </div>
@@ -67,9 +69,11 @@ export function LoginPage() {
             {busy && <Loader2 size={16} className="animate-spin" />}
             Sign in
           </button>
-          <p className="rounded-lg bg-slate-50 px-3 py-2 text-center text-2xs text-slate-500">
-            Default login — <b>admin</b> / <b>admin123</b>. Change it in Settings after first sign-in.
-          </p>
+          {!supabaseMode && (
+            <p className="rounded-lg bg-slate-50 px-3 py-2 text-center text-2xs text-slate-500">
+              Default login — <b>admin</b> / <b>admin123</b>. Change it in Settings after first sign-in.
+            </p>
+          )}
         </form>
       </div>
     </div>

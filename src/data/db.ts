@@ -66,6 +66,13 @@ export function getRevision(): number {
   return revision
 }
 
+// Optional persistence hook (e.g. Supabase write-through). Kept generic so the
+// low-level store has no backend dependency.
+let persistHook: ((db: Database) => void) | null = null
+export function setPersistHook(fn: (db: Database) => void): void {
+  persistHook = fn
+}
+
 function emit() {
   revision++
   listeners.forEach((fn) => fn())
@@ -93,6 +100,9 @@ export function saveDb(db: Database): void {
     console.error('Failed to save DB', e)
     throw new Error('Storage write failed. Local storage may be full.')
   }
+  // Local write is the source of truth for the UI; the persist hook (if any)
+  // replicates to the remote backend asynchronously.
+  persistHook?.(db)
   emit()
 }
 
@@ -100,6 +110,19 @@ export function getDb(): Database {
   const db = loadDb()
   if (!db) throw new Error('Database not initialised')
   return db
+}
+
+// Replace the whole store without invoking the persist hook — used to hydrate
+// from the remote backend so the freshly-loaded data is not written straight
+// back. Still caches locally (offline fallback) and notifies the UI.
+export function replaceLocal(db: Database): void {
+  cache = db
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(db))
+  } catch (e) {
+    console.error('Failed to cache DB locally', e)
+  }
+  emit()
 }
 
 // Apply a mutation to the DB atomically and persist. After the mutation runs

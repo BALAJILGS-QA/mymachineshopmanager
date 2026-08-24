@@ -1,7 +1,8 @@
-// Lightweight local authentication for the MVP. Credentials are never stored in
-// the application data tables (PRD 11) — only a salted SHA-256 hash is kept in a
-// separate key, and the password default is changeable from Settings. This gates
-// the SPA; for a hosted deployment swap this for Supabase Auth.
+// Authentication. Two modes:
+//  • Supabase mode (VITE_SUPABASE_* set) — real email/password auth via
+//    Supabase Auth so Postgres RLS grants access only to signed-in users.
+//  • Local mode — a salted SHA-256 admin credential kept in localStorage,
+//    never in the data tables (PRD 11). Gates the static SPA at zero cost.
 
 import {
   createContext,
@@ -11,6 +12,7 @@ import {
   useState,
   type ReactNode,
 } from 'react'
+import { supabase, isSupabaseEnabled } from '@/data/supabase'
 
 export type Role = 'Admin' | 'Shop' | 'Accounts'
 
@@ -21,6 +23,8 @@ interface Session {
 
 interface AuthApi {
   session: Session | null
+  loading: boolean
+  supabaseMode: boolean
   login: (username: string, password: string) => Promise<boolean>
   logout: () => void
   changePassword: (current: string, next: string) => Promise<boolean>
@@ -66,7 +70,9 @@ export function useAuth(): AuthApi {
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
+  const supabaseMode = isSupabaseEnabled()
   const [session, setSession] = useState<Session | null>(() => {
+    if (supabaseMode) return null
     try {
       const raw = localStorage.getItem(SESSION_KEY)
       return raw ? (JSON.parse(raw) as Session) : null
@@ -74,15 +80,41 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return null
     }
   })
+  const [loading, setLoading] = useState(supabaseMode)
 
   useEffect(() => {
-    void ensureDefaultCredential()
-  }, [])
+    if (!supabaseMode) {
+      void ensureDefaultCredential()
+      return
+    }
+    let active = true
+    supabase!.auth.getSession().then(({ data }) => {
+      if (!active) return
+      setSession(data.session ? { username: data.session.user.email ?? 'user', role: 'Admin' } : null)
+      setLoading(false)
+    })
+    const { data: sub } = supabase!.auth.onAuthStateChange((_event, s) => {
+      setSession(s ? { username: s.user.email ?? 'user', role: 'Admin' } : null)
+    })
+    return () => {
+      active = false
+      sub.subscription.unsubscribe()
+    }
+  }, [supabaseMode])
 
   const api = useMemo<AuthApi>(
     () => ({
       session,
+      loading,
+      supabaseMode,
       async login(username, password) {
+        if (supabaseMode) {
+          const { error } = await supabase!.auth.signInWithPassword({
+            email: username.trim(),
+            password,
+          })
+          return !error
+        }
         await ensureDefaultCredential()
         const raw = localStorage.getItem(AUTH_KEY)
         if (!raw) return false
@@ -100,10 +132,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return false
       },
       logout() {
+        if (supabaseMode) {
+          void supabase!.auth.signOut()
+          return
+        }
         localStorage.removeItem(SESSION_KEY)
         setSession(null)
       },
       async changePassword(current, next) {
+        if (supabaseMode) {
+          const { error } = await supabase!.auth.updateUser({ password: next })
+          return !error
+        }
         const raw = localStorage.getItem(AUTH_KEY)
         if (!raw) return false
         const cred = JSON.parse(raw) as Credential
@@ -113,7 +153,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return true
       },
     }),
-    [session],
+    [session, loading, supabaseMode],
   )
 
   return <AuthContext.Provider value={api}>{children}</AuthContext.Provider>

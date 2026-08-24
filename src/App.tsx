@@ -1,7 +1,12 @@
+import { useEffect, useState } from 'react'
 import { Routes, Route, Navigate } from 'react-router-dom'
+import { Loader2 } from 'lucide-react'
 import { useAuth } from './features/auth/auth'
 import { LoginPage } from './features/auth/LoginPage'
 import { AppShell } from './components/layout/AppShell'
+import { hydrateFromRemote } from './data/store'
+import { setSyncErrorHandler } from './data/backend'
+import { useToast } from './components/ui/Toast'
 import { DashboardPage } from './features/dashboard/DashboardPage'
 import { JobsPage } from './features/jobs/JobsPage'
 import { ProductionPage } from './features/production/ProductionPage'
@@ -14,10 +19,41 @@ import { ReportsPage } from './features/reports/ReportsPage'
 import { CompaniesPage } from './features/companies/CompaniesPage'
 import { SettingsPage } from './features/settings/SettingsPage'
 
-export default function App() {
-  const { session } = useAuth()
+function FullScreenLoader({ label }: { label: string }) {
+  return (
+    <div className="flex min-h-screen flex-col items-center justify-center gap-3 text-slate-500">
+      <Loader2 className="animate-spin text-brand-600" size={28} />
+      <p className="text-sm">{label}</p>
+    </div>
+  )
+}
 
+export default function App() {
+  const { session, loading, supabaseMode } = useAuth()
+  const toast = useToast()
+  const [hydrated, setHydrated] = useState(!supabaseMode)
+
+  useEffect(() => {
+    setSyncErrorHandler((e) =>
+      toast.error(`Cloud sync failed: ${e instanceof Error ? e.message : 'unknown error'}`),
+    )
+  }, [toast])
+
+  // In Supabase mode, pull the dataset once a session exists before rendering.
+  useEffect(() => {
+    if (supabaseMode && session && !hydrated) {
+      hydrateFromRemote()
+        .then(() => setHydrated(true))
+        .catch((e) => {
+          toast.error(`Could not load data: ${e instanceof Error ? e.message : 'error'}`)
+          setHydrated(true)
+        })
+    }
+  }, [supabaseMode, session, hydrated, toast])
+
+  if (loading) return <FullScreenLoader label="Starting…" />
   if (!session) return <LoginPage />
+  if (!hydrated) return <FullScreenLoader label="Loading your shop data…" />
 
   return (
     <AppShell>

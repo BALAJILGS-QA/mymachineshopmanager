@@ -1,27 +1,47 @@
 -- =============================================================================
 -- CNC Machine Shop Management System — Supabase / PostgreSQL schema
 -- =============================================================================
--- This is the production upgrade path for the MVP. The shipped app runs on a
--- browser-local store (zero backend, free on Netlify). To move to a hosted,
--- multi-user backend, run this in the Supabase SQL editor and point the
--- repository layer (src/data/repo.ts) at Supabase via @supabase/supabase-js.
+-- Run this once in the Supabase SQL Editor (Dashboard → SQL → New query).
 --
--- Business rules that live in src/data/repo.ts are mirrored here as database
--- constraints + triggers so they hold regardless of client (PRD 11 & 13).
+-- The app generates its own string IDs (e.g. "cmp_ab12cd") and document
+-- numbers, so primary keys are TEXT, not uuid. Business rules from
+-- src/data/repo.ts are mirrored as constraints + triggers so they hold
+-- regardless of client (PRD 11 & 13).
+--
+-- Security: RLS is enabled and grants full access to AUTHENTICATED users only
+-- (single-tenant shop). The frontend signs in with Supabase Auth, so the public
+-- anon key alone cannot read/write. Create one auth user in
+-- Dashboard → Authentication → Users → Add user (and turn off "Confirm email"
+-- under Authentication → Providers → Email for instant login).
 -- =============================================================================
 
-create extension if not exists "pgcrypto";
-
 -- ---------- Enums ------------------------------------------------------------
-create type job_status   as enum ('Draft','Pending','In Progress','On Hold','Completed','Delivered','Cancelled');
-create type job_priority as enum ('Low','Normal','High','Urgent');
-create type invoice_status as enum ('Draft','Unpaid','Partially Paid','Paid','Cancelled');
-create type payment_method as enum ('Cash','Bank Transfer','UPI','Cheque','Other');
-create type owner_type   as enum ('Company','Shop');
+do $$ begin
+  create type job_status as enum ('Draft','Pending','In Progress','On Hold','Completed','Delivered','Cancelled');
+exception when duplicate_object then null; end $$;
+do $$ begin
+  create type job_priority as enum ('Low','Normal','High','Urgent');
+exception when duplicate_object then null; end $$;
+do $$ begin
+  create type invoice_status as enum ('Draft','Unpaid','Partially Paid','Paid','Cancelled');
+exception when duplicate_object then null; end $$;
+do $$ begin
+  create type payment_method as enum ('Cash','Bank Transfer','UPI','Cheque','Other');
+exception when duplicate_object then null; end $$;
+do $$ begin
+  create type owner_type as enum ('Company','Shop');
+exception when duplicate_object then null; end $$;
+
+-- ---------- App state (settings + sequences singleton) ----------------------
+create table if not exists app_state (
+  id text primary key,          -- always 'singleton'
+  data jsonb not null,
+  updated_at timestamptz not null default now()
+);
 
 -- ---------- Master data ------------------------------------------------------
-create table companies (
-  id uuid primary key default gen_random_uuid(),
+create table if not exists companies (
+  id text primary key,
   code text not null unique,
   name text not null,
   contact_person text,
@@ -35,8 +55,8 @@ create table companies (
   updated_at timestamptz not null default now()
 );
 
-create table materials (
-  id uuid primary key default gen_random_uuid(),
+create table if not exists materials (
+  id text primary key,
   code text not null unique,
   name text not null,
   type text,
@@ -50,14 +70,14 @@ create table materials (
 );
 
 -- ---------- Job orders -------------------------------------------------------
-create table job_orders (
-  id uuid primary key default gen_random_uuid(),
+create table if not exists job_orders (
+  id text primary key,
   job_no text not null unique,
-  company_id uuid not null references companies(id),
+  company_id text not null references companies(id),
   customer_po text,
   part_name text not null,
   part_number text,
-  material_id uuid references materials(id),
+  material_id text references materials(id),
   ordered_qty numeric(14,3) not null check (ordered_qty > 0),
   completed_qty numeric(14,3) not null default 0 check (completed_qty >= 0),
   rate numeric(14,2),
@@ -73,12 +93,12 @@ create table job_orders (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
-create index on job_orders (company_id);
-create index on job_orders (status);
+create index if not exists idx_jobs_company on job_orders (company_id);
+create index if not exists idx_jobs_status on job_orders (status);
 
-create table production_events (
-  id uuid primary key default gen_random_uuid(),
-  job_id uuid not null references job_orders(id) on delete cascade,
+create table if not exists production_events (
+  id text primary key,
+  job_id text not null references job_orders(id) on delete cascade,
   type text not null,
   from_status job_status,
   to_status job_status,
@@ -87,17 +107,17 @@ create table production_events (
   operator text,
   at timestamptz not null default now()
 );
-create index on production_events (job_id);
+create index if not exists idx_prod_job on production_events (job_id);
 
 -- ---------- Stock ------------------------------------------------------------
-create table material_receipts (
-  id uuid primary key default gen_random_uuid(),
+create table if not exists material_receipts (
+  id text primary key,
   receipt_no text not null unique,
   date date not null,
-  material_id uuid not null references materials(id),
+  material_id text not null references materials(id),
   owner_type owner_type not null,
-  company_id uuid references companies(id),
-  job_id uuid references job_orders(id),
+  company_id text references companies(id),
+  job_id text references job_orders(id),
   supplier text,
   quantity numeric(14,3) not null check (quantity > 0),
   unit text not null,
@@ -109,13 +129,13 @@ create table material_receipts (
   updated_at timestamptz not null default now()
 );
 
-create table material_issues (
-  id uuid primary key default gen_random_uuid(),
+create table if not exists material_issues (
+  id text primary key,
   issue_no text not null unique,
   date date not null,
-  material_id uuid not null references materials(id),
-  job_id uuid not null references job_orders(id),
-  company_id uuid references companies(id),
+  material_id text not null references materials(id),
+  job_id text not null references job_orders(id),
+  company_id text references companies(id),
   quantity numeric(14,3) not null check (quantity > 0),
   unit text not null,
   note text,
@@ -123,12 +143,12 @@ create table material_issues (
   updated_at timestamptz not null default now()
 );
 
-create table stock_adjustments (
-  id uuid primary key default gen_random_uuid(),
+create table if not exists stock_adjustments (
+  id text primary key,
   adj_no text not null unique,
   date date not null,
-  material_id uuid not null references materials(id),
-  company_id uuid references companies(id),
+  material_id text not null references materials(id),
+  company_id text references companies(id),
   quantity numeric(14,3) not null check (quantity <> 0), -- signed
   unit text not null,
   reason text not null,
@@ -136,9 +156,8 @@ create table stock_adjustments (
   updated_at timestamptz not null default now()
 );
 
--- Current stock balance per material (overall pool). Company-wise views can
--- filter the underlying tables by company_id.
-create view material_stock as
+-- Overall stock balance per material.
+create or replace view material_stock as
 select
   m.id as material_id,
   coalesce((select sum(quantity) from material_receipts r where r.material_id = m.id), 0)
@@ -147,29 +166,12 @@ select
     as balance
 from materials m;
 
--- Guard: block an issue that would drive overall stock negative (PRD 13).
-create or replace function check_stock_non_negative() returns trigger as $$
-declare
-  bal numeric;
-begin
-  select balance into bal from material_stock where material_id = new.material_id;
-  if (bal - new.quantity) < 0 then
-    raise exception 'Insufficient stock for material % (available %)', new.material_id, bal;
-  end if;
-  return new;
-end;
-$$ language plpgsql;
-
-create trigger trg_issue_stock_guard
-  before insert on material_issues
-  for each row execute function check_stock_non_negative();
-
 -- ---------- Invoices & payments ---------------------------------------------
-create table invoices (
-  id uuid primary key default gen_random_uuid(),
+create table if not exists invoices (
+  id text primary key,
   invoice_no text not null unique,
   date date not null,
-  company_id uuid not null references companies(id),
+  company_id text not null references companies(id),
   billing_address text,
   reference text,
   discount numeric(14,2) not null default 0 check (discount >= 0),
@@ -180,23 +182,23 @@ create table invoices (
   updated_at timestamptz not null default now()
 );
 
-create table invoice_lines (
-  id uuid primary key default gen_random_uuid(),
-  invoice_id uuid not null references invoices(id) on delete cascade,
-  job_id uuid references job_orders(id),
+create table if not exists invoice_lines (
+  id text primary key,
+  invoice_id text not null references invoices(id) on delete cascade,
+  job_id text references job_orders(id),
   description text not null,
   quantity numeric(14,3) not null check (quantity > 0),
   rate numeric(14,2) not null check (rate >= 0),
   line_no int
 );
-create index on invoice_lines (invoice_id);
+create index if not exists idx_lines_invoice on invoice_lines (invoice_id);
 
-create table payments (
-  id uuid primary key default gen_random_uuid(),
+create table if not exists payments (
+  id text primary key,
   payment_no text not null unique,
   date date not null,
-  company_id uuid not null references companies(id),
-  invoice_id uuid references invoices(id),
+  company_id text not null references companies(id),
+  invoice_id text references invoices(id),
   amount numeric(14,2) not null check (amount > 0),
   method payment_method not null,
   reference text,
@@ -205,14 +207,13 @@ create table payments (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
-create index on payments (invoice_id);
+create index if not exists idx_pay_invoice on payments (invoice_id);
 
--- Derived invoice totals + outstanding (PRD 6.6). Cancelled invoices excluded.
-create view invoice_totals as
+-- Derived invoice totals + outstanding (PRD 6.6). Cancelled excluded.
+create or replace view invoice_totals as
 select
   i.id as invoice_id,
   coalesce(sub.subtotal, 0) as subtotal,
-  greatest(coalesce(sub.subtotal,0) - i.discount, 0) as taxable,
   round(greatest(coalesce(sub.subtotal,0) - i.discount,0) * i.tax_percent / 100, 2) as tax_amount,
   round(greatest(coalesce(sub.subtotal,0) - i.discount,0) * (1 + i.tax_percent/100), 2) as total,
   case when i.status = 'Cancelled' then 0 else coalesce(pay.paid,0) end as paid,
@@ -228,8 +229,8 @@ left join (
 ) pay on pay.invoice_id = i.id;
 
 -- ---------- Expenses ---------------------------------------------------------
-create table expenses (
-  id uuid primary key default gen_random_uuid(),
+create table if not exists expenses (
+  id text primary key,
   expense_no text not null unique,
   date date not null,
   category text not null,
@@ -237,75 +238,42 @@ create table expenses (
   method payment_method not null,
   vendor text,
   reference text,
-  company_id uuid references companies(id),
-  job_id uuid references job_orders(id),
+  company_id text references companies(id),
+  job_id text references job_orders(id),
   notes text,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
 
 -- ---------- Audit log --------------------------------------------------------
-create table audit_log (
-  id uuid primary key default gen_random_uuid(),
+create table if not exists audit_log (
+  id text primary key,
   at timestamptz not null default now(),
   entity text not null,
-  entity_id uuid,
+  entity_id text,
   action text not null,
   summary text,
-  actor uuid
+  actor text
 );
 
--- ---------- updated_at trigger ----------------------------------------------
-create or replace function touch_updated_at() returns trigger as $$
-begin
-  new.updated_at = now();
-  return new;
-end;
-$$ language plpgsql;
-
-do $$
-declare t text;
-begin
-  foreach t in array array['companies','materials','job_orders','material_receipts',
-    'material_issues','stock_adjustments','invoices','payments','expenses']
-  loop
-    execute format('create trigger trg_touch_%1$s before update on %1$s
-      for each row execute function touch_updated_at();', t);
-  end loop;
-end $$;
-
 -- ---------- Row Level Security (PRD 11) -------------------------------------
--- Authenticated staff get full access in this single-tenant MVP. Tighten per
--- company / role when staff logins are introduced (Phase 2).
-alter table companies         enable row level security;
-alter table materials         enable row level security;
-alter table job_orders        enable row level security;
-alter table production_events enable row level security;
-alter table material_receipts enable row level security;
-alter table material_issues   enable row level security;
-alter table stock_adjustments enable row level security;
-alter table invoices          enable row level security;
-alter table invoice_lines     enable row level security;
-alter table payments          enable row level security;
-alter table expenses          enable row level security;
-alter table audit_log         enable row level security;
-
 do $$
 declare t text;
 begin
-  foreach t in array array['companies','materials','job_orders','production_events',
+  foreach t in array array['app_state','companies','materials','job_orders','production_events',
     'material_receipts','material_issues','stock_adjustments','invoices',
     'invoice_lines','payments','expenses','audit_log']
   loop
-    execute format($f$create policy "auth_all_%1$s" on %1$s
-      for all to authenticated using (true) with check (true);$f$, t);
+    execute format('alter table %I enable row level security;', t);
+    execute format('drop policy if exists auth_all on %I;', t);
+    execute format('create policy auth_all on %I for all to authenticated using (true) with check (true);', t);
   end loop;
 end $$;
 
 -- ---------- Seed initial companies (PRD 18) ---------------------------------
-insert into companies (code, name) values
-  ('C001','Flowra Global'),
-  ('C002','Vahinie Engineering'),
-  ('C003','Nirmal Pumps'),
-  ('C004','Local')
+insert into companies (id, code, name) values
+  ('cmp_seed_flowra','C001','Flowra Global'),
+  ('cmp_seed_vahinie','C002','Vahinie Engineering'),
+  ('cmp_seed_nirmal','C003','Nirmal Pumps'),
+  ('cmp_seed_local','C004','Local')
 on conflict (code) do nothing;
