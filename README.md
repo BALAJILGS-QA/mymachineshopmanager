@@ -16,22 +16,37 @@ Built to the PRD v1.0 (`CNC_Machine_Shop_Management_PRD_v1.0`).
 | Data (server-state) | TanStack Query provider + reactive local store |
 | Forms/validation | React Hook Form pattern + Zod available |
 | Charts | Recharts |
-| Persistence (MVP) | Browser `localStorage` via a repository abstraction |
-| Persistence (production) | Supabase / PostgreSQL — see `docs/supabase-schema.sql` |
+| Persistence | Supabase / PostgreSQL (active) with automatic local fallback |
 | Hosting | Netlify (static SPA, free tier) |
 | E2E tests | Playwright (desktop + mobile) |
 
-### Why a local store for the MVP?
-The PRD requires a **zero-cost, immediately-deployable** first release. The app
-ships with a `localStorage`-backed repository (`src/data/`) that implements every
-business rule (uniqueness, non-negative stock, outstanding calculation, audit
-logging). This runs as a pure static SPA on Netlify with **no backend and no
-running cost**. All data access goes through `src/data/repo.ts`, so switching to
-Supabase later is a repository swap — the UI is untouched. The full Postgres
-schema (constraints, triggers, RLS) is in `docs/supabase-schema.sql`.
+### Data architecture
+All data access goes through a repository abstraction (`src/data/repo.ts`) that
+owns every business rule (uniqueness, non-negative stock, outstanding
+calculation, audit logging). Two interchangeable backends sit behind it:
 
-> Data is stored per-browser. Use **Settings → Data & Backup** to export/restore
-> JSON backups, or migrate to Supabase for multi-user/hosted use.
+- **Supabase / PostgreSQL (active in production).** When `VITE_SUPABASE_URL` and
+  `VITE_SUPABASE_ANON_KEY` are set, the app signs in with **Supabase Auth**,
+  **hydrates** the store from Postgres on boot, and **writes through** every
+  change (diff-based, foreign-key-safe ordering). Data is shared across devices
+  and protected by row-level security. Schema: `docs/supabase-schema.sql`.
+- **Local (`localStorage`) fallback.** With no env vars the same app runs as a
+  pure static SPA with zero backend cost — useful for demos and offline use.
+
+Because the repository is the only mutation path, no feature page knows which
+backend is active.
+
+**Supabase setup** (already applied to the production project):
+1. Run `docs/supabase-schema.sql` in the Supabase SQL Editor.
+2. Create an auth user (Authentication → Users) and disable "Confirm email".
+3. Set `VITE_SUPABASE_URL` + `VITE_SUPABASE_ANON_KEY` (Netlify env / local `.env`).
+
+`scripts/run-schema.mjs` and `scripts/create-user.mjs` automate steps 1–2 (they
+read the DB password / credentials from environment variables — never source).
+
+> **Login:** the production site uses your Supabase email/password. In local mode
+> the default is `admin` / `admin123` (change it in Settings). Use
+> **Settings → Data & Backup** for JSON export/restore.
 
 ## Getting started
 

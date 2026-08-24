@@ -13,9 +13,22 @@ export function LoginPage() {
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault()
     setBusy(true)
-    const ok = await login(username, password)
-    setBusy(false)
-    if (!ok) toast.error(supabaseMode ? 'Invalid email or password' : 'Invalid username or password')
+    try {
+      // Guard against a hung network call so the button always recovers.
+      const ok = await Promise.race([
+        login(username, password),
+        new Promise<boolean>((_, reject) =>
+          setTimeout(() => reject(new Error('timeout')), 15000),
+        ),
+      ])
+      if (!ok) {
+        toast.error(supabaseMode ? 'Invalid email or password' : 'Invalid username or password')
+      }
+    } catch {
+      toast.error('Sign-in failed. Please check your connection and try again.')
+    } finally {
+      setBusy(false)
+    }
   }
 
   return (
