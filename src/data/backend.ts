@@ -119,11 +119,13 @@ const M: Mapping[] = [
   {
     table: 'invoices',
     collection: 'invoices',
-    numeric: ['discount', 'taxPercent'],
+    numeric: ['discount', 'taxPercent', 'cgstPercent', 'sgstPercent'],
     fields: {
       id: 'id', invoiceNo: 'invoice_no', date: 'date', companyId: 'company_id',
-      billingAddress: 'billing_address', reference: 'reference', discount: 'discount',
-      taxPercent: 'tax_percent', status: 'status', notes: 'notes',
+      billingAddress: 'billing_address', shippingAddress: 'shipping_address',
+      reference: 'reference', dcReference: 'dc_reference', discount: 'discount',
+      taxPercent: 'tax_percent', cgstPercent: 'cgst_percent', sgstPercent: 'sgst_percent',
+      status: 'status', notes: 'notes',
       createdAt: 'created_at', updatedAt: 'updated_at',
     },
   },
