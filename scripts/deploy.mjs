@@ -24,15 +24,21 @@ const isWin = process.platform === 'win32'
 const NPM = isWin ? 'npm.cmd' : 'npm'
 const NPX = isWin ? 'npx.cmd' : 'npx'
 
+// On Windows, npm/npx are .cmd shims that Node refuses to spawn without a shell.
+// git is a real .exe, so it never needs the shell. Args are static or passed as
+// an array to git only, so enabling the shell here introduces no injection risk.
+const needsShell = (bin) => isWin && bin.endsWith('.cmd')
+
 function run(bin, args) {
   console.log(`\n$ ${bin} ${args.join(' ')}`)
-  const r = spawnSync(bin, args, { stdio: 'inherit' })
+  const r = spawnSync(bin, args, { stdio: 'inherit', shell: needsShell(bin) })
+  if (r.error) throw r.error
   if (r.status !== 0) {
     throw new Error(`${bin} ${args.join(' ')} exited with code ${r.status}`)
   }
 }
 function capture(bin, args) {
-  const r = spawnSync(bin, args, { encoding: 'utf8' })
+  const r = spawnSync(bin, args, { encoding: 'utf8', shell: needsShell(bin) })
   return (r.stdout || '').trim()
 }
 function step(n, label) {
