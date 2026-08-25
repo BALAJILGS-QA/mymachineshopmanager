@@ -163,7 +163,7 @@ export function JobsPage() {
                     <td className="td">{companyName(j.companyId)}</td>
                     <td className="td">
                       <div className="font-medium text-slate-800">{j.partName}</div>
-                      {j.partNumber && <div className="text-2xs text-slate-400">{j.partNumber}</div>}
+                      {j.partNumber && <div className="text-2xs text-slate-500">{j.partNumber}</div>}
                     </td>
                     <td className="td text-right">{qty(j.orderedQty)}</td>
                     <td className="td text-right">{qty(j.completedQty)}</td>

@@ -5,6 +5,7 @@
 // the UI (see docs/supabase-schema.sql).
 
 import type {
+  AppUser,
   AuditLog,
   Company,
   DeliveryChallan,
@@ -52,6 +53,9 @@ export interface Database {
   payments: Payment[]
   expenses: Expense[]
   auditLog: AuditLog[]
+  // Registered accounts + approval state. Synced inside app_state (JSON), so no
+  // dedicated Postgres table is required.
+  users: AppUser[]
 }
 
 const STORAGE_KEY = 'cnc-shop-db'
@@ -157,6 +161,7 @@ export function mutate<T>(fn: (db: Database) => T): T {
     payments: [...db.payments],
     expenses: [...db.expenses],
     auditLog: [...db.auditLog],
+    users: [...db.users],
   }
   saveDb(next)
   return result

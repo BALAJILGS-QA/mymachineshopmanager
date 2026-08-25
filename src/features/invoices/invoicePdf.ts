@@ -73,8 +73,11 @@ export function downloadInvoicePdf(invoiceId: string): void {
   text(company?.name ?? '—', M, y)
   y += 13
   doc.setFont('helvetica', 'normal').setFontSize(9).setTextColor(90)
-  const billLines = [inv.billingAddress || company?.billingAddress, company?.gstin ? `GSTIN: ${company.gstin}` : '', inv.reference ? `Ref: ${inv.reference}` : '']
-    .filter(Boolean) as string[]
+  const billLines = [
+    inv.billingAddress || company?.billingAddress,
+    company?.gstin ? `GSTIN: ${company.gstin}` : '',
+    inv.reference ? `Ref: ${inv.reference}` : '',
+  ].filter(Boolean) as string[]
   billLines.forEach((l) => { text(l, M, y); y += 12 })
 
   y += 10
@@ -116,12 +119,42 @@ export function downloadInvoicePdf(invoiceId: string): void {
   }
   row('Subtotal', money(c.subtotal, sym))
   if (inv.discount > 0) row('Discount', `- ${money(inv.discount, sym)}`)
-  if (inv.taxPercent > 0) row(`Tax (${inv.taxPercent}%)`, money(c.taxAmount, sym))
+  {
+    const taxable = Math.max(0, c.subtotal - (inv.discount || 0))
+    if (inv.cgstPercent != null || inv.sgstPercent != null) {
+      if (inv.cgstPercent) row(`CGST (${inv.cgstPercent}%)`, money((taxable * inv.cgstPercent) / 100, sym))
+      if (inv.sgstPercent) row(`SGST (${inv.sgstPercent}%)`, money((taxable * inv.sgstPercent) / 100, sym))
+    } else if (inv.taxPercent > 0) {
+      row(`Tax (${inv.taxPercent}%)`, money(c.taxAmount, sym))
+    }
+  }
   doc.setDrawColor(210).line(lx, y - 4, W - M, y - 4); y += 6
   row('Total', money(c.total, sym), true)
   if (c.paid > 0) {
     row('Paid', money(c.paid, sym))
     row('Outstanding', money(c.outstanding, sym), true)
+  }
+
+  // ---- Delivery Challan + Ship To (bottom, after the total)
+  y += 20
+  doc.setDrawColor(220).line(M, y, W - M, y)
+  y += 16
+  const colR = W / 2 + 10
+  doc.setFont('helvetica', 'bold').setFontSize(8.5).setTextColor(120)
+  text('DELIVERY CHALLAN', M, y)
+  text('SHIPPED TO', colR, y)
+  y += 13
+  doc.setFont('helvetica', 'normal').setFontSize(9.5).setTextColor(40)
+  text(inv.dcReference || '-', M, y)
+  doc.setFont('helvetica', 'bold').setTextColor(30)
+  text(company?.name ?? '-', colR, y)
+  y += 12
+  doc.setFont('helvetica', 'normal').setFontSize(9).setTextColor(90)
+  const shipTo = inv.shippingAddress || inv.billingAddress || company?.billingAddress || ''
+  if (shipTo) {
+    const shipLines = doc.splitTextToSize(shipTo, W - colR - M) as string[]
+    text(shipLines, colR, y)
+    y += shipLines.length * 12
   }
 
   // ---- Notes + footer

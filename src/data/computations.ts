@@ -34,7 +34,12 @@ export function computeInvoice(
 ): InvoiceComputed {
   const subtotal = invoiceSubtotal(inv)
   const taxable = Math.max(0, subtotal - (inv.discount || 0))
-  const taxAmount = roundMoney((taxable * (inv.taxPercent || 0)) / 100)
+  // Prefer the CGST + SGST split when present; fall back to the combined rate.
+  const taxPct =
+    inv.cgstPercent != null || inv.sgstPercent != null
+      ? (inv.cgstPercent || 0) + (inv.sgstPercent || 0)
+      : inv.taxPercent || 0
+  const taxAmount = roundMoney((taxable * taxPct) / 100)
   const total = roundMoney(taxable + taxAmount)
   const paid = inv.status === 'Cancelled' ? 0 : paidForInvoice(inv.id, payments)
   const outstanding = inv.status === 'Cancelled' ? 0 : roundMoney(total - paid)

@@ -54,7 +54,7 @@ export function InvoicePrintPage() {
             {shop.gstin && <p className="text-xs text-slate-500">GSTIN: {shop.gstin}</p>}
           </div>
           <div className="text-right">
-            <p className="text-lg font-bold uppercase tracking-wide text-slate-400">Invoice</p>
+            <p className="text-lg font-bold uppercase tracking-wide text-slate-500">Invoice</p>
             <p className="font-mono text-sm font-semibold text-slate-800">{invoice.invoiceNo}</p>
             <p className="text-xs text-slate-500">{fmtDate(invoice.date)}</p>
             <div className="mt-1 flex justify-end">
@@ -65,7 +65,7 @@ export function InvoicePrintPage() {
 
         <div className="grid grid-cols-2 gap-4 py-5">
           <div>
-            <p className="text-2xs font-semibold uppercase tracking-wide text-slate-400">Bill To</p>
+            <p className="text-2xs font-semibold uppercase tracking-wide text-slate-500">Bill To</p>
             <p className="mt-1 text-sm font-semibold text-slate-800">{company?.name}</p>
             {(invoice.billingAddress || company?.billingAddress) && (
               <p className="whitespace-pre-line text-xs text-slate-500">
@@ -76,7 +76,7 @@ export function InvoicePrintPage() {
           </div>
           {invoice.reference && (
             <div className="text-right">
-              <p className="text-2xs font-semibold uppercase tracking-wide text-slate-400">Reference</p>
+              <p className="text-2xs font-semibold uppercase tracking-wide text-slate-500">Reference</p>
               <p className="mt-1 text-sm text-slate-700">{invoice.reference}</p>
             </div>
           )}
@@ -95,7 +95,7 @@ export function InvoicePrintPage() {
           <tbody>
             {invoice.lines.map((l, i) => (
               <tr key={l.id} className="border-b border-slate-100">
-                <td className="px-2 py-2 text-slate-400">{i + 1}</td>
+                <td className="px-2 py-2 text-slate-500">{i + 1}</td>
                 <td className="px-2 py-2 text-slate-700">{l.description}</td>
                 <td className="px-2 py-2 text-right">{qty(l.quantity)}</td>
                 <td className="px-2 py-2 text-right">{currency(l.rate)}</td>
@@ -109,9 +109,22 @@ export function InvoicePrintPage() {
           <div className="w-64 space-y-1.5 text-sm">
             <Row label="Subtotal" value={currency(c.subtotal)} />
             {invoice.discount > 0 && <Row label="Discount" value={`- ${currency(invoice.discount)}`} />}
-            {invoice.taxPercent > 0 && (
-              <Row label={`Tax (${invoice.taxPercent}%)`} value={currency(c.taxAmount)} />
-            )}
+            {(() => {
+              const taxable = Math.max(0, c.subtotal - (invoice.discount || 0))
+              const cg = invoice.cgstPercent
+              const sg = invoice.sgstPercent
+              if (cg != null || sg != null) {
+                return (
+                  <>
+                    {!!cg && <Row label={`CGST (${cg}%)`} value={currency((taxable * cg) / 100)} />}
+                    {!!sg && <Row label={`SGST (${sg}%)`} value={currency((taxable * sg) / 100)} />}
+                  </>
+                )
+              }
+              return invoice.taxPercent > 0 ? (
+                <Row label={`Tax (${invoice.taxPercent}%)`} value={currency(c.taxAmount)} />
+              ) : null
+            })()}
             <div className="flex justify-between border-t border-slate-200 pt-1.5 text-base font-bold text-slate-900">
               <span>Total</span>
               <span>{currency(c.total)}</span>
@@ -128,14 +141,31 @@ export function InvoicePrintPage() {
           </div>
         </div>
 
+        {/* Delivery Challan + Ship To — shown at the bottom, after the total. */}
+        <div className="mt-6 grid grid-cols-2 gap-4 border-t border-slate-200 pt-4">
+          <div>
+            <p className="text-2xs font-semibold uppercase tracking-wide text-slate-500">
+              Delivery Challan
+            </p>
+            <p className="mt-1 text-sm font-medium text-slate-800">{invoice.dcReference || '—'}</p>
+          </div>
+          <div>
+            <p className="text-2xs font-semibold uppercase tracking-wide text-slate-500">Shipped To</p>
+            <p className="mt-1 text-sm font-semibold text-slate-800">{company?.name}</p>
+            <p className="whitespace-pre-line text-xs text-slate-500">
+              {invoice.shippingAddress || invoice.billingAddress || company?.billingAddress || '—'}
+            </p>
+          </div>
+        </div>
+
         {invoice.notes && (
           <div className="mt-6 border-t border-slate-100 pt-3">
-            <p className="text-2xs font-semibold uppercase tracking-wide text-slate-400">Notes</p>
+            <p className="text-2xs font-semibold uppercase tracking-wide text-slate-500">Notes</p>
             <p className="mt-1 whitespace-pre-line text-xs text-slate-500">{invoice.notes}</p>
           </div>
         )}
 
-        <p className="mt-8 text-center text-2xs text-slate-400">
+        <p className="mt-8 text-center text-2xs text-slate-500">
           This is a computer-generated invoice.
         </p>
       </div>

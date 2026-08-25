@@ -12,13 +12,13 @@ export function BlogListPage() {
     path: '/blog',
     title: 'CNC Machining Insights & Guides',
     description:
-      'Practical guides on CNC machining, turning, materials, tolerances and reducing machining costs — from the Sree Balaji Industries workshop.',
+      'Practical guides on CNC machining, turning, materials, tolerances and reducing machining costs — from the Machine Shop Management team.',
     keywords:
-      'CNC machining blog, CNC turning guide, machining tolerances, material selection, machine shop tips, Sree Balaji Industries',
+      'CNC machining blog, CNC turning guide, machining tolerances, material selection, machine shop tips, Machine Shop Management',
     jsonLd: {
       '@context': 'https://schema.org',
       '@type': 'Blog',
-      name: 'Sree Balaji Industries Blog',
+      name: 'Machine Shop Management Blog',
       url: `${SITE.BASE_URL}/blog`,
       blogPost: POSTS.map((p) => ({
         '@type': 'BlogPosting',

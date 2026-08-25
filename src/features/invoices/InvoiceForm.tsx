@@ -1,10 +1,12 @@
 import { useMemo, useState } from 'react'
+import { clsx } from 'clsx'
 import { Plus, Trash2 } from 'lucide-react'
 import type { Invoice, InvoiceLine } from '@/types'
-import { invoiceRepo, previewNextNo, BusinessRuleError } from '@/data/repo'
+import { invoiceRepo, BusinessRuleError } from '@/data/repo'
 import { useDb } from '@/data/store'
 import { invoiceSubtotal, roundMoney } from '@/data/computations'
-import { currency, todayISO } from '@/lib/format'
+import { currency, fmtDateTime, todayISO } from '@/lib/format'
+import { previewNextNo } from '@/data/repo'
 import { uid } from '@/lib/id'
 import { Field, Input, Select, Textarea } from '@/components/ui/primitives'
 import { Modal } from '@/components/ui/Modal'
@@ -18,7 +20,7 @@ export function InvoiceForm({
 }: {
   invoice: Invoice | null
   onClose: () => void
-  prefill?: { companyId?: string; reference?: string; lines?: InvoiceLine[] }
+  prefill?: { companyId?: string; reference?: string; dcReference?: string; lines?: InvoiceLine[] }
   onCreated?: (invoiceId: string) => void
 }) {
   const toast = useToast()
@@ -27,13 +29,23 @@ export function InvoiceForm({
   const products = useDb((db) => db.products.filter((p) => p.active))
   const settings = useDb((db) => db.settings)
 
+  const defCgst = settings.defaultCgstPercent ?? (settings.defaultTaxPercent || 0) / 2
+  const defSgst = settings.defaultSgstPercent ?? (settings.defaultTaxPercent || 0) / 2
+
+  const [invoiceNo, setInvoiceNo] = useState(
+    invoice?.invoiceNo ?? previewNextNo('invoice', settings.numbering.invoice),
+  )
   const [companyId, setCompanyId] = useState(invoice?.companyId ?? prefill?.companyId ?? companies[0]?.id ?? '')
   const [date, setDate] = useState(invoice?.date ?? todayISO())
   const [reference, setReference] = useState(invoice?.reference ?? prefill?.reference ?? '')
+  const [dcReference, setDcReference] = useState(invoice?.dcReference ?? prefill?.dcReference ?? '')
+  // Ship-to defaults to the billing address; toggle off to enter a different one.
+  const [sameAsBilling, setSameAsBilling] = useState(invoice ? !invoice.shippingAddress : true)
+  const [shippingAddress, setShippingAddress] = useState(invoice?.shippingAddress ?? '')
   const [discount, setDiscount] = useState(String(invoice?.discount ?? 0))
-  const [taxPercent, setTaxPercent] = useState(
-    String(invoice?.taxPercent ?? settings.defaultTaxPercent),
-  )
+  // CGST / SGST default to half of the configured tax rate; both editable.
+  const [cgst, setCgst] = useState(String(invoice?.cgstPercent ?? (invoice ? (invoice.taxPercent || 0) / 2 : defCgst)))
+  const [sgst, setSgst] = useState(String(invoice?.sgstPercent ?? (invoice ? (invoice.taxPercent || 0) / 2 : defSgst)))
   const [notes, setNotes] = useState(invoice?.notes ?? '')
   const [lines, setLines] = useState<InvoiceLine[]>(
     invoice?.lines ??
@@ -84,39 +96,34 @@ export function InvoiceForm({
     ])
   }
 
-  const draft: Invoice = {
-    id: invoice?.id ?? 'draft',
-    invoiceNo: invoice?.invoiceNo ?? '',
-    date,
-    companyId,
-    reference,
-    lines,
-    discount: Number(discount) || 0,
-    taxPercent: Number(taxPercent) || 0,
-    status: invoice?.status ?? 'Unpaid',
-    notes,
-    createdAt: '',
-    updatedAt: '',
-  }
-  const subtotal = invoiceSubtotal(draft)
-  const taxable = Math.max(0, subtotal - draft.discount)
-  const taxAmount = roundMoney((taxable * draft.taxPercent) / 100)
-  const total = roundMoney(taxable + taxAmount)
+  const subtotal = invoiceSubtotal({ lines } as Invoice)
+  const discountNum = Number(discount) || 0
+  const cgstNum = Number(cgst) || 0
+  const sgstNum = Number(sgst) || 0
+  const taxable = Math.max(0, subtotal - discountNum)
+  const cgstAmount = roundMoney((taxable * cgstNum) / 100)
+  const sgstAmount = roundMoney((taxable * sgstNum) / 100)
+  const total = roundMoney(taxable + cgstAmount + sgstAmount)
 
   function submit(asDraft: boolean) {
     try {
       const payload = {
+        invoiceNo: invoiceNo.trim() || undefined,
         date,
         companyId,
         reference: reference || undefined,
+        dcReference: dcReference || undefined,
         lines: lines
           .filter((l) => l.description.trim() || l.rate > 0)
           .map((l) => ({ ...l, quantity: Number(l.quantity), rate: Number(l.rate) })),
-        discount: Number(discount) || 0,
-        taxPercent: Number(taxPercent) || 0,
+        discount: discountNum,
+        cgstPercent: cgstNum,
+        sgstPercent: sgstNum,
+        taxPercent: cgstNum + sgstNum,
         status: (asDraft ? 'Draft' : 'Unpaid') as Invoice['status'],
         notes: notes || undefined,
         billingAddress: undefined,
+        shippingAddress: sameAsBilling ? undefined : shippingAddress.trim() || undefined,
       }
       if (invoice) {
         invoiceRepo.update(invoice.id, payload)
@@ -154,12 +161,16 @@ export function InvoiceForm({
         </>
       }
     >
-      {!invoice && (
-        <p className="mb-3 rounded-lg bg-brand-50 px-3 py-2 text-xs text-brand-700">
-          Invoice number will be <b>{previewNextNo('invoice', settings.numbering.invoice)}</b>
+      {invoice && (
+        <p className="mb-3 text-right text-2xs text-slate-500">
+          Last updated {fmtDateTime(invoice.updatedAt)}
         </p>
       )}
+
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <Field label="Invoice Number" required hint="Auto-sequenced; editable">
+          <Input value={invoiceNo} onChange={(e) => setInvoiceNo(e.target.value)} />
+        </Field>
         <Field label="Company" required>
           <Select value={companyId} onChange={(e) => setCompanyId(e.target.value)}>
             <option value="">Select…</option>
@@ -173,9 +184,58 @@ export function InvoiceForm({
         <Field label="Invoice Date" required>
           <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
         </Field>
+      </div>
+
+      <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
         <Field label="Reference / PO">
           <Input value={reference} onChange={(e) => setReference(e.target.value)} />
         </Field>
+        <Field label="Delivery Challan Ref" hint="DC number(s) this invoice covers">
+          <Input
+            value={dcReference}
+            placeholder="e.g. DC-2026-27-0001, DC-2026-27-0002"
+            onChange={(e) => setDcReference(e.target.value)}
+          />
+        </Field>
+      </div>
+
+      {/* Shipping address — same as billing by default. */}
+      <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
+        <label className="flex cursor-pointer items-center justify-between gap-3">
+          <span className="text-sm font-medium text-slate-700">
+            Shipping address same as billing (Bill To)
+          </span>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={sameAsBilling}
+            aria-label="Shipping address same as billing"
+            onClick={() => setSameAsBilling((v) => !v)}
+            className={clsx(
+              'relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition',
+              sameAsBilling ? 'bg-brand-600' : 'bg-slate-300',
+            )}
+          >
+            <span
+              className={clsx(
+                'inline-block h-5 w-5 transform rounded-full bg-white shadow transition',
+                sameAsBilling ? 'translate-x-5' : 'translate-x-0.5',
+              )}
+            />
+          </button>
+        </label>
+        {!sameAsBilling && (
+          <div className="mt-3">
+            <Field label="Shipping Address (Ship To)">
+              <Textarea
+                rows={2}
+                value={shippingAddress}
+                placeholder="Delivery address if different from billing"
+                onChange={(e) => setShippingAddress(e.target.value)}
+              />
+            </Field>
+          </div>
+        )}
       </div>
 
       {eligibleJobs.length > 0 && (
@@ -286,11 +346,11 @@ export function InvoiceForm({
         </Field>
         <div className="space-y-2 rounded-lg bg-slate-50 p-3">
           <div className="flex items-center justify-between text-sm">
-            <span className="text-slate-500">Subtotal</span>
+            <span className="text-slate-600">Subtotal</span>
             <span className="font-medium">{currency(subtotal)}</span>
           </div>
           <div className="flex items-center justify-between gap-2 text-sm">
-            <span className="text-slate-500">Discount</span>
+            <span className="text-slate-600">Discount</span>
             <input
               type="number"
               step="0.01"
@@ -300,18 +360,34 @@ export function InvoiceForm({
             />
           </div>
           <div className="flex items-center justify-between gap-2 text-sm">
-            <span className="text-slate-500">Tax %</span>
+            <span className="text-slate-600">CGST %</span>
             <input
               type="number"
               step="0.01"
               className="input w-28 text-right"
-              value={taxPercent}
-              onChange={(e) => setTaxPercent(e.target.value)}
+              value={cgst}
+              onChange={(e) => setCgst(e.target.value)}
+              aria-label="CGST %"
             />
           </div>
-          <div className="flex items-center justify-between text-sm">
-            <span className="text-slate-500">Tax amount</span>
-            <span className="font-medium">{currency(taxAmount)}</span>
+          <div className="flex items-center justify-between text-2xs text-slate-500">
+            <span>CGST amount</span>
+            <span>{currency(cgstAmount)}</span>
+          </div>
+          <div className="flex items-center justify-between gap-2 text-sm">
+            <span className="text-slate-600">SGST %</span>
+            <input
+              type="number"
+              step="0.01"
+              className="input w-28 text-right"
+              value={sgst}
+              onChange={(e) => setSgst(e.target.value)}
+              aria-label="SGST %"
+            />
+          </div>
+          <div className="flex items-center justify-between text-2xs text-slate-500">
+            <span>SGST amount</span>
+            <span>{currency(sgstAmount)}</span>
           </div>
           <div className="flex items-center justify-between border-t border-slate-200 pt-2 text-base font-bold text-slate-900">
             <span>Total</span>

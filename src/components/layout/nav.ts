@@ -9,6 +9,7 @@ import {
   Receipt,
   BarChart3,
   Building2,
+  ShieldCheck,
   Settings as SettingsIcon,
   type LucideIcon,
 } from 'lucide-react'
@@ -18,6 +19,7 @@ export interface NavItem {
   label: string
   icon: LucideIcon
   short: string
+  superAdmin?: boolean // visible only to the super admin
 }
 
 // PRD 14 — MVP navigation order. Routes live under /app (the public marketing
@@ -33,6 +35,7 @@ export const NAV_ITEMS: NavItem[] = [
   { to: '/app/expenses', label: 'Expenses', icon: Receipt, short: 'Expense' },
   { to: '/app/reports', label: 'Reports', icon: BarChart3, short: 'Reports' },
   { to: '/app/companies', label: 'Companies', icon: Building2, short: 'Company' },
+  { to: '/app/approvals', label: 'User Approvals', icon: ShieldCheck, short: 'Approvals', superAdmin: true },
   { to: '/app/settings', label: 'Settings', icon: SettingsIcon, short: 'Settings' },
 ]
 

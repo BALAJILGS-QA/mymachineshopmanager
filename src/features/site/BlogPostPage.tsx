@@ -52,7 +52,7 @@ export function BlogPostPage() {
     path: `/blog/${slug ?? ''}`,
     title: post?.title ?? 'Article',
     description: post?.excerpt ?? '',
-    keywords: post ? `${post.tags.join(', ')}, CNC, machine shop, Sree Balaji Industries` : undefined,
+    keywords: post ? `${post.tags.join(', ')}, CNC, machine shop, Machine Shop Management` : undefined,
     type: 'article',
     noindex: !post,
     jsonLd: post
@@ -64,7 +64,7 @@ export function BlogPostPage() {
           datePublished: post.date,
           dateModified: post.date,
           author: { '@type': 'Organization', name: post.author },
-          publisher: { '@type': 'Organization', name: 'Sree Balaji Industries' },
+          publisher: { '@type': 'Organization', name: 'Machine Shop Management' },
           mainEntityOfPage: `${SITE.BASE_URL}/blog/${post.slug}`,
           keywords: post.tags.join(', '),
         }

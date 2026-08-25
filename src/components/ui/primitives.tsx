@@ -43,8 +43,8 @@ export function Field({
         </label>
       )}
       {control}
-      {hint && !error && <p className="mt-1 text-2xs text-slate-400">{hint}</p>}
-      {error && <p className="mt-1 text-2xs font-medium text-red-500">{error}</p>}
+      {hint && !error && <p className="mt-1 text-2xs text-slate-500">{hint}</p>}
+      {error && <p className="mt-1 text-2xs font-semibold text-red-600">{error}</p>}
     </div>
   )
 }
@@ -73,14 +73,16 @@ export const Select = forwardRef<
   )
 })
 
+// Each tone carries a ring so the pill keeps a defined edge against white
+// cards and coloured rows, and darker text (800) for readable contrast.
 const BADGE_TONES: Record<string, string> = {
-  slate: 'bg-slate-100 text-slate-600',
-  blue: 'bg-blue-100 text-blue-700',
-  green: 'bg-emerald-100 text-emerald-700',
-  amber: 'bg-amber-100 text-amber-700',
-  red: 'bg-red-100 text-red-700',
-  violet: 'bg-violet-100 text-violet-700',
-  gray: 'bg-slate-200 text-slate-500',
+  slate: 'bg-slate-200 text-slate-800 ring-1 ring-slate-300',
+  blue: 'bg-blue-100 text-blue-800 ring-1 ring-blue-300',
+  green: 'bg-emerald-100 text-emerald-800 ring-1 ring-emerald-300',
+  amber: 'bg-amber-100 text-amber-900 ring-1 ring-amber-300',
+  red: 'bg-red-100 text-red-800 ring-1 ring-red-300',
+  violet: 'bg-violet-100 text-violet-800 ring-1 ring-violet-300',
+  gray: 'bg-slate-200 text-slate-700 ring-1 ring-slate-300',
 }
 
 export function Badge({
@@ -115,8 +117,8 @@ export function SectionTitle({
   return (
     <div className="flex items-start justify-between gap-3">
       <div>
-        <h2 className="text-base font-semibold text-slate-800">{title}</h2>
-        {subtitle && <p className="text-xs text-slate-500">{subtitle}</p>}
+        <h2 className="text-base font-semibold text-slate-900">{title}</h2>
+        {subtitle && <p className="text-xs text-slate-600">{subtitle}</p>}
       </div>
       {action}
     </div>
@@ -136,9 +138,9 @@ export function EmptyState({
 }) {
   return (
     <div className="flex flex-col items-center justify-center gap-2 px-6 py-12 text-center">
-      {icon && <div className="text-slate-300">{icon}</div>}
-      <p className="text-sm font-semibold text-slate-600">{title}</p>
-      {description && <p className="max-w-sm text-xs text-slate-400">{description}</p>}
+      {icon && <div className="text-slate-500">{icon}</div>}
+      <p className="text-sm font-semibold text-slate-800">{title}</p>
+      {description && <p className="max-w-sm text-xs text-slate-600">{description}</p>}
       {action && <div className="mt-2">{action}</div>}
     </div>
   )

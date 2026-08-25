@@ -1,7 +1,16 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
-  <rect width="32" height="32" rx="7" fill="#1a5cf5"/>
-  <g fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-    <circle cx="16" cy="16" r="4.2"/>
-    <path d="M16 5.5v3M16 23.5v3M5.5 16h3M23.5 16h3M8.6 8.6l2.1 2.1M21.3 21.3l2.1 2.1M23.4 8.6l-2.1 2.1M10.7 21.3l-2.1 2.1"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <defs>
+    <linearGradient id="g" x1="6" y1="4" x2="58" y2="60" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#a4d13a"/>
+      <stop offset="0.55" stop-color="#8db600"/>
+      <stop offset="1" stop-color="#4f6a00"/>
+    </linearGradient>
+  </defs>
+  <rect x="2" y="2" width="60" height="60" rx="17" fill="url(#g)"/>
+  <g fill="none" stroke="#ffffff" stroke-linecap="round">
+    <path d="M14 20a20 20 0 0 1 36 0" stroke-opacity="0.18" stroke-width="1.4"/>
+    <path d="M18 18a15 15 0 0 1 28 0" stroke-opacity="0.12" stroke-width="1.4"/>
   </g>
+  <text x="32" y="40" text-anchor="middle" font-family="Inter, system-ui, Segoe UI, sans-serif" font-weight="800" font-size="20.5" letter-spacing="-0.6" fill="#ffffff">MSM</text>
+  <rect x="21" y="46.5" width="22" height="3" rx="1.5" fill="#f4b400"/>
 </svg>

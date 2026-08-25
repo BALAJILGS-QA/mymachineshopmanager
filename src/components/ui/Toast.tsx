@@ -75,7 +75,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
             <p className="flex-1 text-sm text-slate-700">{t.message}</p>
             <button
               onClick={() => remove(t.id)}
-              className="text-slate-400 hover:text-slate-600"
+              className="text-slate-500 hover:text-slate-600"
               aria-label="Dismiss"
             >
               <X size={16} />

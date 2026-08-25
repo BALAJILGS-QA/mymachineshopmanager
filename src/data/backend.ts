@@ -202,6 +202,7 @@ export async function loadAll(): Promise<Database | null> {
     },
     companies: [], materials: [], products: [], jobs: [], productionEvents: [], receipts: [],
     issues: [], adjustments: [], deliveryChallans: [], invoices: [], payments: [], expenses: [], auditLog: [],
+    users: [],
   }
 
   for (const m of M) {
@@ -241,7 +242,11 @@ export async function loadAll(): Promise<Database | null> {
     .maybeSingle()
   if (stateErr) throw stateErr
   if (state?.data) {
-    const parsed = state.data as { settings?: Database['settings']; sequences?: Database['sequences'] }
+    const parsed = state.data as {
+      settings?: Database['settings']
+      sequences?: Database['sequences']
+      users?: Database['users']
+    }
     if (parsed.settings) {
       // Deep-merge so newly-added nested keys (e.g. numbering.dc) keep their
       // defaults when the stored settings predate them.
@@ -253,6 +258,7 @@ export async function loadAll(): Promise<Database | null> {
       }
     }
     if (parsed.sequences) db.sequences = { ...db.sequences, ...parsed.sequences }
+    if (Array.isArray(parsed.users)) db.users = parsed.users
   } else {
     // Fresh DB seeded via SQL: align code sequences with existing rows.
     db.sequences.companyCode = db.companies.length
@@ -260,6 +266,18 @@ export async function loadAll(): Promise<Database | null> {
   }
 
   return db
+}
+
+// Mirror an approval decision into the server-side approval registry so the RLS
+// gate (see docs/supabase-approval-policy.sql) grants/revokes data access. The
+// RPC is a no-op unless the caller is a super admin (enforced in the DB).
+export async function setRemoteApproval(email: string, approved: boolean): Promise<void> {
+  if (!supabase) return
+  const { error } = await supabase.rpc('set_user_approval', { p_email: email, p_approved: approved })
+  // Missing function (policy not yet applied) shouldn't break the local update.
+  if (error && !/function .* does not exist|not find the function/i.test(error.message)) {
+    throw error
+  }
 }
 
 // --------------------------------------------------------- Write-through sync
@@ -326,13 +344,17 @@ async function applyAppState(prev: Database, next: Database) {
   if (!supabase) return
   if (
     JSON.stringify(prev.settings) === JSON.stringify(next.settings) &&
-    JSON.stringify(prev.sequences) === JSON.stringify(next.sequences)
+    JSON.stringify(prev.sequences) === JSON.stringify(next.sequences) &&
+    JSON.stringify(prev.users) === JSON.stringify(next.users)
   ) {
     return
   }
   const { error } = await supabase
     .from('app_state')
-    .upsert({ id: 'singleton', data: { settings: next.settings, sequences: next.sequences } })
+    .upsert({
+      id: 'singleton',
+      data: { settings: next.settings, sequences: next.sequences, users: next.users },
+    })
   if (error) throw error
 }
 
@@ -382,5 +404,6 @@ function emptyDb(): Database {
     sequences: { job: 0, invoice: 0, receipt: 0, issue: 0, adjustment: 0, payment: 0, expense: 0, dc: 0, companyCode: 0, materialCode: 0, productCode: 0 },
     companies: [], materials: [], products: [], jobs: [], productionEvents: [], receipts: [],
     issues: [], adjustments: [], deliveryChallans: [], invoices: [], payments: [], expenses: [], auditLog: [],
+    users: [],
   }
 }

@@ -184,10 +184,14 @@ export interface Invoice extends AuditFields {
   date: ISODate
   companyId: ID
   billingAddress?: string
+  shippingAddress?: string // ship-to; when empty, same as billing
   reference?: string
+  dcReference?: string // delivery-challan number(s) this invoice was raised against
   lines: InvoiceLine[]
   discount: number // absolute amount
-  taxPercent: number // e.g. 18 for GST 18%
+  taxPercent: number // combined GST % (CGST + SGST) — kept for computations
+  cgstPercent?: number // e.g. 9
+  sgstPercent?: number // e.g. 9
   status: InvoiceStatus
   notes?: string
   // subtotal, taxAmount, total, paid, outstanding are all derived
@@ -235,6 +239,8 @@ export interface Settings {
   currencySymbol: string
   timezone: string
   defaultTaxPercent: number
+  defaultCgstPercent: number
+  defaultSgstPercent: number
   allowOverproduction: boolean
   allowNegativeStock: boolean
   units: string[]
@@ -256,7 +262,35 @@ export interface Settings {
     phone: string
     email: string
     gstin: string
+    // SEO — applied globally to the app's page title, description and keywords.
+    seoDescription: string
+    seoKeywords: string
   }
+}
+
+// ----- Users & registration approval ----------------------------------------
+
+export type UserRole = 'SuperAdmin' | 'User'
+export type UserStatus = 'pending' | 'approved' | 'rejected'
+
+// A registered account. Regular users sign up and start as 'pending' — they
+// cannot enter the app until a SuperAdmin approves them. passwordHash is used
+// only in local (localStorage) mode; in Supabase mode passwords live in
+// Supabase Auth and this record only carries profile + approval state.
+export interface AppUser {
+  id: ID
+  email: string // login identifier (email everywhere; also used as username in local mode)
+  fullName: string
+  companyName: string
+  phone: string
+  address: string
+  gstin: string
+  role: UserRole
+  status: UserStatus
+  passwordHash?: string
+  createdAt: ISODate
+  decidedAt?: ISODate
+  decidedBy?: string
 }
 
 // ----- Derived / view models -------------------------------------------------

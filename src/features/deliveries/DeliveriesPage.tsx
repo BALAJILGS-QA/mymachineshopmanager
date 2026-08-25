@@ -1,7 +1,10 @@
 import { useMemo, useState } from 'react'
-import { Ban, FileText, Pencil, Plus, Trash2, Truck } from 'lucide-react'
+import { Link, useNavigate } from 'react-router-dom'
+import { clsx } from 'clsx'
+import { Ban, FileDown, FileText, Layers, Pencil, Plus, Printer, RotateCcw, Trash2, Truck } from 'lucide-react'
 import type { DeliveryChallan, DcLine, InvoiceLine } from '@/types'
 import { dcRepo, previewNextNo, BusinessRuleError } from '@/data/repo'
+import { downloadChallanPdf } from './challanPdf'
 import { useDb } from '@/data/store'
 import { fmtDate, todayISO } from '@/lib/format'
 import { uid } from '@/lib/id'
@@ -19,14 +22,32 @@ const STATUS_TONE: Record<string, string> = { Open: 'amber', Invoiced: 'green', 
 
 export function DeliveriesPage() {
   const challans = useDb((db) => db.deliveryChallans)
+  const invoices = useDb((db) => db.invoices)
   const companyName = useCompanyName()
   const toast = useToast()
   const confirm = useConfirm()
+  const navigate = useNavigate()
+
+  // A challan marked "Invoiced" whose invoice is gone or cancelled is stranded:
+  // its dispatch was never actually billed, so let the user reopen it.
+  const isStranded = (d: DeliveryChallan) => {
+    if (d.status !== 'Invoiced') return false
+    const inv = d.invoiceId ? invoices.find((i) => i.id === d.invoiceId) : undefined
+    return !inv || inv.status === 'Cancelled'
+  }
 
   const [editing, setEditing] = useState<DeliveryChallan | null | undefined>(undefined)
-  const [invoiceFor, setInvoiceFor] = useState<DeliveryChallan | null>(null)
+  // Challans queued for invoicing — one row, or several combined into one invoice.
+  const [invoiceFor, setInvoiceFor] = useState<DeliveryChallan[] | null>(null)
+  const [selected, setSelected] = useState<Set<string>>(new Set())
   const [search, setSearch] = useState('')
   const [company, setCompany] = useState('')
+
+  // The live invoice a challan was billed on (undefined if none / cancelled).
+  const linkedInvoice = (d: DeliveryChallan) =>
+    d.status === 'Invoiced' && d.invoiceId
+      ? invoices.find((i) => i.id === d.invoiceId && i.status !== 'Cancelled')
+      : undefined
 
   const rows = useMemo(() => {
     const s = search.toLowerCase()
@@ -40,6 +61,41 @@ export function DeliveriesPage() {
   }, [challans, company, search])
 
   const pg = usePagination(rows)
+
+  // Multi-select: only Open challans can be batched onto one invoice.
+  const selectedDcs = useMemo(
+    () => challans.filter((d) => selected.has(d.id) && d.status === 'Open'),
+    [challans, selected],
+  )
+  const openOnPage = pg.pageItems.filter((d) => d.status === 'Open')
+  const allOpenSelected = openOnPage.length > 0 && openOnPage.every((d) => selected.has(d.id))
+
+  function toggle(id: string) {
+    setSelected((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+  function toggleAllOnPage() {
+    setSelected((prev) => {
+      const next = new Set(prev)
+      if (allOpenSelected) openOnPage.forEach((d) => next.delete(d.id))
+      else openOnPage.forEach((d) => next.add(d.id))
+      return next
+    })
+  }
+
+  // A single invoice is per-company, so refuse a batch that mixes companies.
+  function startInvoice(dcs: DeliveryChallan[]) {
+    if (!dcs.length) return
+    if (new Set(dcs.map((d) => d.companyId)).size > 1) {
+      toast.error('Select challans from a single company to combine them into one invoice')
+      return
+    }
+    setInvoiceFor(dcs)
+  }
 
   async function onDelete(d: DeliveryChallan) {
     const ok = await confirm({
@@ -64,15 +120,37 @@ export function DeliveriesPage() {
     toast.success('Challan cancelled')
   }
 
+  async function onReopen(d: DeliveryChallan) {
+    const ok = await confirm({
+      title: 'Reopen challan',
+      message: `${d.dcNo}'s invoice was cancelled. Reopen it so it can be re-invoiced or removed?`,
+      confirmLabel: 'Reopen',
+    })
+    if (!ok) return
+    try {
+      dcRepo.reopen(d.id)
+      toast.success('Challan reopened')
+    } catch (e) {
+      toast.error(e instanceof BusinessRuleError ? e.message : 'Reopen failed')
+    }
+  }
+
   return (
     <div>
       <PageHeader
         title="Delivery Challans"
         subtitle={`${challans.length} total`}
         actions={
-          <button className="btn-primary" onClick={() => setEditing(null)}>
-            <Plus size={16} /> New Challan
-          </button>
+          <div className="flex items-center gap-2">
+            {selectedDcs.length > 0 && (
+              <button className="btn-secondary" onClick={() => startInvoice(selectedDcs)}>
+                <Layers size={16} /> Invoice {selectedDcs.length} selected
+              </button>
+            )}
+            <button className="btn-primary" onClick={() => setEditing(null)}>
+              <Plus size={16} /> New Challan
+            </button>
+          </div>
         }
       />
 
@@ -92,6 +170,16 @@ export function DeliveriesPage() {
           <ResponsiveTable>
             <thead>
               <tr className="border-b border-slate-100">
+                <th className="th w-8">
+                  <input
+                    type="checkbox"
+                    className="h-4 w-4 accent-brand-600"
+                    checked={allOpenSelected}
+                    onChange={toggleAllOnPage}
+                    disabled={openOnPage.length === 0}
+                    aria-label="Select all open challans on this page"
+                  />
+                </th>
                 <th className="th">DC No</th>
                 <th className="th">Date</th>
                 <th className="th">Company</th>
@@ -102,25 +190,83 @@ export function DeliveriesPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-50">
-              {pg.pageItems.map((d) => (
-                <tr key={d.id} className="hover:bg-slate-50/60">
+              {pg.pageItems.map((d) => {
+                const inv = linkedInvoice(d)
+                const billed = Boolean(inv)
+                return (
+                <tr
+                  key={d.id}
+                  className={clsx(
+                    'hover:bg-slate-50/60',
+                    // Billed challans are locked: greyed out with the invoice shown.
+                    billed && 'bg-slate-50 [&>td]:text-slate-400',
+                    selected.has(d.id) && 'bg-brand-50/60',
+                  )}
+                >
+                  <td className="td w-8">
+                    {d.status === 'Open' && (
+                      <input
+                        type="checkbox"
+                        className="h-4 w-4 accent-brand-600"
+                        checked={selected.has(d.id)}
+                        onChange={() => toggle(d.id)}
+                        aria-label={`Select ${d.dcNo}`}
+                      />
+                    )}
+                  </td>
                   <td className="td font-mono text-xs font-semibold text-slate-700">{d.dcNo}</td>
                   <td className="td">{fmtDate(d.date)}</td>
                   <td className="td">{companyName(d.companyId)}</td>
                   <td className="td">{d.reference || '—'}</td>
                   <td className="td text-right">{d.lines.length}</td>
                   <td className="td">
-                    <Badge tone={STATUS_TONE[d.status]}>{d.status}</Badge>
+                    {billed ? (
+                      <div className="flex flex-col gap-0.5">
+                        <Badge tone="gray">Invoiced</Badge>
+                        <Link
+                          to={`/app/invoices/${inv!.id}/print`}
+                          className="font-mono text-2xs font-semibold text-brand-700 hover:underline"
+                          title="View invoice for this challan"
+                        >
+                          {inv!.invoiceNo}
+                        </Link>
+                      </div>
+                    ) : (
+                      <Badge tone={STATUS_TONE[d.status]}>{d.status}</Badge>
+                    )}
                   </td>
                   <td className="td">
                     <div className="flex justify-end gap-1">
+                      <button
+                        className="btn-ghost btn-sm"
+                        title="View / Print"
+                        onClick={() => navigate(`/app/deliveries/${d.id}/print`)}
+                      >
+                        <Printer size={15} />
+                      </button>
+                      <button
+                        className="btn-ghost btn-sm"
+                        title="Download PDF"
+                        onClick={() => downloadChallanPdf(d.id)}
+                      >
+                        <FileDown size={15} />
+                      </button>
                       {d.status === 'Open' && (
                         <button
                           className="btn-ghost btn-sm text-brand-600"
                           title="Create invoice"
-                          onClick={() => setInvoiceFor(d)}
+                          onClick={() => startInvoice([d])}
                         >
                           <FileText size={15} />
+                        </button>
+                      )}
+                      {isStranded(d) && (
+                        <button
+                          className="btn-ghost btn-sm text-brand-600"
+                          title="Reopen (invoice cancelled)"
+                          onClick={() => onReopen(d)}
+                        >
+                          <RotateCcw size={15} />
                         </button>
                       )}
                       {d.status !== 'Invoiced' && (
@@ -141,7 +287,8 @@ export function DeliveriesPage() {
                     </div>
                   </td>
                 </tr>
-              ))}
+                )
+              })}
             </tbody>
           </ResponsiveTable>
         )}
@@ -150,23 +297,34 @@ export function DeliveriesPage() {
 
       {editing !== undefined && <DcForm dc={editing} onClose={() => setEditing(undefined)} />}
 
-      {invoiceFor && (
+      {invoiceFor && invoiceFor.length > 0 && (
         <InvoiceForm
           invoice={null}
           prefill={{
-            companyId: invoiceFor.companyId,
-            reference: invoiceFor.dcNo,
-            lines: invoiceFor.lines.map<InvoiceLine>((l) => ({
-              id: uid('l_'),
-              jobId: l.jobId,
-              description: l.description,
-              quantity: l.quantity,
-              rate: 0,
-            })),
+            companyId: invoiceFor[0].companyId,
+            // Every source challan number is carried onto the invoice's DC reference.
+            dcReference: invoiceFor.map((d) => d.dcNo).join(', '),
+            // Combine all challan lines; when batching, tag each line with its DC
+            // so the invoice stays traceable back to the dispatch it came from.
+            lines: invoiceFor.flatMap((d) =>
+              d.lines.map<InvoiceLine>((l) => ({
+                id: uid('l_'),
+                jobId: l.jobId,
+                description:
+                  invoiceFor.length > 1 ? `${l.description} — ${d.dcNo}` : l.description,
+                quantity: l.quantity,
+                rate: 0,
+              })),
+            ),
           }}
           onCreated={(invoiceId) => {
-            dcRepo.setStatus(invoiceFor.id, 'Invoiced', invoiceId)
-            toast.success(`Invoice raised against ${invoiceFor.dcNo}`)
+            invoiceFor.forEach((d) => dcRepo.setStatus(d.id, 'Invoiced', invoiceId))
+            toast.success(
+              invoiceFor.length > 1
+                ? `Invoice raised against ${invoiceFor.length} challans`
+                : `Invoice raised against ${invoiceFor[0].dcNo}`,
+            )
+            setSelected(new Set())
           }}
           onClose={() => setInvoiceFor(null)}
         />

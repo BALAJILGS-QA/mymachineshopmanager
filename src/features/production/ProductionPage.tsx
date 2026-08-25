@@ -102,7 +102,7 @@ export function ProductionPage() {
                   </div>
                 </div>
 
-                <p className="mb-3 text-2xs text-slate-400">Due {fmtDate(job.dueDate)}</p>
+                <p className="mb-3 text-2xs text-slate-500">Due {fmtDate(job.dueDate)}</p>
 
                 <div className="mt-auto flex flex-wrap gap-1.5">
                   {(job.status === 'Pending' || job.status === 'On Hold') && (
@@ -258,7 +258,7 @@ function HistoryModal({ job, onClose }: { job: JobOrder; onClose: () => void }) 
   return (
     <Modal open onClose={onClose} title={`History — ${job.jobNo}`} size="md">
       {events.length === 0 ? (
-        <p className="py-6 text-center text-sm text-slate-400">No events recorded yet.</p>
+        <p className="py-6 text-center text-sm text-slate-500">No events recorded yet.</p>
       ) : (
         <ol className="relative space-y-4 border-l border-slate-200 pl-4">
           {events.map((e) => (
@@ -266,14 +266,14 @@ function HistoryModal({ job, onClose }: { job: JobOrder; onClose: () => void }) 
               <span className="absolute -left-[21px] top-1 h-2.5 w-2.5 rounded-full bg-brand-500 ring-4 ring-white" />
               <div className="flex items-center gap-2">
                 {e.toStatus && <JobStatusBadge status={e.toStatus} />}
-                <span className="text-2xs text-slate-400">{fmtDateTime(e.at)}</span>
+                <span className="text-2xs text-slate-500">{fmtDateTime(e.at)}</span>
               </div>
               <p className="mt-1 text-sm text-slate-600">
                 {e.fromStatus && e.toStatus ? `${e.fromStatus} → ${e.toStatus}` : e.type}
                 {e.completedQty !== undefined && ` · completed ${qty(e.completedQty)}`}
                 {e.operator && ` · ${e.operator}`}
               </p>
-              {e.note && <p className="text-xs text-slate-400">“{e.note}”</p>}
+              {e.note && <p className="text-xs text-slate-500">“{e.note}”</p>}
             </li>
           ))}
         </ol>

@@ -21,3 +21,4 @@ vite.config.d.ts
 
 # Local Netlify folder
 .netlify
+supabase-backup-*.json

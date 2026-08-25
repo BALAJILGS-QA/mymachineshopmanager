@@ -266,7 +266,7 @@ export function DashboardPage() {
                 <div key={j.id} className="flex items-center justify-between gap-2 py-2">
                   <div className="min-w-0">
                     <p className="truncate text-sm font-medium text-slate-800">{j.partName}</p>
-                    <p className="text-2xs text-slate-400">
+                    <p className="text-2xs text-slate-600">
                       {j.jobNo} · {companyName(j.companyId)} · due {fmtDate(j.dueDate)}
                     </p>
                   </div>
@@ -290,7 +290,7 @@ export function DashboardPage() {
                 <div key={m.id} className="flex items-center justify-between py-2">
                   <div>
                     <p className="text-sm font-medium text-slate-800">{m.name}</p>
-                    <p className="text-2xs text-slate-400">Reorder at {m.reorderLevel ?? 0} {m.unit}</p>
+                    <p className="text-2xs text-slate-600">Reorder at {m.reorderLevel ?? 0} {m.unit}</p>
                   </div>
                   <span className={`text-sm font-semibold ${bal < 0 ? 'text-red-600' : 'text-amber-600'}`}>
                     {qty(bal)} {m.unit}
@@ -311,7 +311,7 @@ export function DashboardPage() {
                 <div key={p.id} className="flex items-center justify-between py-2">
                   <div>
                     <p className="text-sm font-medium text-slate-800">{companyName(p.companyId)}</p>
-                    <p className="text-2xs text-slate-400">{fmtDate(p.date)} · {p.method}</p>
+                    <p className="text-2xs text-slate-600">{fmtDate(p.date)} · {p.method}</p>
                   </div>
                   <span className="text-sm font-semibold text-emerald-600">{currency(p.amount)}</span>
                 </div>
@@ -330,7 +330,7 @@ export function DashboardPage() {
                 <div key={it.id} className="flex items-center justify-between py-2">
                   <div>
                     <p className="text-sm font-medium text-slate-800">{materialName(it.materialId)}</p>
-                    <p className="text-2xs text-slate-400">{fmtDate(it.date)} · {it.issueNo}</p>
+                    <p className="text-2xs text-slate-600">{fmtDate(it.date)} · {it.issueNo}</p>
                   </div>
                   <span className="text-sm font-semibold text-slate-700">{qty(it.quantity)} {it.unit}</span>
                 </div>
@@ -344,12 +344,12 @@ export function DashboardPage() {
 }
 
 const TONES: Record<string, string> = {
-  amber: 'bg-amber-50 text-amber-600',
-  blue: 'bg-sky-50 text-sky-600',
-  green: 'bg-emerald-50 text-emerald-600',
-  violet: 'bg-violet-50 text-violet-600',
-  red: 'bg-red-50 text-red-600',
-  slate: 'bg-slate-100 text-slate-600',
+  amber: 'bg-amber-100 text-amber-700 ring-1 ring-amber-300',
+  blue: 'bg-sky-100 text-sky-700 ring-1 ring-sky-300',
+  green: 'bg-emerald-100 text-emerald-700 ring-1 ring-emerald-300',
+  violet: 'bg-violet-100 text-violet-700 ring-1 ring-violet-300',
+  red: 'bg-red-100 text-red-700 ring-1 ring-red-300',
+  slate: 'bg-slate-200 text-slate-700 ring-1 ring-slate-300',
 }
 
 function Kpi({
@@ -371,7 +371,7 @@ function Kpi({
         <Icon size={17} />
       </div>
       <p className="text-lg font-bold leading-tight text-slate-900">{value}</p>
-      <p className="text-2xs text-slate-500">{label}</p>
+      <p className="text-2xs font-medium text-slate-600">{label}</p>
     </Link>
   )
 }
@@ -420,5 +420,5 @@ function ListHeader({ title, to, icon }: { title: string; to: string; icon?: Rea
 }
 
 function Empty({ text, tall }: { text: string; tall?: boolean }) {
-  return <p className={`text-center text-xs text-slate-400 ${tall ? 'py-20' : 'py-8'}`}>{text}</p>
+  return <p className={`text-center text-xs text-slate-500 ${tall ? 'py-20' : 'py-8'}`}>{text}</p>
 }

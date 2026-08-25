@@ -9,6 +9,8 @@ export const DEFAULT_SETTINGS: Settings = {
   currencySymbol: '₹',
   timezone: 'Asia/Kolkata',
   defaultTaxPercent: 18,
+  defaultCgstPercent: 9,
+  defaultSgstPercent: 9,
   allowOverproduction: false,
   allowNegativeStock: false,
   units: ['Nos', 'Kg', 'Meter', 'mm', 'Ton', 'Litre', 'Set', 'Sheet', 'Bar'],
@@ -46,11 +48,15 @@ export const DEFAULT_SETTINGS: Settings = {
     dc: 'DC-{FY}-{####}',
   },
   company: {
-    name: 'My CNC Machine Shop',
+    name: 'Machine Shop Management',
     address: '',
     phone: '',
     email: '',
     gstin: '',
+    seoDescription:
+      'Machine shop management — job orders, materials, delivery challans, invoices, payments and expenses tracked company-wise from order to dispatch.',
+    seoKeywords:
+      'machine shop management, job orders, delivery challan, invoicing, materials stock, payments, CNC shop',
   },
 }
 
@@ -103,5 +109,6 @@ export function buildInitialDb(): Database {
     payments: [],
     expenses: [],
     auditLog: [],
+    users: [],
   }
 }

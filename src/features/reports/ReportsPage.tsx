@@ -216,7 +216,7 @@ export function ReportsPage() {
           <span className="text-xs font-medium text-slate-500">{footer}</span>
         </div>
         {rows.length === 0 ? (
-          <p className="py-12 text-center text-sm text-slate-400">No data for the selected filters.</p>
+          <p className="py-12 text-center text-sm text-slate-500">No data for the selected filters.</p>
         ) : (
           <ResponsiveTable>
             <thead>

@@ -1,5 +1,24 @@
 import { useRef, useState } from 'react'
-import { Database, Download, KeyRound, Plus, Save, Upload, Wand2, Trash2 } from 'lucide-react'
+import {
+  ArrowLeft,
+  ChevronRight,
+  Coins,
+  Database,
+  Download,
+  Hash,
+  KeyRound,
+  Layers,
+  ListChecks,
+  Plus,
+  Ruler,
+  Save,
+  Store,
+  Tags,
+  Upload,
+  Wand2,
+  Trash2,
+  type LucideIcon,
+} from 'lucide-react'
 import { settingsRepo, productRepo, BusinessRuleError } from '@/data/repo'
 import { useDb } from '@/data/store'
 import { exportDb, importDb, resetDb, saveDb } from '@/data/db'
@@ -7,54 +26,136 @@ import { buildInitialDb } from '@/data/seed'
 import { loadDemoData } from '@/data/demo'
 import { currency, setCurrency } from '@/lib/format'
 import { PageHeader } from '@/components/common/PageHeader'
-import { Card, Field, Input, SectionTitle } from '@/components/ui/primitives'
+import { Card, Field, Input, SectionTitle, Textarea } from '@/components/ui/primitives'
 import { useToast } from '@/components/ui/Toast'
 import { useConfirm } from '@/components/ui/ConfirmDialog'
 import { useAuth } from '@/features/auth/auth'
+
+type SectionKey =
+  | 'profile'
+  | 'financial'
+  | 'units'
+  | 'materialTypes'
+  | 'expenseCategories'
+  | 'products'
+  | 'numbering'
+  | 'password'
+  | 'data'
+
+const MENU: { key: SectionKey; title: string; desc: string; icon: LucideIcon }[] = [
+  { key: 'profile', title: 'Shop Profile', desc: 'Name, tagline, address & SEO', icon: Store },
+  { key: 'financial', title: 'Financial & Rules', desc: 'Currency, tax, CGST/SGST, policies', icon: Coins },
+  { key: 'units', title: 'Units', desc: 'Measurement units for materials', icon: Ruler },
+  { key: 'materialTypes', title: 'Material Types / Grades', desc: 'Grades for materials', icon: Layers },
+  { key: 'expenseCategories', title: 'Expense Categories', desc: 'Heads used for expenses', icon: Tags },
+  { key: 'products', title: 'Machining Rate List', desc: 'Parts and their rates', icon: ListChecks },
+  { key: 'numbering', title: 'Document Numbering', desc: 'Number formats for documents', icon: Hash },
+  { key: 'password', title: 'Change Password', desc: 'Login credential', icon: KeyRound },
+  { key: 'data', title: 'Data & Backup', desc: 'Export, restore, reset', icon: Database },
+]
 
 export function SettingsPage() {
   const settings = useDb((db) => db.settings)
   const toast = useToast()
   const confirm = useConfirm()
+  const [section, setSection] = useState<SectionKey | null>(null)
 
+  const active = MENU.find((m) => m.key === section)
+
+  function renderSection() {
+    switch (section) {
+      case 'profile':
+        return <CompanyProfile />
+      case 'financial':
+        return <FinancialSettings />
+      case 'units':
+        return (
+          <ListEditor
+            title="Units"
+            subtitle="Measurement units for materials"
+            value={settings.units}
+            onSave={(units) => {
+              settingsRepo.update({ units })
+              toast.success('Units updated')
+            }}
+          />
+        )
+      case 'materialTypes':
+        return (
+          <ListEditor
+            title="Material Types / Grades"
+            subtitle="Grades available when defining materials"
+            value={settings.materialTypes}
+            onSave={(materialTypes) => {
+              settingsRepo.update({ materialTypes })
+              toast.success('Material types updated')
+            }}
+          />
+        )
+      case 'expenseCategories':
+        return (
+          <ListEditor
+            title="Expense Categories"
+            subtitle="Categories used when recording expenses"
+            value={settings.expenseCategories}
+            onSave={(expenseCategories) => {
+              settingsRepo.update({ expenseCategories })
+              toast.success('Expense categories updated')
+            }}
+          />
+        )
+      case 'products':
+        return <ProductsCard />
+      case 'numbering':
+        return <NumberingSettings />
+      case 'password':
+        return <ChangePassword />
+      case 'data':
+        return <DataManagement toast={toast} confirm={confirm} />
+      default:
+        return null
+    }
+  }
+
+  // Section view.
+  if (active) {
+    return (
+      <div>
+        <PageHeader
+          title={active.title}
+          subtitle={active.desc}
+          actions={
+            <button className="btn-secondary" onClick={() => setSection(null)}>
+              <ArrowLeft size={16} /> All settings
+            </button>
+          }
+        />
+        <div className="max-w-2xl">{renderSection()}</div>
+      </div>
+    )
+  }
+
+  // Menu view.
   return (
     <div>
-      <PageHeader title="Settings" subtitle="Master data, numbering, company profile and backups" />
-
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <CompanyProfile />
-        <FinancialSettings />
-        <ListEditor
-          title="Units"
-          subtitle="Measurement units for materials"
-          value={settings.units}
-          onSave={(units) => {
-            settingsRepo.update({ units })
-            toast.success('Units updated')
-          }}
-        />
-        <ListEditor
-          title="Material Types / Grades"
-          subtitle="Grades available when defining materials"
-          value={settings.materialTypes}
-          onSave={(materialTypes) => {
-            settingsRepo.update({ materialTypes })
-            toast.success('Material types updated')
-          }}
-        />
-        <ListEditor
-          title="Expense Categories"
-          subtitle="Categories used when recording expenses"
-          value={settings.expenseCategories}
-          onSave={(expenseCategories) => {
-            settingsRepo.update({ expenseCategories })
-            toast.success('Expense categories updated')
-          }}
-        />
-        <ProductsCard />
-        <NumberingSettings />
-        <ChangePassword />
-        <DataManagement toast={toast} confirm={confirm} />
+      <PageHeader title="Settings" subtitle="Choose a section to configure" />
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        {MENU.map((m) => (
+          <button
+            key={m.key}
+            onClick={() => setSection(m.key)}
+            className="flex items-center gap-3 rounded-xl border border-slate-300 bg-white p-4 text-left shadow-sm transition hover:border-brand-400 hover:shadow-md"
+          >
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-brand-100 text-brand-700 ring-1 ring-brand-300">
+              <m.icon size={20} />
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block text-sm font-semibold text-slate-900">{m.title}</span>
+              <span className="block truncate text-xs text-slate-500">{m.desc}</span>
+            </span>
+            <ChevronRight size={18} className="shrink-0 text-slate-400" />
+          </button>
+        ))}
       </div>
     </div>
   )
@@ -154,9 +255,12 @@ function CompanyProfile() {
 
   return (
     <Card className="p-4">
-      <SectionTitle title="Shop Profile" subtitle="Shown on printed invoices" />
+      <SectionTitle
+        title="Shop Profile"
+        subtitle="Shop name & tagline show across every page and on printed invoices; SEO applies site-wide"
+      />
       <div className="mt-3 space-y-3">
-        <Field label="Shop Name">
+        <Field label="Shop Name" hint="Displayed in the sidebar, browser tab and page metadata everywhere">
           <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
         </Field>
         <Field label="Address">
@@ -173,11 +277,31 @@ function CompanyProfile() {
         <Field label="GSTIN">
           <Input value={form.gstin} onChange={(e) => setForm({ ...form, gstin: e.target.value })} />
         </Field>
+
+        <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+          <p className="mb-2 text-xs font-semibold text-slate-700">SEO (applied globally)</p>
+          <div className="space-y-3">
+            <Field label="Meta Description" hint="Used for the page description across the app">
+              <Textarea
+                rows={2}
+                value={form.seoDescription}
+                onChange={(e) => setForm({ ...form, seoDescription: e.target.value })}
+              />
+            </Field>
+            <Field label="Keywords" hint="Comma-separated keywords for search metadata">
+              <Input
+                value={form.seoKeywords}
+                onChange={(e) => setForm({ ...form, seoKeywords: e.target.value })}
+              />
+            </Field>
+          </div>
+        </div>
+
         <button
           className="btn-primary"
           onClick={() => {
             settingsRepo.update({ company: form })
-            toast.success('Shop profile saved')
+            toast.success('Shop profile saved — changes apply across all pages')
           }}
         >
           <Save size={16} /> Save profile
@@ -194,6 +318,8 @@ function FinancialSettings() {
     currency: settings.currency,
     currencySymbol: settings.currencySymbol,
     defaultTaxPercent: String(settings.defaultTaxPercent),
+    defaultCgstPercent: String(settings.defaultCgstPercent ?? settings.defaultTaxPercent / 2),
+    defaultSgstPercent: String(settings.defaultSgstPercent ?? settings.defaultTaxPercent / 2),
     allowOverproduction: settings.allowOverproduction,
     allowNegativeStock: settings.allowNegativeStock,
   })
@@ -210,7 +336,7 @@ function FinancialSettings() {
             <Input value={form.currencySymbol} onChange={(e) => setForm({ ...form, currencySymbol: e.target.value })} />
           </Field>
         </div>
-        <Field label="Default Tax %">
+        <Field label="Default Tax %" hint="Combined GST used as a fallback">
           <Input
             type="number"
             step="0.01"
@@ -218,6 +344,24 @@ function FinancialSettings() {
             onChange={(e) => setForm({ ...form, defaultTaxPercent: e.target.value })}
           />
         </Field>
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="Default CGST %" hint="Auto-fills new invoices">
+            <Input
+              type="number"
+              step="0.01"
+              value={form.defaultCgstPercent}
+              onChange={(e) => setForm({ ...form, defaultCgstPercent: e.target.value })}
+            />
+          </Field>
+          <Field label="Default SGST %" hint="Auto-fills new invoices">
+            <Input
+              type="number"
+              step="0.01"
+              value={form.defaultSgstPercent}
+              onChange={(e) => setForm({ ...form, defaultSgstPercent: e.target.value })}
+            />
+          </Field>
+        </div>
         <label className="flex items-center gap-2 text-sm text-slate-600">
           <input
             type="checkbox"
@@ -243,6 +387,8 @@ function FinancialSettings() {
               currency: form.currency,
               currencySymbol: form.currencySymbol,
               defaultTaxPercent: Number(form.defaultTaxPercent) || 0,
+              defaultCgstPercent: Number(form.defaultCgstPercent) || 0,
+              defaultSgstPercent: Number(form.defaultSgstPercent) || 0,
               allowOverproduction: form.allowOverproduction,
               allowNegativeStock: form.allowNegativeStock,
             })
@@ -462,7 +608,7 @@ function DataManagement({
           }}
         />
       </div>
-      <p className="mt-3 flex items-center gap-1.5 text-2xs text-slate-400">
+      <p className="mt-3 flex items-center gap-1.5 text-2xs text-slate-500">
         <Database size={13} /> For a hosted multi-user deployment, connect the repository layer to Supabase
         (see docs/supabase-schema.sql).
       </p>

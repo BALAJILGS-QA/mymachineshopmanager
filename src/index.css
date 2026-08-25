@@ -12,7 +12,7 @@
     height: 100%;
   }
   body {
-    @apply text-slate-800 antialiased;
+    @apply text-slate-900 antialiased;
     font-feature-settings: 'cv11', 'ss01';
     /* Rich apple-green light gradient behind the whole app */
     background-color: #f3f8e7;
@@ -24,7 +24,7 @@
     background-attachment: fixed;
   }
   * {
-    @apply border-slate-200;
+    @apply border-slate-300;
   }
   /* Compact number inputs without spinners on webkit */
   input[type='number']::-webkit-outer-spin-button,
@@ -36,17 +36,17 @@
 
 @layer components {
   .card {
-    @apply rounded-xl border border-slate-200 bg-white shadow-sm;
+    @apply rounded-xl border border-slate-300 bg-white shadow-sm;
   }
   .label {
-    @apply mb-1 block text-xs font-medium text-slate-600;
+    @apply mb-1 block text-xs font-semibold text-slate-700;
   }
   .input {
-    @apply w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm
-      text-slate-800 shadow-sm outline-none transition
-      placeholder:text-slate-400
-      focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20
-      disabled:cursor-not-allowed disabled:bg-slate-50;
+    @apply w-full rounded-lg border border-slate-400 bg-white px-3 py-2 text-sm
+      text-slate-900 shadow-sm outline-none transition
+      placeholder:text-slate-500
+      focus:border-brand-600 focus:ring-2 focus:ring-brand-600/30
+      disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-600;
   }
   .btn {
     @apply inline-flex select-none items-center justify-center gap-1.5 rounded-lg
@@ -58,24 +58,24 @@
     @apply btn bg-brand-600 text-white hover:bg-brand-700 focus:ring-brand-500/40;
   }
   .btn-secondary {
-    @apply btn border border-slate-300 bg-white text-slate-700 hover:bg-slate-50
-      focus:ring-slate-300;
+    @apply btn border border-slate-400 bg-white text-slate-800 hover:bg-slate-100
+      focus:ring-slate-400;
   }
   .btn-danger {
     @apply btn bg-red-600 text-white hover:bg-red-700 focus:ring-red-500/40;
   }
   .btn-ghost {
-    @apply btn text-slate-600 hover:bg-slate-100 focus:ring-slate-300;
+    @apply btn text-slate-700 hover:bg-slate-100 focus:ring-slate-400;
   }
   .btn-sm {
     @apply px-2.5 py-1.5 text-xs;
   }
   .th {
-    @apply whitespace-nowrap px-3 py-2 text-left text-2xs font-semibold uppercase
-      tracking-wide text-slate-500;
+    @apply whitespace-nowrap px-3 py-2 text-left text-2xs font-bold uppercase
+      tracking-wide text-slate-700;
   }
   .td {
-    @apply whitespace-nowrap px-3 py-2.5 text-sm text-slate-700;
+    @apply whitespace-nowrap px-3 py-2.5 text-sm text-slate-900;
   }
   .chip {
     @apply inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-2xs font-semibold;
@@ -88,10 +88,52 @@
   width: 8px;
 }
 ::-webkit-scrollbar-thumb {
-  @apply rounded-full bg-slate-300;
+  @apply rounded-full bg-slate-400;
 }
 ::-webkit-scrollbar-thumb:hover {
-  @apply bg-slate-400;
+  @apply bg-slate-500;
+}
+
+/* Opt-in maximum contrast for users who request it at the OS/browser level.
+   Pushes borders, dividers and secondary text further than the raised
+   defaults, and makes focus rings unmistakable across every page. */
+@media (prefers-contrast: more) {
+  body {
+    @apply text-slate-950;
+    background-image: none;
+    background-color: #ffffff;
+  }
+  * {
+    @apply border-slate-400;
+  }
+  .card {
+    @apply border-slate-400 shadow-none;
+  }
+  .label {
+    @apply text-slate-900;
+  }
+  .input {
+    @apply border-slate-500 text-slate-950 placeholder:text-slate-600;
+  }
+  .th {
+    @apply text-slate-900;
+  }
+  .td {
+    @apply text-slate-950;
+  }
+  .btn-secondary {
+    @apply border-slate-500 text-slate-900;
+  }
+  /* Any muted grey text steps up to a legible tone. */
+  .text-slate-300,
+  .text-slate-400,
+  .text-slate-500 {
+    @apply text-slate-700 !important;
+  }
+  :focus-visible {
+    outline: 2px solid theme('colors.brand.700');
+    outline-offset: 2px;
+  }
 }
 
 @media print {

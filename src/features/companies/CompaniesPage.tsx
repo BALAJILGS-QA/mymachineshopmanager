@@ -65,7 +65,7 @@ export function CompaniesPage() {
 
       <Card className="mb-3 p-3">
         <div className="relative max-w-xs">
-          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
           <Input
             className="pl-9"
             placeholder="Search name or code…"

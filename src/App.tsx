@@ -14,12 +14,14 @@ import { JobsPage } from './features/jobs/JobsPage'
 import { ProductionPage } from './features/production/ProductionPage'
 import { MaterialsPage } from './features/materials/MaterialsPage'
 import { DeliveriesPage } from './features/deliveries/DeliveriesPage'
+import { ChallanPrintPage } from './features/deliveries/ChallanPrintPage'
 import { InvoicesPage } from './features/invoices/InvoicesPage'
 import { InvoicePrintPage } from './features/invoices/InvoicePrintPage'
 import { PaymentsPage } from './features/payments/PaymentsPage'
 import { ExpensesPage } from './features/expenses/ExpensesPage'
 import { ReportsPage } from './features/reports/ReportsPage'
 import { CompaniesPage } from './features/companies/CompaniesPage'
+import { ApprovalsPage } from './features/approvals/ApprovalsPage'
 import { SettingsPage } from './features/settings/SettingsPage'
 
 function FullScreenLoader({ label }: { label: string }) {
@@ -82,12 +84,14 @@ function Portal() {
         <Route path="production" element={<ProductionPage />} />
         <Route path="materials" element={<MaterialsPage />} />
         <Route path="deliveries" element={<DeliveriesPage />} />
+        <Route path="deliveries/:id/print" element={<ChallanPrintPage />} />
         <Route path="invoices" element={<InvoicesPage />} />
         <Route path="invoices/:id/print" element={<InvoicePrintPage />} />
         <Route path="payments" element={<PaymentsPage />} />
         <Route path="expenses" element={<ExpensesPage />} />
         <Route path="reports" element={<ReportsPage />} />
         <Route path="companies" element={<CompaniesPage />} />
+        <Route path="approvals" element={<ApprovalsPage />} />
         <Route path="settings" element={<SettingsPage />} />
         <Route path="*" element={<Navigate to="/app" replace />} />
       </Routes>

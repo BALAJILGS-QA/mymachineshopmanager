@@ -1,6 +1,6 @@
 import { useEffect } from 'react'
 
-const SITE_NAME = 'Sree Balaji Industries'
+const SITE_NAME = 'Machine Shop Management'
 const BASE_URL = 'https://sreebalajiindustries.netlify.app'
 const DEFAULT_IMAGE = `${BASE_URL}/og-image.svg`
 
@@ -85,3 +85,28 @@ export function useSeo(input: SeoInput): void {
 }
 
 export const SITE = { SITE_NAME, BASE_URL, DEFAULT_IMAGE }
+
+// Applies SEO/meta globally for the authenticated app using the configured shop
+// profile. Called on every route so the shop name, description and keywords set
+// in Settings → Shop Profile reflect in the document title and meta tags across
+// all pages. Not a hook — safe to call from an effect.
+export function applyAppSeo(opts: {
+  shopName: string
+  pageLabel: string
+  description?: string
+  keywords?: string
+}): void {
+  const title = `${opts.pageLabel} · ${opts.shopName}`
+  document.title = title
+  upsertMeta('name', 'description', opts.description || opts.shopName)
+  if (opts.keywords) upsertMeta('name', 'keywords', opts.keywords)
+  upsertMeta('property', 'og:site_name', opts.shopName)
+  upsertMeta('property', 'og:title', title)
+  if (opts.description) upsertMeta('property', 'og:description', opts.description)
+  upsertMeta('property', 'og:type', 'website')
+  upsertMeta('name', 'twitter:card', 'summary_large_image')
+  upsertMeta('name', 'twitter:title', title)
+  if (opts.description) upsertMeta('name', 'twitter:description', opts.description)
+  upsertMeta('name', 'twitter:image', DEFAULT_IMAGE)
+  upsertMeta('property', 'og:image', DEFAULT_IMAGE)
+}

@@ -185,7 +185,7 @@ function StockTab() {
             <tr key={r.material.id} className="hover:bg-slate-50/60">
               <td className="td">
                 <div className="font-semibold text-slate-800">{r.material.name}</div>
-                <div className="text-2xs text-slate-400">
+                <div className="text-2xs text-slate-500">
                   {r.material.code} · {r.material.unit}
                   {r.material.type ? ` · ${r.material.type}` : ''}
                 </div>
@@ -211,7 +211,7 @@ function StockTab() {
               <td className="td text-right">{currency(r.value)}</td>
               <td className="td">
                 <div className="flex flex-wrap gap-1">
-                  {r.perCompany.length === 0 && <span className="text-2xs text-slate-300">—</span>}
+                  {r.perCompany.length === 0 && <span className="text-2xs text-slate-400">—</span>}
                   {r.perCompany.map((pc) => (
                     <Badge key={pc.companyId} tone={pc.balance < 0 ? 'red' : 'slate'}>
                       {companyName(pc.companyId)}: {qty(pc.balance)}

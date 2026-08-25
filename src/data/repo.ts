@@ -4,6 +4,7 @@
 // store directly — it goes through these functions.
 
 import type {
+  AppUser,
   Company,
   DeliveryChallan,
   Expense,
@@ -552,6 +553,24 @@ export const dcRepo = {
       return dc
     }),
 
+  // Recover a challan that is stuck as "Invoiced" but whose invoice no longer
+  // counts (deleted or cancelled). Refuses while a live invoice still links it,
+  // so an actively-billed dispatch can never be silently unlocked.
+  reopen: (id: string): DeliveryChallan =>
+    mutate((db) => {
+      const dc = db.deliveryChallans.find((d) => d.id === id)
+      if (!dc) throw new BusinessRuleError('Delivery challan not found')
+      const inv = dc.invoiceId ? db.invoices.find((i) => i.id === dc.invoiceId) : undefined
+      if (inv && inv.status !== 'Cancelled') {
+        throw new BusinessRuleError('Challan is billed on a live invoice. Cancel the invoice first.')
+      }
+      dc.status = 'Open'
+      dc.invoiceId = undefined
+      dc.updatedAt = nowISO()
+      audit(db, 'DeliveryChallan', id, 'status', `${dc.dcNo} → Open (reopened)`)
+      return dc
+    }),
+
   remove: (id: string): void =>
     mutate((db) => {
       const dc = db.deliveryChallans.find((d) => d.id === id)
@@ -570,7 +589,7 @@ export const invoiceRepo = {
   computed: (inv: Invoice) => computeInvoice(inv, getDb().payments),
 
   create: (
-    input: Omit<Invoice, 'id' | 'invoiceNo' | 'createdAt' | 'updatedAt'>,
+    input: Omit<Invoice, 'id' | 'invoiceNo' | 'createdAt' | 'updatedAt'> & { invoiceNo?: string },
   ): Invoice =>
     mutate((db) => {
       if (!db.companies.some((c) => c.id === input.companyId)) {
@@ -582,11 +601,26 @@ export const invoiceRepo = {
           throw new BusinessRuleError('Line quantity must be > 0 and rate must be >= 0')
         }
       }
+      // Invoice number: use the (editable) value if given, else auto-generate.
+      const desired = input.invoiceNo?.trim()
+      let invoiceNo: string
+      if (desired) {
+        if (db.invoices.some((i) => i.invoiceNo === desired)) {
+          throw new BusinessRuleError(`Invoice number "${desired}" already exists`)
+        }
+        invoiceNo = desired
+        // Keep the auto-sequence advancing when the suggested next number is kept.
+        if (desired === formatDocNo(db.settings.numbering.invoice, db.sequences.invoice + 1)) {
+          db.sequences.invoice += 1
+        }
+      } else {
+        invoiceNo = nextNo(db, 'invoice', db.settings.numbering.invoice)
+      }
       const ts = nowISO()
       const invoice: Invoice = {
         ...input,
         id: uid('inv_'),
-        invoiceNo: nextNo(db, 'invoice', db.settings.numbering.invoice),
+        invoiceNo,
         createdAt: ts,
         updatedAt: ts,
       }
@@ -601,6 +635,13 @@ export const invoiceRepo = {
       if (!inv) throw new BusinessRuleError('Invoice not found')
       if (inv.status === 'Paid' && patch.lines) {
         throw new BusinessRuleError('Cannot edit line items on a fully paid invoice')
+      }
+      if (patch.invoiceNo && patch.invoiceNo.trim() !== inv.invoiceNo) {
+        const wanted = patch.invoiceNo.trim()
+        if (db.invoices.some((i) => i.id !== id && i.invoiceNo === wanted)) {
+          throw new BusinessRuleError(`Invoice number "${wanted}" already exists`)
+        }
+        patch = { ...patch, invoiceNo: wanted }
       }
       Object.assign(inv, patch, { updatedAt: nowISO() })
       audit(db, 'Invoice', id, 'update', `Updated invoice ${inv.invoiceNo}`)
@@ -617,6 +658,17 @@ export const invoiceRepo = {
           throw new BusinessRuleError(
             'Invoice has payments recorded. Remove payments before cancelling.',
           )
+        }
+        // Cancelling frees any delivery challan raised against this invoice so it
+        // can be re-invoiced or removed — otherwise the DC is orphaned as
+        // permanently "Invoiced" against a document that no longer counts.
+        for (const dc of db.deliveryChallans) {
+          if (dc.invoiceId === id) {
+            dc.status = 'Open'
+            dc.invoiceId = undefined
+            dc.updatedAt = nowISO()
+            audit(db, 'DeliveryChallan', dc.id, 'status', `${dc.dcNo} → Open (invoice ${inv.invoiceNo} cancelled)`)
+          }
         }
       }
       inv.status = status
@@ -733,6 +785,77 @@ export const expenseRepo = {
 
 export const auditRepo = {
   list: () => getDb().auditLog,
+}
+
+// ------------------------------------------------------------------ Users
+// Registration + approval. New sign-ups land as 'pending' and cannot enter the
+// app until a SuperAdmin approves them.
+export const userRepo = {
+  list: (): AppUser[] => getDb().users,
+  pending: (): AppUser[] => getDb().users.filter((u) => u.status === 'pending'),
+  getByEmail: (email: string): AppUser | undefined => {
+    const key = email.trim().toLowerCase()
+    return getDb().users.find((u) => u.email.trim().toLowerCase() === key)
+  },
+
+  register: (
+    input: Omit<AppUser, 'id' | 'role' | 'status' | 'createdAt' | 'decidedAt' | 'decidedBy'>,
+  ): AppUser =>
+    mutate((db) => {
+      const email = input.email.trim().toLowerCase()
+      if (!email) throw new BusinessRuleError('Email is required')
+      if (!input.fullName.trim()) throw new BusinessRuleError('Full name is required')
+      if (db.users.some((u) => u.email.trim().toLowerCase() === email)) {
+        throw new BusinessRuleError('An account with this email already exists')
+      }
+      const user: AppUser = {
+        ...input,
+        email: input.email.trim(),
+        id: uid('usr_'),
+        role: 'User',
+        status: 'pending',
+        createdAt: nowISO(),
+      }
+      db.users.push(user)
+      audit(db, 'User', user.id, 'create', `Registration requested: ${user.email}`)
+      return user
+    }),
+
+  update: (id: string, patch: Partial<AppUser>): AppUser =>
+    mutate((db) => {
+      const user = db.users.find((u) => u.id === id)
+      if (!user) throw new BusinessRuleError('User not found')
+      Object.assign(user, patch)
+      return user
+    }),
+
+  approve: (id: string, by: string): AppUser =>
+    mutate((db) => {
+      const user = db.users.find((u) => u.id === id)
+      if (!user) throw new BusinessRuleError('User not found')
+      user.status = 'approved'
+      user.decidedAt = nowISO()
+      user.decidedBy = by
+      audit(db, 'User', id, 'status', `Approved ${user.email}`)
+      return user
+    }),
+
+  reject: (id: string, by: string): AppUser =>
+    mutate((db) => {
+      const user = db.users.find((u) => u.id === id)
+      if (!user) throw new BusinessRuleError('User not found')
+      user.status = 'rejected'
+      user.decidedAt = nowISO()
+      user.decidedBy = by
+      audit(db, 'User', id, 'status', `Rejected ${user.email}`)
+      return user
+    }),
+
+  remove: (id: string): void =>
+    mutate((db) => {
+      db.users = db.users.filter((u) => u.id !== id)
+      audit(db, 'User', id, 'delete', 'Deleted user')
+    }),
 }
 
 // Preview the next document number without consuming the sequence.

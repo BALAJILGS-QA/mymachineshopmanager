@@ -1,20 +1,19 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
-import { Cog, Menu, X, ArrowUpRight } from 'lucide-react'
+import { Menu, X, ArrowUpRight } from 'lucide-react'
 import { clsx } from 'clsx'
+import { Logo } from '@/components/ui/Logo'
+import { BRAND } from '@/lib/brand'
 import './site.css'
 
 const NAV = [{ to: '/blog', label: 'Blog' }]
 
 function Wordmark() {
   return (
-    <Link to="/" className="flex items-center gap-2.5">
-      <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-gradient-to-br from-brand-500 to-brand-700 text-white shadow-sm">
-        <Cog size={20} className="spin-slow" />
-      </span>
-      <span className="leading-none">
-        <span className="display block text-[15px] font-bold tracking-tight text-[var(--ink)]">SREE BALAJI</span>
-        <span className="mono block text-[9px] tracking-[0.3em] text-[var(--ink-faint)]">INDUSTRIES</span>
+    <Link to="/" className="flex items-center gap-2.5" aria-label={BRAND.product}>
+      <Logo size={38} className="rounded-[28%] shadow-sm" />
+      <span className="display text-[15px] font-bold leading-tight tracking-tight text-[var(--ink)]">
+        {BRAND.product}
       </span>
     </Link>
   )
@@ -119,12 +118,9 @@ function Footer() {
         <div>
           <Wordmark />
           <p className="mt-4 max-w-xs text-sm leading-relaxed text-[var(--ink-dim)]">
-            Precision CNC turning for pumps, engineering and industrial components.
-            Company-wise job tracking from order to delivery.
+            {BRAND.product} — job orders, materials, delivery challans, invoices, payments and
+            expenses, tracked company-wise from order to dispatch.
           </p>
-          <a href="mailto:contact@sreebalajiindustries.com" className="mono mt-4 inline-block text-sm text-[var(--amber)]">
-            contact@sreebalajiindustries.com
-          </a>
         </div>
         <div>
           <p className="kicker mb-3">Company</p>
@@ -143,7 +139,7 @@ function Footer() {
       </div>
       <div className="border-t border-[var(--line)]">
         <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-2 px-5 py-5 text-xs text-[var(--ink-faint)] sm:flex-row">
-          <p>© {year} Sree Balaji Industries. All rights reserved.</p>
+          <p>© {year} {BRAND.product}. All rights reserved.</p>
           <p className="mono">PRECISION · REPEATABILITY · TRACEABILITY</p>
         </div>
       </div>

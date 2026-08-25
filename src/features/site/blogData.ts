@@ -26,7 +26,7 @@ export const POSTS: Post[] = [
     excerpt:
       'What CNC machining actually involves, when to use it, and how to get precise, repeatable parts made without wasting time or money.',
     date: '2026-08-10',
-    author: 'Sree Balaji Industries',
+    author: 'Machine Shop Management',
     readMins: 7,
     tags: ['CNC', 'Manufacturing', 'Guide'],
     accent: '#ff7a1a',
@@ -48,7 +48,7 @@ export const POSTS: Post[] = [
     excerpt:
       'Turning and milling solve different problems. Here is a practical way to decide which one — or both — your component needs.',
     date: '2026-07-28',
-    author: 'Sree Balaji Industries',
+    author: 'Machine Shop Management',
     readMins: 5,
     tags: ['CNC', 'Turning', 'Milling'],
     accent: '#38bdf8',
@@ -68,7 +68,7 @@ export const POSTS: Post[] = [
     excerpt:
       'Steel, stainless, aluminium or brass? A simple framework for matching material to function, cost and machinability.',
     date: '2026-07-12',
-    author: 'Sree Balaji Industries',
+    author: 'Machine Shop Management',
     readMins: 6,
     tags: ['Materials', 'Engineering'],
     accent: '#a3e635',
@@ -87,7 +87,7 @@ export const POSTS: Post[] = [
     excerpt:
       'Tolerances decide whether parts fit and function. Learn how to specify them so you get precision where it matters — and pay for it only there.',
     date: '2026-06-30',
-    author: 'Sree Balaji Industries',
+    author: 'Machine Shop Management',
     readMins: 5,
     tags: ['Quality', 'Tolerances'],
     accent: '#f472b6',
@@ -106,7 +106,7 @@ export const POSTS: Post[] = [
     excerpt:
       'Small design and ordering decisions can cut machining cost significantly. Here are five that consistently pay off.',
     date: '2026-06-15',
-    author: 'Sree Balaji Industries',
+    author: 'Machine Shop Management',
     readMins: 4,
     tags: ['Cost', 'Design for Manufacturing'],
     accent: '#facc15',
