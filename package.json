@@ -10,7 +10,8 @@
     "preview": "vite preview",
     "lint": "tsc --noEmit",
     "test:e2e": "playwright test",
-    "test:e2e:prod": "playwright test --config=playwright.prod.config.ts"
+    "test:e2e:prod": "playwright test --config=playwright.prod.config.ts",
+    "deploy": "node scripts/deploy.mjs"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.9.1",

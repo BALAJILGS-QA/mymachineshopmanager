@@ -12,7 +12,7 @@ export function PageHeader({
   return (
     <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
       <div>
-        <h1 className="text-lg font-bold text-slate-900 sm:text-xl">{title}</h1>
+        <h1 className="text-gradient-brand text-lg font-bold sm:text-xl">{title}</h1>
         {subtitle && <p className="mt-0.5 text-sm text-slate-600">{subtitle}</p>}
       </div>
       {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}

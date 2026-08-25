@@ -366,7 +366,7 @@ function Kpi({
   to: string
 }) {
   return (
-    <Link to={to} className="card p-3.5 transition hover:shadow-md">
+    <Link to={to} className="card p-3.5 transition duration-200 hover:-translate-y-0.5 hover:shadow-md">
       <div className={`mb-2 inline-flex h-8 w-8 items-center justify-center rounded-lg ${TONES[tone]}`}>
         <Icon size={17} />
       </div>

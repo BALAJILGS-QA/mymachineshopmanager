@@ -14,13 +14,13 @@
   body {
     @apply text-slate-900 antialiased;
     font-feature-settings: 'cv11', 'ss01';
-    /* Rich apple-green light gradient behind the whole app */
-    background-color: #f3f8e7;
+    /* Rich apple-green premium gradient wash behind the whole app */
+    background-color: #eef6da;
     background-image:
-      radial-gradient(52% 42% at 10% -2%, rgba(141, 182, 0, 0.18), transparent 60%),
-      radial-gradient(48% 40% at 102% 4%, rgba(115, 148, 0, 0.14), transparent 60%),
-      radial-gradient(60% 50% at 50% 110%, rgba(164, 209, 58, 0.12), transparent 60%),
-      linear-gradient(180deg, #f7fbec 0%, #edf4dd 100%);
+      radial-gradient(46% 38% at 8% -4%, rgba(141, 182, 0, 0.26), transparent 62%),
+      radial-gradient(44% 40% at 104% 2%, rgba(88, 114, 0, 0.2), transparent 60%),
+      radial-gradient(60% 50% at 50% 116%, rgba(164, 209, 58, 0.2), transparent 62%),
+      linear-gradient(180deg, #f8fcef 0%, #e9f3d6 100%);
     background-attachment: fixed;
   }
   * {
@@ -36,13 +36,17 @@
 
 @layer components {
   .card {
-    @apply rounded-xl border border-slate-300 bg-white shadow-sm;
+    @apply rounded-2xl border border-slate-200 bg-white;
+    background-image: linear-gradient(180deg, #ffffff 0%, #fbfdf5 100%);
+    box-shadow:
+      0 1px 2px rgba(16, 24, 40, 0.04),
+      0 14px 30px -18px rgba(70, 90, 9, 0.28);
   }
   .label {
     @apply mb-1 block text-xs font-semibold text-slate-700;
   }
   .input {
-    @apply w-full rounded-lg border border-slate-400 bg-white px-3 py-2 text-sm
+    @apply w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm
       text-slate-900 shadow-sm outline-none transition
       placeholder:text-slate-500
       focus:border-brand-600 focus:ring-2 focus:ring-brand-600/30
@@ -54,18 +58,34 @@
       focus:outline-none focus:ring-2 focus:ring-offset-1
       disabled:cursor-not-allowed disabled:opacity-50;
   }
+  /* Premium apple-green gradient action button. */
   .btn-primary {
-    @apply btn bg-brand-600 text-white hover:bg-brand-700 focus:ring-brand-500/40;
+    @apply btn text-white focus:ring-brand-500/40;
+    background-image: linear-gradient(135deg, #a4d13a 0%, #8db600 45%, #587200 100%);
+    box-shadow:
+      0 1px 2px rgba(70, 90, 9, 0.25),
+      0 10px 20px -10px rgba(88, 114, 0, 0.55);
+  }
+  .btn-primary:hover {
+    filter: brightness(1.05) saturate(1.05);
+    box-shadow:
+      0 2px 4px rgba(70, 90, 9, 0.3),
+      0 12px 24px -10px rgba(88, 114, 0, 0.65);
+  }
+  .btn-primary:active {
+    filter: brightness(0.97);
   }
   .btn-secondary {
-    @apply btn border border-slate-400 bg-white text-slate-800 hover:bg-slate-100
-      focus:ring-slate-400;
+    @apply btn border border-slate-300 bg-white text-slate-800 hover:bg-brand-50
+      hover:border-brand-300 focus:ring-slate-400;
   }
   .btn-danger {
-    @apply btn bg-red-600 text-white hover:bg-red-700 focus:ring-red-500/40;
+    @apply btn text-white focus:ring-red-500/40;
+    background-image: linear-gradient(135deg, #f87171 0%, #dc2626 55%, #b91c1c 100%);
+    box-shadow: 0 8px 18px -10px rgba(220, 38, 38, 0.5);
   }
   .btn-ghost {
-    @apply btn text-slate-700 hover:bg-slate-100 focus:ring-slate-400;
+    @apply btn text-slate-700 hover:bg-brand-50 hover:text-brand-800 focus:ring-slate-400;
   }
   .btn-sm {
     @apply px-2.5 py-1.5 text-xs;
@@ -82,16 +102,36 @@
   }
 }
 
+@layer utilities {
+  /* Apple-green gradient fills + gradient text for headings and accents. */
+  .bg-brand-gradient {
+    background-image: linear-gradient(135deg, #a4d13a 0%, #8db600 45%, #587200 100%);
+  }
+  .bg-brand-soft {
+    background-image: linear-gradient(135deg, #f5fbe7 0%, #e8f6c6 100%);
+  }
+  .text-gradient-brand {
+    background-image: linear-gradient(120deg, #739400 0%, #8db600 40%, #465a09 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+  .ring-brand-soft {
+    box-shadow: 0 0 0 1px rgba(141, 182, 0, 0.35);
+  }
+}
+
 /* Thin scrollbars for dense tables */
 ::-webkit-scrollbar {
   height: 8px;
   width: 8px;
 }
 ::-webkit-scrollbar-thumb {
-  @apply rounded-full bg-slate-400;
+  border-radius: 9999px;
+  background-image: linear-gradient(180deg, #a4d13a, #587200);
 }
 ::-webkit-scrollbar-thumb:hover {
-  @apply bg-slate-500;
+  background-image: linear-gradient(180deg, #8db600, #465a09);
 }
 
 /* Opt-in maximum contrast for users who request it at the OS/browser level.
@@ -108,6 +148,17 @@
   }
   .card {
     @apply border-slate-400 shadow-none;
+    background-image: none;
+  }
+  .btn-primary {
+    @apply bg-brand-700;
+    background-image: none;
+    box-shadow: none;
+  }
+  .btn-danger {
+    @apply bg-red-700;
+    background-image: none;
+    box-shadow: none;
   }
   .label {
     @apply text-slate-900;
@@ -123,6 +174,12 @@
   }
   .btn-secondary {
     @apply border-slate-500 text-slate-900;
+  }
+  /* Gradient text falls back to a solid, high-contrast colour. */
+  .text-gradient-brand {
+    background-image: none;
+    -webkit-text-fill-color: currentColor;
+    @apply text-slate-950;
   }
   /* Any muted grey text steps up to a legible tone. */
   .text-slate-300,
