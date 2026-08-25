@@ -122,11 +122,13 @@ export function downloadChallanPdf(challanId: string): void {
     text(doc.splitTextToSize(dc.notes, W - 2 * M) as string[], M, y)
   }
 
-  doc.setFontSize(9).setTextColor(90)
-  text('Received in good condition', M, 780)
-  text('Authorised Signatory', W - M, 780, { align: 'right' })
-  doc.setFontSize(8).setTextColor(160)
-  text('This is a computer-generated delivery challan.', W / 2, 812, { align: 'center' })
+  // "For <shop>" signatory block (bottom-right); label depends on business type.
+  doc.setFont('helvetica', 'bold').setFontSize(10).setTextColor(30)
+  text(`For ${shop.name || 'Machine Shop'}`, W - M, 770, { align: 'right' })
+  doc.setFont('helvetica', 'normal').setFontSize(9).setTextColor(90)
+  text(shop.isProprietor ? 'Proprietor' : 'Partner / Authorised Signatory', W - M, 800, {
+    align: 'right',
+  })
 
   doc.save(`${dc.dcNo}.pdf`)
 }

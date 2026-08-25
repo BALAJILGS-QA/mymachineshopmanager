@@ -53,6 +53,7 @@ export const DEFAULT_SETTINGS: Settings = {
     phone: '',
     email: '',
     gstin: '',
+    isProprietor: true,
     seoDescription:
       'Machine shop management — job orders, materials, delivery challans, invoices, payments and expenses tracked company-wise from order to dispatch.',
     seoKeywords:

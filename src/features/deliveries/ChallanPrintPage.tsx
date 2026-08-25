@@ -112,11 +112,14 @@ export function ChallanPrintPage() {
           </div>
         )}
 
-        <div className="mt-10 flex justify-between text-xs text-slate-500">
-          <span>Received in good condition</span>
-          <span>Authorised Signatory</span>
+        <div className="mt-12 flex justify-end">
+          <div className="text-right">
+            <p className="text-sm font-semibold text-slate-800">For {shop.name}</p>
+            <p className="mt-10 text-xs font-medium text-slate-600">
+              {shop.isProprietor ? 'Proprietor' : 'Partner / Authorised Signatory'}
+            </p>
+          </div>
         </div>
-        <p className="mt-6 text-center text-2xs text-slate-500">This is a computer-generated delivery challan.</p>
       </div>
     </div>
   )

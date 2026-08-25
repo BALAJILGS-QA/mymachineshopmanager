@@ -26,7 +26,7 @@ import { buildInitialDb } from '@/data/seed'
 import { loadDemoData } from '@/data/demo'
 import { currency, setCurrency } from '@/lib/format'
 import { PageHeader } from '@/components/common/PageHeader'
-import { Card, Field, Input, SectionTitle, Textarea } from '@/components/ui/primitives'
+import { Card, Field, Input, SectionTitle, Select, Textarea } from '@/components/ui/primitives'
 import { useToast } from '@/components/ui/Toast'
 import { useConfirm } from '@/components/ui/ConfirmDialog'
 import { useAuth } from '@/features/auth/auth'
@@ -276,6 +276,15 @@ function CompanyProfile() {
         </div>
         <Field label="GSTIN">
           <Input value={form.gstin} onChange={(e) => setForm({ ...form, gstin: e.target.value })} />
+        </Field>
+        <Field label="Business Type" hint="Sets the signatory line on printed documents">
+          <Select
+            value={form.isProprietor ? 'proprietor' : 'partner'}
+            onChange={(e) => setForm({ ...form, isProprietor: e.target.value === 'proprietor' })}
+          >
+            <option value="proprietor">Proprietorship — sign as "Proprietor"</option>
+            <option value="partner">Partnership / Other — "Partner / Authorised Signatory"</option>
+          </Select>
         </Field>
 
         <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">

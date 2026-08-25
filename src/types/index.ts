@@ -262,6 +262,9 @@ export interface Settings {
     phone: string
     email: string
     gstin: string
+    // Signatory type — drives the "For <shop>" footer on printed documents.
+    // true → "Proprietor"; false → "Partner / Authorised Signatory".
+    isProprietor: boolean
     // SEO — applied globally to the app's page title, description and keywords.
     seoDescription: string
     seoKeywords: string
