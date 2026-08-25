@@ -1,6 +1,7 @@
 import { useState } from 'react'
-import type { JobOrder, JobPriority, JobStatus } from '@/types'
+import type { JobOrder, JobPriority, JobStatus, MaterialOwnerType } from '@/types'
 import { jobRepo, stockRepo, previewNextNo, BusinessRuleError } from '@/data/repo'
+import { SHOP_SCOPE } from '@/data/computations'
 import { useDb } from '@/data/store'
 import { todayISO, qty } from '@/lib/format'
 import { Field, Input, Select, Textarea } from '@/components/ui/primitives'
@@ -31,6 +32,7 @@ export function JobForm({ job, onClose }: { job: JobOrder | null; onClose: () =>
     customerPo: job?.customerPo ?? '',
     materialId: job?.materialId ?? '',
     materialQty: '',
+    materialOwner: 'Shop' as MaterialOwnerType,
     orderedQty: job?.orderedQty ?? 1,
     completedQty: job?.completedQty ?? 0,
     rate: job?.rate ?? '',
@@ -67,7 +69,7 @@ export function JobForm({ job, onClose }: { job: JobOrder | null; onClose: () =>
         toast.success('Job order updated')
       } else {
         const consume = form.materialQty === '' ? undefined : Number(form.materialQty)
-        jobRepo.create({ ...payload, materialQty: consume })
+        jobRepo.create({ ...payload, materialQty: consume, materialOwner: form.materialOwner })
         toast.success(
           consume ? 'Job order created — material issued from stock' : 'Job order created',
         )
@@ -131,23 +133,39 @@ export function JobForm({ job, onClose }: { job: JobOrder | null; onClose: () =>
           </Select>
         </Field>
         {!job && form.materialId && (
-          <Field
-            label="Material Qty to Consume"
-            hint={(() => {
-              const m = materials.find((x) => x.id === form.materialId)
-              const bal = stockRepo.balance(form.materialId).balance
-              return m ? `In stock: ${qty(bal)} ${m.unit} — issued from inventory on create` : undefined
-            })()}
-          >
-            <Input
-              type="number"
-              step="0.001"
-              min={0}
-              value={form.materialQty}
-              placeholder="0"
-              onChange={(e) => set('materialQty', e.target.value as never)}
-            />
-          </Field>
+          <>
+            <Field label="Consume from stock">
+              <Select
+                value={form.materialOwner}
+                onChange={(e) => set('materialOwner', e.target.value as MaterialOwnerType)}
+              >
+                <option value="Shop">Own (shop) stock</option>
+                <option value="Company">This customer's stock</option>
+              </Select>
+            </Field>
+            <Field
+              label="Material Qty to Consume"
+              hint={(() => {
+                const m = materials.find((x) => x.id === form.materialId)
+                const scope = form.materialOwner === 'Company' ? form.companyId : SHOP_SCOPE
+                const bal = form.materialId && (form.materialOwner === 'Shop' || form.companyId)
+                  ? stockRepo.balance(form.materialId, scope).balance
+                  : 0
+                return m
+                  ? `In ${form.materialOwner === 'Company' ? 'customer' : 'own'} stock: ${qty(bal)} ${m.unit} — issued on create`
+                  : undefined
+              })()}
+            >
+              <Input
+                type="number"
+                step="0.001"
+                min={0}
+                value={form.materialQty}
+                placeholder="0"
+                onChange={(e) => set('materialQty', e.target.value as never)}
+              />
+            </Field>
+          </>
         )}
         <Field label="Rate (per unit)" hint="Optional; used to prefill invoices">
           <Input

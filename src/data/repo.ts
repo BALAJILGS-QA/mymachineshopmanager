@@ -13,6 +13,7 @@ import type {
   JobStatus,
   Material,
   MaterialIssue,
+  MaterialOwnerType,
   MaterialReceipt,
   Payment,
   Product,
@@ -28,6 +29,7 @@ import {
   computeInvoice,
   deriveInvoiceStatus,
   materialStock,
+  SHOP_SCOPE,
 } from './computations'
 
 export class BusinessRuleError extends Error {}
@@ -255,6 +257,8 @@ type JobInput = Omit<
   completedQty?: number
   // Raw material consumed by the job — issued from inventory on creation.
   materialQty?: number
+  // Which pool to consume from: 'Shop' (own) or 'Company' (this customer's).
+  materialOwner?: MaterialOwnerType
 }
 
 function validateJob(db: Database, input: Partial<JobOrder>) {
@@ -283,7 +287,7 @@ export const jobRepo = {
   get: (id: string) => getDb().jobs.find((j) => j.id === id),
   create: (input: JobInput): JobOrder =>
     mutate((db) => {
-      const { materialQty, ...jobInput } = input
+      const { materialQty, materialOwner, ...jobInput } = input
       if (!jobInput.partName.trim()) throw new BusinessRuleError('Part name is required')
       if (!db.companies.some((c) => c.id === jobInput.companyId)) {
         throw new BusinessRuleError('Select a valid company')
@@ -291,17 +295,22 @@ export const jobRepo = {
       validateJob(db, jobInput)
 
       // Validate raw-material availability BEFORE mutating anything, so a stock
-      // shortfall doesn't leave a half-created job.
+      // shortfall doesn't leave a half-created job. Own vs customer pools are
+      // kept separate: consume from own (shop) stock, or this customer's stock.
       const consume = Number(materialQty) || 0
+      const fromCustomer = materialOwner === 'Company'
+      const consumeCompanyId = fromCustomer ? jobInput.companyId : undefined
+      const consumeScope = fromCustomer ? jobInput.companyId : SHOP_SCOPE
       const material = jobInput.materialId
         ? db.materials.find((m) => m.id === jobInput.materialId)
         : undefined
       if (consume > 0) {
         if (!material) throw new BusinessRuleError('Select a valid material to consume')
-        const available = materialStock(db, material.id).balance
+        const available = materialStock(db, material.id, consumeScope).balance
         if (!db.settings.allowNegativeStock && consume > available) {
+          const where = fromCustomer ? "this customer's" : 'own (shop)'
           throw new BusinessRuleError(
-            `Only ${available} ${material.unit} of "${material.name}" in stock — cannot create a job consuming ${consume}.`,
+            `Only ${available} ${material.unit} of "${material.name}" in ${where} stock — cannot create a job consuming ${consume}.`,
           )
         }
       }
@@ -327,10 +336,10 @@ export const jobRepo = {
           date: job.orderDate,
           materialId: material.id,
           jobId: job.id,
-          companyId: job.companyId,
+          companyId: consumeCompanyId,
           quantity: consume,
           unit: material.unit,
-          note: `Auto-issued on creation of job ${job.jobNo}`,
+          note: `Auto-issued on creation of job ${job.jobNo} (${fromCustomer ? 'customer' : 'own'} stock)`,
           createdAt: ts,
           updatedAt: ts,
         }
@@ -485,14 +494,15 @@ export const stockRepo = {
       }
       if (input.quantity <= 0) throw new BusinessRuleError('Quantity must be greater than zero')
 
-      const companyId = input.companyId ?? job.companyId
-      // Availability is checked against the overall material pool (company &
-      // shop owned). Ownership is retained on the issue for company-wise
-      // reporting, but shop-owned stock is usable for any job.
-      const available = materialStock(db, input.materialId).balance
+      // Own vs customer stock is kept separate: an issue draws from a specific
+      // pool — own (shop) when no companyId is given, otherwise that customer's.
+      const companyId = input.companyId
+      const scope = companyId ?? SHOP_SCOPE
+      const available = materialStock(db, input.materialId, scope).balance
       if (!db.settings.allowNegativeStock && !override && input.quantity > available) {
+        const where = companyId ? 'this customer' : 'own (shop)'
         throw new BusinessRuleError(
-          `Only ${available} in stock for this material. Enable override to issue anyway.`,
+          `Only ${available} in ${where} stock for this material. Enable override to issue anyway.`,
         )
       }
       const ts = nowISO()

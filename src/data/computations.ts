@@ -58,14 +58,24 @@ export function deriveInvoiceStatus(
   return 'Paid'
 }
 
-// Stock balance for a material, optionally scoped to an owning company.
+// Sentinel scope for shop-/self-owned ("own") stock (companyId is null).
+export const SHOP_SCOPE = '__shop__'
+
+// Stock balance for a material.
+//   scope undefined     → overall (own + all customers)
+//   scope SHOP_SCOPE    → own (shop) stock only
+//   scope <companyId>   → that customer's stock only
 export function materialStock(
   db: Database,
   materialId: string,
   companyId?: string,
 ): MaterialStock {
   const matchCompany = (cid?: string) =>
-    companyId === undefined ? true : cid === companyId
+    companyId === undefined
+      ? true
+      : companyId === SHOP_SCOPE
+      ? cid == null
+      : cid === companyId
 
   const received = db.receipts
     .filter((r) => r.materialId === materialId && matchCompany(r.companyId))

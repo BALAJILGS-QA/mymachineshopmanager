@@ -13,7 +13,7 @@ import { clsx } from 'clsx'
 import type { Material } from '@/types'
 import { materialRepo, stockRepo, BusinessRuleError } from '@/data/repo'
 import { useDb } from '@/data/store'
-import { materialStock, materialStockValue } from '@/data/computations'
+import { materialStock, materialStockValue, SHOP_SCOPE } from '@/data/computations'
 import { getDb } from '@/data/db'
 import { currency, fmtDate, qty } from '@/lib/format'
 import { downloadCsv } from '@/lib/csv'
@@ -36,10 +36,22 @@ const TABS: { key: Tab; label: string }[] = [
   { key: 'adjustments', label: 'Adjustments' },
 ]
 
+// Owner-scope match: '' = all, SHOP_SCOPE = own (shop, companyId null),
+// else a specific customer companyId.
+export function ownerMatch(rowCompanyId: string | undefined, filter: string): boolean {
+  if (!filter) return true
+  if (filter === SHOP_SCOPE) return rowCompanyId == null
+  return rowCompanyId === filter
+}
+
 export function MaterialsPage() {
   const [tab, setTab] = useState<Tab>('stock')
   const [dialog, setDialog] = useState<Dialog>(null)
   const [editMaterial, setEditMaterial] = useState<Material | null>(null)
+  const [fCompany, setFCompany] = useState('')
+  const [fMaterial, setFMaterial] = useState('')
+  const companies = useDb((db) => db.companies)
+  const materials = useDb((db) => db.materials)
 
   return (
     <div>
@@ -76,7 +88,55 @@ export function MaterialsPage() {
         ))}
       </div>
 
-      {tab === 'stock' && <StockTab />}
+      {/* Company + material filters — show all records for the selection. */}
+      {tab !== 'materials' && (
+        <div className="mb-3 flex flex-wrap items-end gap-2 rounded-xl border border-slate-200 bg-white p-3">
+          <div>
+            <label className="label">Company</label>
+            <select
+              className="input min-w-[11rem]"
+              value={fCompany}
+              onChange={(e) => setFCompany(e.target.value)}
+            >
+              <option value="">All (own + customers)</option>
+              <option value={SHOP_SCOPE}>Own material (shop)</option>
+              {companies.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="label">Material</label>
+            <select
+              className="input min-w-[12rem]"
+              value={fMaterial}
+              onChange={(e) => setFMaterial(e.target.value)}
+            >
+              <option value="">All materials</option>
+              {materials.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          {(fCompany || fMaterial) && (
+            <button
+              className="btn-ghost btn-sm mb-0.5"
+              onClick={() => {
+                setFCompany('')
+                setFMaterial('')
+              }}
+            >
+              Clear
+            </button>
+          )}
+        </div>
+      )}
+
+      {tab === 'stock' && <StockTab fCompany={fCompany} fMaterial={fMaterial} />}
       {tab === 'materials' && (
         <MaterialsTab
           onAdd={() => {
@@ -89,9 +149,9 @@ export function MaterialsPage() {
           }}
         />
       )}
-      {tab === 'receipts' && <ReceiptsTab />}
-      {tab === 'issues' && <IssuesTab />}
-      {tab === 'adjustments' && <AdjustmentsTab />}
+      {tab === 'receipts' && <ReceiptsTab fCompany={fCompany} fMaterial={fMaterial} />}
+      {tab === 'issues' && <IssuesTab fCompany={fCompany} fMaterial={fMaterial} />}
+      {tab === 'adjustments' && <AdjustmentsTab fCompany={fCompany} fMaterial={fMaterial} />}
 
       {dialog === 'material' && (
         <MaterialForm material={editMaterial} onClose={() => setDialog(null)} />
@@ -104,8 +164,8 @@ export function MaterialsPage() {
 }
 
 // ------------------------------------------------------------------- Stock tab
-function StockTab() {
-  const materials = useDb((db) => db.materials)
+function StockTab({ fCompany, fMaterial }: { fCompany: string; fMaterial: string }) {
+  const materialsAll = useDb((db) => db.materials)
   // Recompute whenever any stock txn changes.
   const stampKey = useDb(
     (db) => db.receipts.length + db.issues.length + db.adjustments.length,
@@ -114,27 +174,33 @@ function StockTab() {
 
   const rows = useMemo(() => {
     const db = getDb()
+    const materials = fMaterial ? materialsAll.filter((m) => m.id === fMaterial) : materialsAll
     return materials.map((m) => {
       const overall = materialStock(db, m.id)
+      const ownBalance = materialStock(db, m.id, SHOP_SCOPE).balance
       // per-company breakdown
       const companyIds = new Set<string>()
       db.receipts.filter((r) => r.materialId === m.id && r.companyId).forEach((r) => companyIds.add(r.companyId!))
       db.issues.filter((i) => i.materialId === m.id && i.companyId).forEach((i) => companyIds.add(i.companyId!))
-      const perCompany = [...companyIds].map((cid) => ({
+      let perCompany = [...companyIds].map((cid) => ({
         companyId: cid,
         balance: materialStock(db, m.id, cid).balance,
       }))
+      // Company filter narrows the breakdown to the chosen scope.
+      if (fCompany && fCompany !== SHOP_SCOPE) perCompany = perCompany.filter((pc) => pc.companyId === fCompany)
       return {
         material: m,
         overall,
+        ownBalance,
         value: materialStockValue(db, m.id),
         perCompany,
+        showOwn: !fCompany || fCompany === SHOP_SCOPE,
         low: m.reorderLevel !== undefined && overall.balance <= m.reorderLevel,
         negative: overall.balance < 0,
       }
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [materials, stampKey])
+  }, [materialsAll, stampKey, fCompany, fMaterial])
 
   function exportCsv() {
     downloadCsv('stock-balance', rows, [
@@ -149,7 +215,7 @@ function StockTab() {
     ])
   }
 
-  if (materials.length === 0) {
+  if (materialsAll.length === 0) {
     return (
       <Card>
         <EmptyState
@@ -211,12 +277,19 @@ function StockTab() {
               <td className="td text-right">{currency(r.value)}</td>
               <td className="td">
                 <div className="flex flex-wrap gap-1">
-                  {r.perCompany.length === 0 && <span className="text-2xs text-slate-400">—</span>}
+                  {r.showOwn && (
+                    <Badge tone={r.ownBalance < 0 ? 'red' : 'green'}>
+                      Own (shop): {qty(r.ownBalance)}
+                    </Badge>
+                  )}
                   {r.perCompany.map((pc) => (
-                    <Badge key={pc.companyId} tone={pc.balance < 0 ? 'red' : 'slate'}>
+                    <Badge key={pc.companyId} tone={pc.balance < 0 ? 'red' : 'blue'}>
                       {companyName(pc.companyId)}: {qty(pc.balance)}
                     </Badge>
                   ))}
+                  {!r.showOwn && r.perCompany.length === 0 && (
+                    <span className="text-2xs text-slate-400">—</span>
+                  )}
                 </div>
               </td>
             </tr>
@@ -310,8 +383,15 @@ function MaterialsTab({
 }
 
 // ---------------------------------------------------------------- Receipts tab
-function ReceiptsTab() {
-  const receipts = useDb((db) => db.receipts)
+function ReceiptsTab({ fCompany, fMaterial }: { fCompany: string; fMaterial: string }) {
+  const allReceipts = useDb((db) => db.receipts)
+  const receipts = useMemo(
+    () =>
+      allReceipts.filter(
+        (r) => ownerMatch(r.companyId, fCompany) && (!fMaterial || r.materialId === fMaterial),
+      ),
+    [allReceipts, fCompany, fMaterial],
+  )
   const materialName = useMaterialName()
   const companyName = useCompanyName()
   const confirm = useConfirm()
@@ -375,8 +455,15 @@ function ReceiptsTab() {
 }
 
 // ------------------------------------------------------------------ Issues tab
-function IssuesTab() {
-  const issues = useDb((db) => db.issues)
+function IssuesTab({ fCompany, fMaterial }: { fCompany: string; fMaterial: string }) {
+  const allIssues = useDb((db) => db.issues)
+  const issues = useMemo(
+    () =>
+      allIssues.filter(
+        (i) => ownerMatch(i.companyId, fCompany) && (!fMaterial || i.materialId === fMaterial),
+      ),
+    [allIssues, fCompany, fMaterial],
+  )
   const materialName = useMaterialName()
   const jobNo = useJobNo()
   const companyName = useCompanyName()
@@ -415,7 +502,9 @@ function IssuesTab() {
                 <td className="td">{fmtDate(i.date)}</td>
                 <td className="td font-medium">{materialName(i.materialId)}</td>
                 <td className="td font-mono text-xs">{jobNo(i.jobId)}</td>
-                <td className="td">{companyName(i.companyId)}</td>
+                <td className="td">
+                  {i.companyId ? companyName(i.companyId) : <Badge tone="green">Own (shop)</Badge>}
+                </td>
                 <td className="td text-right font-semibold">
                   {qty(i.quantity)} {i.unit}
                 </td>
@@ -435,8 +524,15 @@ function IssuesTab() {
 }
 
 // ------------------------------------------------------------- Adjustments tab
-function AdjustmentsTab() {
-  const adjustments = useDb((db) => db.adjustments)
+function AdjustmentsTab({ fCompany, fMaterial }: { fCompany: string; fMaterial: string }) {
+  const allAdjustments = useDb((db) => db.adjustments)
+  const adjustments = useMemo(
+    () =>
+      allAdjustments.filter(
+        (a) => ownerMatch(a.companyId, fCompany) && (!fMaterial || a.materialId === fMaterial),
+      ),
+    [allAdjustments, fCompany, fMaterial],
+  )
   const materialName = useMaterialName()
   const companyName = useCompanyName()
   const pg = usePagination(adjustments)
