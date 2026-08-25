@@ -102,6 +102,13 @@ export function ProductionPage() {
                   </div>
                 </div>
 
+                {job.rejectedQty ? (
+                  <p className="mb-2 text-2xs font-medium text-red-600">
+                    QC rejected {qty(job.rejectedQty)} · accepted{' '}
+                    {qty(Math.max(0, job.completedQty - job.rejectedQty))}
+                  </p>
+                ) : null}
+
                 <p className="mb-3 text-2xs text-slate-500">Due {fmtDate(job.dueDate)}</p>
 
                 <div className="mt-auto flex flex-wrap gap-1.5">
@@ -176,10 +183,13 @@ function TransitionModal({
 }) {
   const toast = useToast()
   const [completedQty, setCompletedQty] = useState(String(job.completedQty))
+  const [rejectedQty, setRejectedQty] = useState(String(job.rejectedQty ?? 0))
   const [operator, setOperator] = useState(job.operator ?? '')
   const [note, setNote] = useState('')
 
   const wantsQty = to === 'In Progress' || to === 'Completed'
+  const isComplete = to === 'Completed'
+  const accepted = Math.max(0, Number(completedQty || 0) - Number(rejectedQty || 0))
   const title =
     to === 'In Progress'
       ? job.status === 'In Progress'
@@ -195,6 +205,7 @@ function TransitionModal({
     try {
       jobRepo.transition(job.id, to, {
         completedQty: wantsQty ? Number(completedQty) : undefined,
+        rejectedQty: isComplete ? Number(rejectedQty || 0) : undefined,
         operator: operator || undefined,
         note: note || undefined,
       })
@@ -237,6 +248,20 @@ function TransitionModal({
               value={completedQty}
               onChange={(e) => setCompletedQty(e.target.value)}
               autoFocus
+            />
+          </Field>
+        )}
+        {isComplete && (
+          <Field
+            label="QC rejected quantity"
+            hint={`Accepted (deliverable) will be ${qty(accepted)}`}
+          >
+            <Input
+              type="number"
+              step="0.001"
+              min={0}
+              value={rejectedQty}
+              onChange={(e) => setRejectedQty(e.target.value)}
             />
           </Field>
         )}

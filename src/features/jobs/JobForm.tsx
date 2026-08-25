@@ -1,8 +1,8 @@
 import { useState } from 'react'
 import type { JobOrder, JobPriority, JobStatus } from '@/types'
-import { jobRepo, previewNextNo, BusinessRuleError } from '@/data/repo'
+import { jobRepo, stockRepo, previewNextNo, BusinessRuleError } from '@/data/repo'
 import { useDb } from '@/data/store'
-import { todayISO } from '@/lib/format'
+import { todayISO, qty } from '@/lib/format'
 import { Field, Input, Select, Textarea } from '@/components/ui/primitives'
 import { Modal } from '@/components/ui/Modal'
 import { useToast } from '@/components/ui/Toast'
@@ -30,6 +30,7 @@ export function JobForm({ job, onClose }: { job: JobOrder | null; onClose: () =>
     partNumber: job?.partNumber ?? '',
     customerPo: job?.customerPo ?? '',
     materialId: job?.materialId ?? '',
+    materialQty: '',
     orderedQty: job?.orderedQty ?? 1,
     completedQty: job?.completedQty ?? 0,
     rate: job?.rate ?? '',
@@ -65,8 +66,11 @@ export function JobForm({ job, onClose }: { job: JobOrder | null; onClose: () =>
         jobRepo.update(job.id, payload)
         toast.success('Job order updated')
       } else {
-        jobRepo.create(payload)
-        toast.success('Job order created')
+        const consume = form.materialQty === '' ? undefined : Number(form.materialQty)
+        jobRepo.create({ ...payload, materialQty: consume })
+        toast.success(
+          consume ? 'Job order created — material issued from stock' : 'Job order created',
+        )
       }
       onClose()
     } catch (e) {
@@ -126,6 +130,25 @@ export function JobForm({ job, onClose }: { job: JobOrder | null; onClose: () =>
             ))}
           </Select>
         </Field>
+        {!job && form.materialId && (
+          <Field
+            label="Material Qty to Consume"
+            hint={(() => {
+              const m = materials.find((x) => x.id === form.materialId)
+              const bal = stockRepo.balance(form.materialId).balance
+              return m ? `In stock: ${qty(bal)} ${m.unit} — issued from inventory on create` : undefined
+            })()}
+          >
+            <Input
+              type="number"
+              step="0.001"
+              min={0}
+              value={form.materialQty}
+              placeholder="0"
+              onChange={(e) => set('materialQty', e.target.value as never)}
+            />
+          </Field>
+        )}
         <Field label="Rate (per unit)" hint="Optional; used to prefill invoices">
           <Input
             type="number"

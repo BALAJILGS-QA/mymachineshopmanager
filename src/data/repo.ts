@@ -251,7 +251,11 @@ export const productRepo = {
 type JobInput = Omit<
   JobOrder,
   'id' | 'jobNo' | 'completedQty' | 'createdAt' | 'updatedAt'
-> & { completedQty?: number }
+> & {
+  completedQty?: number
+  // Raw material consumed by the job — issued from inventory on creation.
+  materialQty?: number
+}
 
 function validateJob(db: Database, input: Partial<JobOrder>) {
   if (input.orderedQty !== undefined && input.orderedQty <= 0) {
@@ -279,16 +283,34 @@ export const jobRepo = {
   get: (id: string) => getDb().jobs.find((j) => j.id === id),
   create: (input: JobInput): JobOrder =>
     mutate((db) => {
-      if (!input.partName.trim()) throw new BusinessRuleError('Part name is required')
-      if (!db.companies.some((c) => c.id === input.companyId)) {
+      const { materialQty, ...jobInput } = input
+      if (!jobInput.partName.trim()) throw new BusinessRuleError('Part name is required')
+      if (!db.companies.some((c) => c.id === jobInput.companyId)) {
         throw new BusinessRuleError('Select a valid company')
       }
-      validateJob(db, input)
+      validateJob(db, jobInput)
+
+      // Validate raw-material availability BEFORE mutating anything, so a stock
+      // shortfall doesn't leave a half-created job.
+      const consume = Number(materialQty) || 0
+      const material = jobInput.materialId
+        ? db.materials.find((m) => m.id === jobInput.materialId)
+        : undefined
+      if (consume > 0) {
+        if (!material) throw new BusinessRuleError('Select a valid material to consume')
+        const available = materialStock(db, material.id).balance
+        if (!db.settings.allowNegativeStock && consume > available) {
+          throw new BusinessRuleError(
+            `Only ${available} ${material.unit} of "${material.name}" in stock — cannot create a job consuming ${consume}.`,
+          )
+        }
+      }
+
       const ts = nowISO()
       const job: JobOrder = {
-        ...input,
-        partName: input.partName.trim(),
-        completedQty: input.completedQty ?? 0,
+        ...jobInput,
+        partName: jobInput.partName.trim(),
+        completedQty: jobInput.completedQty ?? 0,
         id: uid('job_'),
         jobNo: nextNo(db, 'job', db.settings.numbering.job),
         createdAt: ts,
@@ -296,6 +318,25 @@ export const jobRepo = {
       }
       db.jobs.push(job)
       audit(db, 'JobOrder', job.id, 'create', `Created job ${job.jobNo}`)
+
+      // Auto-issue the consumed material, reducing inventory.
+      if (consume > 0 && material) {
+        const issue: MaterialIssue = {
+          id: uid('iss_'),
+          issueNo: nextNo(db, 'issue', db.settings.numbering.issue),
+          date: job.orderDate,
+          materialId: material.id,
+          jobId: job.id,
+          companyId: job.companyId,
+          quantity: consume,
+          unit: material.unit,
+          note: `Auto-issued on creation of job ${job.jobNo}`,
+          createdAt: ts,
+          updatedAt: ts,
+        }
+        db.issues.unshift(issue)
+        audit(db, 'MaterialIssue', issue.id, 'create', `Issued ${issue.issueNo} to ${job.jobNo}`)
+      }
       return job
     }),
   update: (id: string, patch: Partial<JobOrder>): JobOrder =>
@@ -328,7 +369,7 @@ export const jobRepo = {
   transition: (
     id: string,
     to: JobStatus,
-    opts: { completedQty?: number; note?: string; operator?: string } = {},
+    opts: { completedQty?: number; rejectedQty?: number; note?: string; operator?: string } = {},
   ): JobOrder =>
     mutate((db) => {
       const job = db.jobs.find((j) => j.id === id)
@@ -355,6 +396,13 @@ export const jobRepo = {
       if (to === 'Completed') {
         job.completedAt = now
         if (job.completedQty === 0) job.completedQty = job.orderedQty
+        if (opts.rejectedQty !== undefined) {
+          if (opts.rejectedQty < 0) throw new BusinessRuleError('Rejected quantity cannot be negative')
+          if (opts.rejectedQty > job.completedQty) {
+            throw new BusinessRuleError('Rejected quantity cannot exceed completed quantity')
+          }
+          job.rejectedQty = opts.rejectedQty
+        }
       }
       if (to === 'Delivered') {
         job.deliveredAt = now

@@ -80,6 +80,7 @@ create table if not exists job_orders (
   material_id text references materials(id),
   ordered_qty numeric(14,3) not null check (ordered_qty > 0),
   completed_qty numeric(14,3) not null default 0 check (completed_qty >= 0),
+  rejected_qty numeric(14,3),
   rate numeric(14,2),
   order_date date not null,
   due_date date,

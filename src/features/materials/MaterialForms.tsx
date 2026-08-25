@@ -142,7 +142,7 @@ export function ReceiptForm({ onClose }: { onClose: () => void }) {
   const [form, setForm] = useState({
     date: todayISO(),
     materialId: materials[0]?.id ?? '',
-    ownerType: 'Company' as MaterialOwnerType,
+    ownerType: 'Shop' as MaterialOwnerType,
     companyId: companies[0]?.id ?? '',
     supplier: '',
     quantity: '',
@@ -209,29 +209,27 @@ export function ReceiptForm({ onClose }: { onClose: () => void }) {
             ))}
           </Select>
         </Field>
-        <Field label="Ownership" required>
+        <Field label="Material belongs to" required>
           <Select
             value={form.ownerType}
             onChange={(e) => set('ownerType', e.target.value as MaterialOwnerType)}
           >
-            <option value="Company">Company-owned</option>
-            <option value="Shop">Shop-owned</option>
+            <option value="Shop">Own material (shop stock)</option>
+            <option value="Company">Customer material</option>
           </Select>
         </Field>
-        <Field label="Owning Company" required={form.ownerType === 'Company'}>
-          <Select
-            value={form.companyId}
-            onChange={(e) => set('companyId', e.target.value)}
-            disabled={form.ownerType === 'Shop'}
-          >
-            <option value="">Select…</option>
-            {companies.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-              </option>
-            ))}
-          </Select>
-        </Field>
+        {form.ownerType === 'Company' && (
+          <Field label="Customer (owning company)" required>
+            <Select value={form.companyId} onChange={(e) => set('companyId', e.target.value)}>
+              <option value="">Select…</option>
+              {companies.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </Select>
+          </Field>
+        )}
         <Field label={`Quantity ${material ? `(${material.unit})` : ''}`} required>
           <Input
             type="number"
@@ -249,8 +247,12 @@ export function ReceiptForm({ onClose }: { onClose: () => void }) {
             onChange={(e) => set('rate', e.target.value)}
           />
         </Field>
-        <Field label="Supplier / Source">
-          <Input value={form.supplier} onChange={(e) => set('supplier', e.target.value)} />
+        <Field label="Received from (source)" hint="Where the material came to your shop floor from">
+          <Input
+            value={form.supplier}
+            placeholder="Supplier / customer / branch…"
+            onChange={(e) => set('supplier', e.target.value)}
+          />
         </Field>
         <Field label="Heat / Batch No.">
           <Input value={form.batchNo} onChange={(e) => set('batchNo', e.target.value)} />

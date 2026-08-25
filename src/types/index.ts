@@ -81,6 +81,7 @@ export interface JobOrder extends AuditFields {
   materialId?: ID
   orderedQty: number
   completedQty: number
+  rejectedQty?: number // QC-rejected quantity recorded at completion
   orderDate: ISODate
   dueDate?: ISODate
   priority: JobPriority

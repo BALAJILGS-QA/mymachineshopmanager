@@ -53,11 +53,12 @@ const M: Mapping[] = [
   {
     table: 'job_orders',
     collection: 'jobs',
-    numeric: ['orderedQty', 'completedQty', 'rate'],
+    numeric: ['orderedQty', 'completedQty', 'rejectedQty', 'rate'],
     fields: {
       id: 'id', jobNo: 'job_no', companyId: 'company_id', customerPo: 'customer_po',
       partName: 'part_name', partNumber: 'part_number', materialId: 'material_id',
-      orderedQty: 'ordered_qty', completedQty: 'completed_qty', rate: 'rate',
+      orderedQty: 'ordered_qty', completedQty: 'completed_qty', rejectedQty: 'rejected_qty',
+      rate: 'rate',
       orderDate: 'order_date', dueDate: 'due_date', priority: 'priority',
       status: 'status', notes: 'notes', startedAt: 'started_at',
       completedAt: 'completed_at', deliveredAt: 'delivered_at', operator: 'operator',
