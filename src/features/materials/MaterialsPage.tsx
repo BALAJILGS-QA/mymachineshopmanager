@@ -25,11 +25,12 @@ import { useConfirm } from '@/components/ui/ConfirmDialog'
 import { useCompanyName, useJobNo, useMaterialName } from '@/features/shared/lookups'
 import { AdjustmentForm, IssueForm, MaterialForm, ReceiptForm } from './MaterialForms'
 
-type Tab = 'stock' | 'materials' | 'receipts' | 'issues' | 'adjustments'
+type Tab = 'stock' | 'ledger' | 'materials' | 'receipts' | 'issues' | 'adjustments'
 type Dialog = 'material' | 'receipt' | 'issue' | 'adjustment' | null
 
 const TABS: { key: Tab; label: string }[] = [
   { key: 'stock', label: 'Stock Balance' },
+  { key: 'ledger', label: 'Company Ledger' },
   { key: 'materials', label: 'Materials' },
   { key: 'receipts', label: 'Receipts' },
   { key: 'issues', label: 'Issues' },
@@ -137,6 +138,7 @@ export function MaterialsPage() {
       )}
 
       {tab === 'stock' && <StockTab fCompany={fCompany} fMaterial={fMaterial} />}
+      {tab === 'ledger' && <LedgerTab fCompany={fCompany} fMaterial={fMaterial} />}
       {tab === 'materials' && (
         <MaterialsTab
           onAdd={() => {
@@ -296,6 +298,151 @@ function StockTab({ fCompany, fMaterial }: { fCompany: string; fMaterial: string
           ))}
         </tbody>
       </ResponsiveTable>
+    </Card>
+  )
+}
+
+// -------------------------------------------------------------- Company ledger
+// Business date for the day, plus the recorded (created) time.
+function whenText(dateOnly: string, createdAt?: string): string {
+  const day = fmtDate(dateOnly)
+  const c = createdAt ? new Date(createdAt) : null
+  if (!c || isNaN(c.getTime())) return day
+  const hh = String(c.getHours()).padStart(2, '0')
+  const mi = String(c.getMinutes()).padStart(2, '0')
+  return `${day}, ${hh}:${mi}`
+}
+function whenSort(dateOnly: string, createdAt?: string): number {
+  const c = createdAt ? new Date(createdAt).getTime() : NaN
+  return isNaN(c) ? new Date(dateOnly).getTime() : c
+}
+
+const DC_TONE: Record<string, string> = { Open: 'amber', Invoiced: 'green', Cancelled: 'red' }
+
+function LedgerTab({ fCompany, fMaterial }: { fCompany: string; fMaterial: string }) {
+  const receipts = useDb((db) => db.receipts)
+  const issues = useDb((db) => db.issues)
+  const adjustments = useDb((db) => db.adjustments)
+  const challans = useDb((db) => db.deliveryChallans)
+  const materialName = useMaterialName()
+  const companyName = useCompanyName()
+  const jobNo = useJobNo()
+
+  type Row = {
+    ts: number
+    when: string
+    type: string
+    tone: string
+    ref: string
+    item: string
+    qty: string
+    detail: string
+  }
+
+  const rows = useMemo<Row[]>(() => {
+    const out: Row[] = []
+    const matOk = (materialId: string) => !fMaterial || materialId === fMaterial
+
+    for (const r of receipts) {
+      if (!ownerMatch(r.companyId, fCompany) || !matOk(r.materialId)) continue
+      out.push({
+        ts: whenSort(r.date, r.createdAt),
+        when: whenText(r.date, r.createdAt),
+        type: 'Received',
+        tone: 'green',
+        ref: r.receiptNo,
+        item: materialName(r.materialId),
+        qty: `+${qty(r.quantity)} ${r.unit}`,
+        detail: `${r.ownerType === 'Shop' ? 'Own (shop)' : companyName(r.companyId)}${r.supplier ? ` · from ${r.supplier}` : ''}`,
+      })
+    }
+    for (const i of issues) {
+      if (!ownerMatch(i.companyId, fCompany) || !matOk(i.materialId)) continue
+      out.push({
+        ts: whenSort(i.date, i.createdAt),
+        when: whenText(i.date, i.createdAt),
+        type: 'Issued',
+        tone: 'blue',
+        ref: i.issueNo,
+        item: materialName(i.materialId),
+        qty: `-${qty(i.quantity)} ${i.unit}`,
+        detail: `${i.companyId ? companyName(i.companyId) : 'Own (shop)'} · Job ${jobNo(i.jobId)}`,
+      })
+    }
+    for (const a of adjustments) {
+      if (!ownerMatch(a.companyId, fCompany) || !matOk(a.materialId)) continue
+      out.push({
+        ts: whenSort(a.date, a.createdAt),
+        when: whenText(a.date, a.createdAt),
+        type: 'Adjusted',
+        tone: 'violet',
+        ref: a.adjNo,
+        item: materialName(a.materialId),
+        qty: `${a.quantity > 0 ? '+' : ''}${qty(a.quantity)} ${a.unit}`,
+        detail: a.reason,
+      })
+    }
+    // Dispatches (delivery challans). No material master link, so only when the
+    // material filter is off. Shown for every status (partial/fully delivered).
+    if (!fMaterial) {
+      for (const d of challans) {
+        if (!ownerMatch(d.companyId, fCompany)) continue
+        const totalQty = d.lines.reduce((s, l) => s + l.quantity, 0)
+        out.push({
+          ts: whenSort(d.date, d.createdAt),
+          when: whenText(d.date, d.createdAt),
+          type: 'Dispatched',
+          tone: DC_TONE[d.status] ?? 'slate',
+          ref: d.dcNo,
+          item: d.lines.map((l) => `${l.description} ×${qty(l.quantity)}`).join(', ') || '—',
+          qty: totalQty ? `${qty(totalQty)}` : '—',
+          detail: `${companyName(d.companyId)} · ${d.status}${d.vehicleNo ? ` · ${d.vehicleNo}` : ''}`,
+        })
+      }
+    }
+
+    return out.sort((a, b) => b.ts - a.ts)
+  }, [receipts, issues, adjustments, challans, fCompany, fMaterial, materialName, companyName, jobNo])
+
+  const pg = usePagination(rows)
+
+  return (
+    <Card>
+      {rows.length === 0 ? (
+        <EmptyState
+          icon={<Boxes size={40} />}
+          title="No records for this selection"
+          description="Receipts, issues, adjustments and dispatches appear here once recorded."
+        />
+      ) : (
+        <ResponsiveTable>
+          <thead>
+            <tr className="border-b border-slate-100">
+              <th className="th">Date &amp; Time</th>
+              <th className="th">Type</th>
+              <th className="th">Reference</th>
+              <th className="th">Material / Items</th>
+              <th className="th text-right">Qty</th>
+              <th className="th">Details</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-50">
+            {pg.pageItems.map((r, idx) => (
+              <tr key={`${r.ref}-${idx}`} className="hover:bg-slate-50/60">
+                <td className="td whitespace-nowrap">{r.when}</td>
+                <td className="td">
+                  <Badge tone={r.tone}>{r.type}</Badge>
+                </td>
+                <td className="td font-mono text-xs text-slate-500">{r.ref}</td>
+                <td className="td max-w-xs whitespace-normal font-medium">{r.item}</td>
+                <td className="td text-right font-semibold">{r.qty}</td>
+                <td className="td max-w-xs whitespace-normal text-slate-600">{r.detail}</td>
+              </tr>
+            ))}
+          </tbody>
+        </ResponsiveTable>
+      )}
+      <Pagination pg={pg} />
     </Card>
   )
 }
