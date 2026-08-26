@@ -32,9 +32,6 @@ export function ApprovalsPage() {
   const confirm = useConfirm()
   const [filter, setFilter] = useState<UserStatus | 'all'>('pending')
 
-  // Only the super admin may review registrations.
-  if (!isSuperAdmin) return <Navigate to="/app" replace />
-
   const rows = useMemo(
     () =>
       users
@@ -43,6 +40,10 @@ export function ApprovalsPage() {
     [users, filter],
   )
   const pendingCount = users.filter((u) => u.status === 'pending').length
+
+  // Only the super admin may review registrations. Guard AFTER all hooks so the
+  // hook call order is stable across renders (react-hooks/rules-of-hooks).
+  if (!isSuperAdmin) return <Navigate to="/app" replace />
 
   async function onApprove(u: AppUser) {
     try {
@@ -152,7 +153,10 @@ export function ApprovalsPage() {
                         </button>
                       )}
                       {u.status !== 'rejected' && (
-                        <button className="btn-secondary btn-sm text-red-600" onClick={() => onReject(u)}>
+                        <button
+                          className="btn-secondary btn-sm text-red-600"
+                          onClick={() => onReject(u)}
+                        >
                           <X size={14} /> Reject
                         </button>
                       )}

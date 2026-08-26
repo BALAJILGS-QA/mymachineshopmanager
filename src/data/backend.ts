@@ -5,6 +5,7 @@
 // page needs to know Supabase exists.
 
 import { supabase, isSupabaseEnabled } from './supabase'
+import { logger } from '@/lib/logger'
 import type { Database } from './db'
 import { DB_VERSION } from './db'
 import { DEFAULT_SETTINGS } from './seed'
@@ -24,10 +25,18 @@ const M: Mapping[] = [
     collection: 'companies',
     numeric: [],
     fields: {
-      id: 'id', code: 'code', name: 'name', contactPerson: 'contact_person',
-      phone: 'phone', email: 'email', billingAddress: 'billing_address',
-      gstin: 'gstin', active: 'active', notes: 'notes',
-      createdAt: 'created_at', updatedAt: 'updated_at',
+      id: 'id',
+      code: 'code',
+      name: 'name',
+      contactPerson: 'contact_person',
+      phone: 'phone',
+      email: 'email',
+      billingAddress: 'billing_address',
+      gstin: 'gstin',
+      active: 'active',
+      notes: 'notes',
+      createdAt: 'created_at',
+      updatedAt: 'updated_at',
     },
   },
   {
@@ -35,10 +44,17 @@ const M: Mapping[] = [
     collection: 'materials',
     numeric: ['defaultRate', 'reorderLevel'],
     fields: {
-      id: 'id', code: 'code', name: 'name', type: 'type', unit: 'unit',
-      description: 'description', defaultRate: 'default_rate',
-      reorderLevel: 'reorder_level', active: 'active',
-      createdAt: 'created_at', updatedAt: 'updated_at',
+      id: 'id',
+      code: 'code',
+      name: 'name',
+      type: 'type',
+      unit: 'unit',
+      description: 'description',
+      defaultRate: 'default_rate',
+      reorderLevel: 'reorder_level',
+      active: 'active',
+      createdAt: 'created_at',
+      updatedAt: 'updated_at',
     },
   },
   {
@@ -46,8 +62,15 @@ const M: Mapping[] = [
     collection: 'products',
     numeric: ['rate'],
     fields: {
-      id: 'id', code: 'code', name: 'name', rate: 'rate', unit: 'unit',
-      hsn: 'hsn', active: 'active', createdAt: 'created_at', updatedAt: 'updated_at',
+      id: 'id',
+      code: 'code',
+      name: 'name',
+      rate: 'rate',
+      unit: 'unit',
+      hsn: 'hsn',
+      active: 'active',
+      createdAt: 'created_at',
+      updatedAt: 'updated_at',
     },
   },
   {
@@ -55,14 +78,28 @@ const M: Mapping[] = [
     collection: 'jobs',
     numeric: ['orderedQty', 'completedQty', 'rejectedQty', 'rate'],
     fields: {
-      id: 'id', jobNo: 'job_no', companyId: 'company_id', customerPo: 'customer_po',
-      partName: 'part_name', partNumber: 'part_number', materialId: 'material_id',
-      orderedQty: 'ordered_qty', completedQty: 'completed_qty', rejectedQty: 'rejected_qty',
+      id: 'id',
+      jobNo: 'job_no',
+      companyId: 'company_id',
+      customerPo: 'customer_po',
+      partName: 'part_name',
+      partNumber: 'part_number',
+      materialId: 'material_id',
+      orderedQty: 'ordered_qty',
+      completedQty: 'completed_qty',
+      rejectedQty: 'rejected_qty',
       rate: 'rate',
-      orderDate: 'order_date', dueDate: 'due_date', priority: 'priority',
-      status: 'status', notes: 'notes', startedAt: 'started_at',
-      completedAt: 'completed_at', deliveredAt: 'delivered_at', operator: 'operator',
-      createdAt: 'created_at', updatedAt: 'updated_at',
+      orderDate: 'order_date',
+      dueDate: 'due_date',
+      priority: 'priority',
+      status: 'status',
+      notes: 'notes',
+      startedAt: 'started_at',
+      completedAt: 'completed_at',
+      deliveredAt: 'delivered_at',
+      operator: 'operator',
+      createdAt: 'created_at',
+      updatedAt: 'updated_at',
     },
   },
   {
@@ -70,9 +107,15 @@ const M: Mapping[] = [
     collection: 'productionEvents',
     numeric: ['completedQty'],
     fields: {
-      id: 'id', jobId: 'job_id', type: 'type', fromStatus: 'from_status',
-      toStatus: 'to_status', completedQty: 'completed_qty', note: 'note',
-      operator: 'operator', at: 'at',
+      id: 'id',
+      jobId: 'job_id',
+      type: 'type',
+      fromStatus: 'from_status',
+      toStatus: 'to_status',
+      completedQty: 'completed_qty',
+      note: 'note',
+      operator: 'operator',
+      at: 'at',
     },
   },
   {
@@ -80,11 +123,22 @@ const M: Mapping[] = [
     collection: 'receipts',
     numeric: ['quantity', 'rate'],
     fields: {
-      id: 'id', receiptNo: 'receipt_no', date: 'date', materialId: 'material_id',
-      ownerType: 'owner_type', companyId: 'company_id', jobId: 'job_id',
-      supplier: 'supplier', quantity: 'quantity', unit: 'unit', rate: 'rate',
-      batchNo: 'batch_no', reference: 'reference', notes: 'notes',
-      createdAt: 'created_at', updatedAt: 'updated_at',
+      id: 'id',
+      receiptNo: 'receipt_no',
+      date: 'date',
+      materialId: 'material_id',
+      ownerType: 'owner_type',
+      companyId: 'company_id',
+      jobId: 'job_id',
+      supplier: 'supplier',
+      quantity: 'quantity',
+      unit: 'unit',
+      rate: 'rate',
+      batchNo: 'batch_no',
+      reference: 'reference',
+      notes: 'notes',
+      createdAt: 'created_at',
+      updatedAt: 'updated_at',
     },
   },
   {
@@ -92,9 +146,17 @@ const M: Mapping[] = [
     collection: 'issues',
     numeric: ['quantity'],
     fields: {
-      id: 'id', issueNo: 'issue_no', date: 'date', materialId: 'material_id',
-      jobId: 'job_id', companyId: 'company_id', quantity: 'quantity', unit: 'unit',
-      note: 'note', createdAt: 'created_at', updatedAt: 'updated_at',
+      id: 'id',
+      issueNo: 'issue_no',
+      date: 'date',
+      materialId: 'material_id',
+      jobId: 'job_id',
+      companyId: 'company_id',
+      quantity: 'quantity',
+      unit: 'unit',
+      note: 'note',
+      createdAt: 'created_at',
+      updatedAt: 'updated_at',
     },
   },
   {
@@ -102,9 +164,16 @@ const M: Mapping[] = [
     collection: 'adjustments',
     numeric: ['quantity'],
     fields: {
-      id: 'id', adjNo: 'adj_no', date: 'date', materialId: 'material_id',
-      companyId: 'company_id', quantity: 'quantity', unit: 'unit', reason: 'reason',
-      createdAt: 'created_at', updatedAt: 'updated_at',
+      id: 'id',
+      adjNo: 'adj_no',
+      date: 'date',
+      materialId: 'material_id',
+      companyId: 'company_id',
+      quantity: 'quantity',
+      unit: 'unit',
+      reason: 'reason',
+      createdAt: 'created_at',
+      updatedAt: 'updated_at',
     },
   },
   {
@@ -112,9 +181,19 @@ const M: Mapping[] = [
     collection: 'deliveryChallans',
     numeric: [],
     fields: {
-      id: 'id', dcNo: 'dc_no', date: 'date', companyId: 'company_id', jobId: 'job_id',
-      reference: 'reference', vehicleNo: 'vehicle_no', lines: 'lines', notes: 'notes',
-      status: 'status', invoiceId: 'invoice_id', createdAt: 'created_at', updatedAt: 'updated_at',
+      id: 'id',
+      dcNo: 'dc_no',
+      date: 'date',
+      companyId: 'company_id',
+      jobId: 'job_id',
+      reference: 'reference',
+      vehicleNo: 'vehicle_no',
+      lines: 'lines',
+      notes: 'notes',
+      status: 'status',
+      invoiceId: 'invoice_id',
+      createdAt: 'created_at',
+      updatedAt: 'updated_at',
     },
   },
   {
@@ -122,12 +201,22 @@ const M: Mapping[] = [
     collection: 'invoices',
     numeric: ['discount', 'taxPercent', 'cgstPercent', 'sgstPercent'],
     fields: {
-      id: 'id', invoiceNo: 'invoice_no', date: 'date', companyId: 'company_id',
-      billingAddress: 'billing_address', shippingAddress: 'shipping_address',
-      reference: 'reference', dcReference: 'dc_reference', discount: 'discount',
-      taxPercent: 'tax_percent', cgstPercent: 'cgst_percent', sgstPercent: 'sgst_percent',
-      status: 'status', notes: 'notes',
-      createdAt: 'created_at', updatedAt: 'updated_at',
+      id: 'id',
+      invoiceNo: 'invoice_no',
+      date: 'date',
+      companyId: 'company_id',
+      billingAddress: 'billing_address',
+      shippingAddress: 'shipping_address',
+      reference: 'reference',
+      dcReference: 'dc_reference',
+      discount: 'discount',
+      taxPercent: 'tax_percent',
+      cgstPercent: 'cgst_percent',
+      sgstPercent: 'sgst_percent',
+      status: 'status',
+      notes: 'notes',
+      createdAt: 'created_at',
+      updatedAt: 'updated_at',
     },
   },
   {
@@ -135,10 +224,18 @@ const M: Mapping[] = [
     collection: 'payments',
     numeric: ['amount'],
     fields: {
-      id: 'id', paymentNo: 'payment_no', date: 'date', companyId: 'company_id',
-      invoiceId: 'invoice_id', amount: 'amount', method: 'method',
-      reference: 'reference', isAdvance: 'is_advance', notes: 'notes',
-      createdAt: 'created_at', updatedAt: 'updated_at',
+      id: 'id',
+      paymentNo: 'payment_no',
+      date: 'date',
+      companyId: 'company_id',
+      invoiceId: 'invoice_id',
+      amount: 'amount',
+      method: 'method',
+      reference: 'reference',
+      isAdvance: 'is_advance',
+      notes: 'notes',
+      createdAt: 'created_at',
+      updatedAt: 'updated_at',
     },
   },
   {
@@ -146,10 +243,19 @@ const M: Mapping[] = [
     collection: 'expenses',
     numeric: ['amount'],
     fields: {
-      id: 'id', expenseNo: 'expense_no', date: 'date', category: 'category',
-      amount: 'amount', method: 'method', vendor: 'vendor', reference: 'reference',
-      companyId: 'company_id', jobId: 'job_id', notes: 'notes',
-      createdAt: 'created_at', updatedAt: 'updated_at',
+      id: 'id',
+      expenseNo: 'expense_no',
+      date: 'date',
+      category: 'category',
+      amount: 'amount',
+      method: 'method',
+      vendor: 'vendor',
+      reference: 'reference',
+      companyId: 'company_id',
+      jobId: 'job_id',
+      notes: 'notes',
+      createdAt: 'created_at',
+      updatedAt: 'updated_at',
     },
   },
   {
@@ -157,8 +263,13 @@ const M: Mapping[] = [
     collection: 'auditLog',
     numeric: [],
     fields: {
-      id: 'id', at: 'at', entity: 'entity', entityId: 'entity_id',
-      action: 'action', summary: 'summary', actor: 'actor',
+      id: 'id',
+      at: 'at',
+      entity: 'entity',
+      entityId: 'entity_id',
+      action: 'action',
+      summary: 'summary',
+      actor: 'actor',
     },
   },
 ]
@@ -187,8 +298,13 @@ function fromRow(row: Row, m: Mapping): Record<string, unknown> {
 
 function lineToRow(line: InvoiceLine, invoiceId: string, index: number): Row {
   return {
-    id: line.id, invoice_id: invoiceId, job_id: line.jobId ?? null,
-    description: line.description, quantity: line.quantity, rate: line.rate, line_no: index,
+    id: line.id,
+    invoice_id: invoiceId,
+    job_id: line.jobId ?? null,
+    description: line.description,
+    quantity: line.quantity,
+    rate: line.rate,
+    line_no: index,
   }
 }
 
@@ -200,11 +316,31 @@ export async function loadAll(): Promise<Database | null> {
     version: DB_VERSION,
     settings: DEFAULT_SETTINGS,
     sequences: {
-      job: 0, invoice: 0, receipt: 0, issue: 0, adjustment: 0, payment: 0,
-      expense: 0, dc: 0, companyCode: 0, materialCode: 0, productCode: 0,
+      job: 0,
+      invoice: 0,
+      receipt: 0,
+      issue: 0,
+      adjustment: 0,
+      payment: 0,
+      expense: 0,
+      dc: 0,
+      companyCode: 0,
+      materialCode: 0,
+      productCode: 0,
     },
-    companies: [], materials: [], products: [], jobs: [], productionEvents: [], receipts: [],
-    issues: [], adjustments: [], deliveryChallans: [], invoices: [], payments: [], expenses: [], auditLog: [],
+    companies: [],
+    materials: [],
+    products: [],
+    jobs: [],
+    productionEvents: [],
+    receipts: [],
+    issues: [],
+    adjustments: [],
+    deliveryChallans: [],
+    invoices: [],
+    payments: [],
+    expenses: [],
+    auditLog: [],
     users: [],
   }
 
@@ -276,7 +412,10 @@ export async function loadAll(): Promise<Database | null> {
 // RPC is a no-op unless the caller is a super admin (enforced in the DB).
 export async function setRemoteApproval(email: string, approved: boolean): Promise<void> {
   if (!supabase) return
-  const { error } = await supabase.rpc('set_user_approval', { p_email: email, p_approved: approved })
+  const { error } = await supabase.rpc('set_user_approval', {
+    p_email: email,
+    p_approved: approved,
+  })
   // Missing function (policy not yet applied) shouldn't break the local update.
   if (error && !/function .* does not exist|not find the function/i.test(error.message)) {
     throw error
@@ -301,7 +440,11 @@ function clone<T>(v: T): T {
 }
 
 // Diff two arrays of entities by id; return rows to upsert and ids to delete.
-function diffCollection(prev: Record<string, unknown>[], next: Record<string, unknown>[], m: Mapping) {
+function diffCollection(
+  prev: Record<string, unknown>[],
+  next: Record<string, unknown>[],
+  m: Mapping,
+) {
   const prevById = new Map(prev.map((e) => [e.id as string, e]))
   const nextById = new Map(next.map((e) => [e.id as string, e]))
   const upserts: Row[] = []
@@ -352,12 +495,10 @@ async function applyAppState(prev: Database, next: Database) {
   ) {
     return
   }
-  const { error } = await supabase
-    .from('app_state')
-    .upsert({
-      id: 'singleton',
-      data: { settings: next.settings, sequences: next.sequences, users: next.users },
-    })
+  const { error } = await supabase.from('app_state').upsert({
+    id: 'singleton',
+    data: { settings: next.settings, sequences: next.sequences, users: next.users },
+  })
   if (error) throw error
 }
 
@@ -397,16 +538,40 @@ export function syncThrough(next: Database): void {
     })
     .catch((e) => {
       onError?.(e)
-      console.error('Supabase sync failed', e)
+      logger.error('Supabase sync failed', e)
     })
 }
 
 function emptyDb(): Database {
   return {
-    version: DB_VERSION, settings: DEFAULT_SETTINGS,
-    sequences: { job: 0, invoice: 0, receipt: 0, issue: 0, adjustment: 0, payment: 0, expense: 0, dc: 0, companyCode: 0, materialCode: 0, productCode: 0 },
-    companies: [], materials: [], products: [], jobs: [], productionEvents: [], receipts: [],
-    issues: [], adjustments: [], deliveryChallans: [], invoices: [], payments: [], expenses: [], auditLog: [],
+    version: DB_VERSION,
+    settings: DEFAULT_SETTINGS,
+    sequences: {
+      job: 0,
+      invoice: 0,
+      receipt: 0,
+      issue: 0,
+      adjustment: 0,
+      payment: 0,
+      expense: 0,
+      dc: 0,
+      companyCode: 0,
+      materialCode: 0,
+      productCode: 0,
+    },
+    companies: [],
+    materials: [],
+    products: [],
+    jobs: [],
+    productionEvents: [],
+    receipts: [],
+    issues: [],
+    adjustments: [],
+    deliveryChallans: [],
+    invoices: [],
+    payments: [],
+    expenses: [],
+    auditLog: [],
     users: [],
   }
 }

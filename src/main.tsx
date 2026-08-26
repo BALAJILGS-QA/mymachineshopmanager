@@ -7,8 +7,10 @@ import { ensureDb } from './data/store'
 import { ToastProvider } from './components/ui/Toast'
 import { ConfirmProvider } from './components/ui/ConfirmDialog'
 import { AuthProvider } from './features/auth/auth'
+import { validateEnv } from './lib/env'
 import './index.css'
 
+validateEnv()
 ensureDb()
 
 const queryClient = new QueryClient({

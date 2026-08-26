@@ -21,6 +21,7 @@ import type {
   Settings,
   StockAdjustment,
 } from '@/types'
+import { logger } from '@/lib/logger'
 
 export interface Sequences {
   job: number
@@ -97,7 +98,7 @@ export function loadDb(): Database | null {
     cache = parsed
     return parsed
   } catch (e) {
-    console.error('Failed to load DB', e)
+    logger.error('Failed to load DB', e)
     return null
   }
 }
@@ -107,7 +108,7 @@ export function saveDb(db: Database): void {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(db))
   } catch (e) {
-    console.error('Failed to save DB', e)
+    logger.error('Failed to save DB', e)
     throw new Error('Storage write failed. Local storage may be full.')
   }
   // Local write is the source of truth for the UI; the persist hook (if any)
@@ -130,7 +131,7 @@ export function replaceLocal(db: Database): void {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(db))
   } catch (e) {
-    console.error('Failed to cache DB locally', e)
+    logger.error('Failed to cache DB locally', e)
   }
   emit()
 }
