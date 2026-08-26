@@ -7,17 +7,7 @@ import { todayISO, qty } from '@/lib/format'
 import { Field, Input, Select, Textarea } from '@/components/ui/primitives'
 import { Modal } from '@/components/ui/Modal'
 import { useToast } from '@/components/ui/Toast'
-
-const PRIORITIES: JobPriority[] = ['Low', 'Normal', 'High', 'Urgent']
-const STATUSES: JobStatus[] = [
-  'Draft',
-  'Pending',
-  'In Progress',
-  'On Hold',
-  'Completed',
-  'Delivered',
-  'Cancelled',
-]
+import { JOB_PRIORITIES as PRIORITIES, JOB_STATUSES as STATUSES } from '@/constants/domain'
 
 export function JobForm({ job, onClose }: { job: JobOrder | null; onClose: () => void }) {
   const toast = useToast()
@@ -148,9 +138,10 @@ export function JobForm({ job, onClose }: { job: JobOrder | null; onClose: () =>
               hint={(() => {
                 const m = materials.find((x) => x.id === form.materialId)
                 const scope = form.materialOwner === 'Company' ? form.companyId : SHOP_SCOPE
-                const bal = form.materialId && (form.materialOwner === 'Shop' || form.companyId)
-                  ? stockRepo.balance(form.materialId, scope).balance
-                  : 0
+                const bal =
+                  form.materialId && (form.materialOwner === 'Shop' || form.companyId)
+                    ? stockRepo.balance(form.materialId, scope).balance
+                    : 0
                 return m
                   ? `In ${form.materialOwner === 'Company' ? 'customer' : 'own'} stock: ${qty(bal)} ${m.unit} — issued on create`
                   : undefined
@@ -194,13 +185,24 @@ export function JobForm({ job, onClose }: { job: JobOrder | null; onClose: () =>
           />
         </Field>
         <Field label="Order Date" required>
-          <Input type="date" value={form.orderDate} onChange={(e) => set('orderDate', e.target.value)} />
+          <Input
+            type="date"
+            value={form.orderDate}
+            onChange={(e) => set('orderDate', e.target.value)}
+          />
         </Field>
         <Field label="Due Date">
-          <Input type="date" value={form.dueDate} onChange={(e) => set('dueDate', e.target.value)} />
+          <Input
+            type="date"
+            value={form.dueDate}
+            onChange={(e) => set('dueDate', e.target.value)}
+          />
         </Field>
         <Field label="Priority">
-          <Select value={form.priority} onChange={(e) => set('priority', e.target.value as JobPriority)}>
+          <Select
+            value={form.priority}
+            onChange={(e) => set('priority', e.target.value as JobPriority)}
+          >
             {PRIORITIES.map((p) => (
               <option key={p}>{p}</option>
             ))}

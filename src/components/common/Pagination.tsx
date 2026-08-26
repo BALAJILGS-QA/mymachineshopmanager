@@ -1,10 +1,9 @@
 import { useEffect, useState } from 'react'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
-
-const PAGE_SIZES = [25, 50, 100]
+import { PAGE_SIZES, DEFAULT_PAGE_SIZE } from '@/constants/domain'
 
 // Client-side pagination hook. Default 25 rows, options 25/50/100.
-export function usePagination<T>(items: T[], defaultSize = 25) {
+export function usePagination<T>(items: T[], defaultSize = DEFAULT_PAGE_SIZE) {
   const [pageSize, setPageSizeState] = useState(defaultSize)
   const [page, setPage] = useState(1)
   const total = items.length
@@ -45,7 +44,16 @@ export interface PaginationState {
 }
 
 export function Pagination({ pg }: { pg: PaginationState }) {
-  const { page, pageCount, pageSize, from, to, total, setPage: onPage, setPageSize: onPageSize } = pg
+  const {
+    page,
+    pageCount,
+    pageSize,
+    from,
+    to,
+    total,
+    setPage: onPage,
+    setPageSize: onPageSize,
+  } = pg
   if (total === 0) return null
   return (
     <div className="flex flex-col items-center justify-between gap-3 border-t border-slate-100 px-3 py-2.5 text-xs text-slate-500 sm:flex-row">

@@ -11,12 +11,7 @@ import { PageHeader, ResponsiveTable } from '@/components/common/PageHeader'
 import { Badge, Card, EmptyState } from '@/components/ui/primitives'
 import { useToast } from '@/components/ui/Toast'
 import { useConfirm } from '@/components/ui/ConfirmDialog'
-
-const STATUS_TONE: Record<UserStatus, string> = {
-  pending: 'amber',
-  approved: 'green',
-  rejected: 'red',
-}
+import { USER_STATUS_TONE as STATUS_TONE } from '@/constants/domain'
 
 const FILTERS: { key: UserStatus | 'all'; label: string }[] = [
   { key: 'pending', label: 'Pending' },

@@ -1,7 +1,18 @@
 import { useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { clsx } from 'clsx'
-import { Ban, FileDown, FileText, Layers, Pencil, Plus, Printer, RotateCcw, Trash2, Truck } from 'lucide-react'
+import {
+  Ban,
+  FileDown,
+  FileText,
+  Layers,
+  Pencil,
+  Plus,
+  Printer,
+  RotateCcw,
+  Trash2,
+  Truck,
+} from 'lucide-react'
 import type { DeliveryChallan, DcLine, InvoiceLine } from '@/types'
 import { dcRepo, previewNextNo, BusinessRuleError } from '@/data/repo'
 import { downloadChallanPdf } from './challanPdf'
@@ -17,8 +28,7 @@ import { useToast } from '@/components/ui/Toast'
 import { useConfirm } from '@/components/ui/ConfirmDialog'
 import { useCompanyName } from '@/features/shared/lookups'
 import { InvoiceForm } from '@/features/invoices/InvoiceForm'
-
-const STATUS_TONE: Record<string, string> = { Open: 'amber', Invoiced: 'green', Cancelled: 'red' }
+import { DC_STATUS_TONE as STATUS_TONE } from '@/constants/domain'
 
 export function DeliveriesPage() {
   const challans = useDb((db) => db.deliveryChallans)
@@ -114,7 +124,12 @@ export function DeliveriesPage() {
   }
 
   async function onCancel(d: DeliveryChallan) {
-    const ok = await confirm({ title: 'Cancel challan', message: `Cancel ${d.dcNo}?`, danger: true, confirmLabel: 'Cancel challan' })
+    const ok = await confirm({
+      title: 'Cancel challan',
+      message: `Cancel ${d.dcNo}?`,
+      danger: true,
+      confirmLabel: 'Cancel challan',
+    })
     if (!ok) return
     dcRepo.setStatus(d.id, 'Cancelled')
     toast.success('Challan cancelled')
@@ -194,99 +209,111 @@ export function DeliveriesPage() {
                 const inv = linkedInvoice(d)
                 const billed = Boolean(inv)
                 return (
-                <tr
-                  key={d.id}
-                  className={clsx(
-                    'hover:bg-slate-50/60',
-                    // Billed challans are locked: greyed out with the invoice shown.
-                    billed && 'bg-slate-50 [&>td]:text-slate-400',
-                    selected.has(d.id) && 'bg-brand-50/60',
-                  )}
-                >
-                  <td className="td w-8">
-                    {d.status === 'Open' && (
-                      <input
-                        type="checkbox"
-                        className="h-4 w-4 accent-brand-600"
-                        checked={selected.has(d.id)}
-                        onChange={() => toggle(d.id)}
-                        aria-label={`Select ${d.dcNo}`}
-                      />
+                  <tr
+                    key={d.id}
+                    className={clsx(
+                      'hover:bg-slate-50/60',
+                      // Billed challans are locked: greyed out with the invoice shown.
+                      billed && 'bg-slate-50 [&>td]:text-slate-400',
+                      selected.has(d.id) && 'bg-brand-50/60',
                     )}
-                  </td>
-                  <td className="td font-mono text-xs font-semibold text-slate-700">{d.dcNo}</td>
-                  <td className="td">{fmtDate(d.date)}</td>
-                  <td className="td">{companyName(d.companyId)}</td>
-                  <td className="td">{d.reference || '—'}</td>
-                  <td className="td text-right">{d.lines.length}</td>
-                  <td className="td">
-                    {billed ? (
-                      <div className="flex flex-col gap-0.5">
-                        <Badge tone="gray">Invoiced</Badge>
-                        <Link
-                          to={`/app/invoices/${inv!.id}/print`}
-                          className="font-mono text-2xs font-semibold text-brand-700 hover:underline"
-                          title="View invoice for this challan"
+                  >
+                    <td className="td w-8">
+                      {d.status === 'Open' && (
+                        <input
+                          type="checkbox"
+                          className="h-4 w-4 accent-brand-600"
+                          checked={selected.has(d.id)}
+                          onChange={() => toggle(d.id)}
+                          aria-label={`Select ${d.dcNo}`}
+                        />
+                      )}
+                    </td>
+                    <td className="td font-mono text-xs font-semibold text-slate-700">{d.dcNo}</td>
+                    <td className="td">{fmtDate(d.date)}</td>
+                    <td className="td">{companyName(d.companyId)}</td>
+                    <td className="td">{d.reference || '—'}</td>
+                    <td className="td text-right">{d.lines.length}</td>
+                    <td className="td">
+                      {billed ? (
+                        <div className="flex flex-col gap-0.5">
+                          <Badge tone="gray">Invoiced</Badge>
+                          <Link
+                            to={`/app/invoices/${inv!.id}/print`}
+                            className="font-mono text-2xs font-semibold text-brand-700 hover:underline"
+                            title="View invoice for this challan"
+                          >
+                            {inv!.invoiceNo}
+                          </Link>
+                        </div>
+                      ) : (
+                        <Badge tone={STATUS_TONE[d.status]}>{d.status}</Badge>
+                      )}
+                    </td>
+                    <td className="td">
+                      <div className="flex justify-end gap-1">
+                        <button
+                          className="btn-ghost btn-sm"
+                          title="View / Print"
+                          onClick={() => navigate(`/app/deliveries/${d.id}/print`)}
                         >
-                          {inv!.invoiceNo}
-                        </Link>
+                          <Printer size={15} />
+                        </button>
+                        <button
+                          className="btn-ghost btn-sm"
+                          title="Download PDF"
+                          onClick={() => downloadChallanPdf(d.id)}
+                        >
+                          <FileDown size={15} />
+                        </button>
+                        {d.status === 'Open' && (
+                          <button
+                            className="btn-ghost btn-sm text-brand-600"
+                            title="Create invoice"
+                            onClick={() => startInvoice([d])}
+                          >
+                            <FileText size={15} />
+                          </button>
+                        )}
+                        {isStranded(d) && (
+                          <button
+                            className="btn-ghost btn-sm text-brand-600"
+                            title="Reopen (invoice cancelled)"
+                            onClick={() => onReopen(d)}
+                          >
+                            <RotateCcw size={15} />
+                          </button>
+                        )}
+                        {d.status !== 'Invoiced' && (
+                          <button
+                            className="btn-ghost btn-sm"
+                            title="Edit"
+                            onClick={() => setEditing(d)}
+                          >
+                            <Pencil size={15} />
+                          </button>
+                        )}
+                        {d.status === 'Open' && (
+                          <button
+                            className="btn-ghost btn-sm text-amber-600"
+                            title="Cancel"
+                            onClick={() => onCancel(d)}
+                          >
+                            <Ban size={15} />
+                          </button>
+                        )}
+                        {d.status !== 'Invoiced' && (
+                          <button
+                            className="btn-ghost btn-sm text-red-500"
+                            title="Delete"
+                            onClick={() => onDelete(d)}
+                          >
+                            <Trash2 size={15} />
+                          </button>
+                        )}
                       </div>
-                    ) : (
-                      <Badge tone={STATUS_TONE[d.status]}>{d.status}</Badge>
-                    )}
-                  </td>
-                  <td className="td">
-                    <div className="flex justify-end gap-1">
-                      <button
-                        className="btn-ghost btn-sm"
-                        title="View / Print"
-                        onClick={() => navigate(`/app/deliveries/${d.id}/print`)}
-                      >
-                        <Printer size={15} />
-                      </button>
-                      <button
-                        className="btn-ghost btn-sm"
-                        title="Download PDF"
-                        onClick={() => downloadChallanPdf(d.id)}
-                      >
-                        <FileDown size={15} />
-                      </button>
-                      {d.status === 'Open' && (
-                        <button
-                          className="btn-ghost btn-sm text-brand-600"
-                          title="Create invoice"
-                          onClick={() => startInvoice([d])}
-                        >
-                          <FileText size={15} />
-                        </button>
-                      )}
-                      {isStranded(d) && (
-                        <button
-                          className="btn-ghost btn-sm text-brand-600"
-                          title="Reopen (invoice cancelled)"
-                          onClick={() => onReopen(d)}
-                        >
-                          <RotateCcw size={15} />
-                        </button>
-                      )}
-                      {d.status !== 'Invoiced' && (
-                        <button className="btn-ghost btn-sm" title="Edit" onClick={() => setEditing(d)}>
-                          <Pencil size={15} />
-                        </button>
-                      )}
-                      {d.status === 'Open' && (
-                        <button className="btn-ghost btn-sm text-amber-600" title="Cancel" onClick={() => onCancel(d)}>
-                          <Ban size={15} />
-                        </button>
-                      )}
-                      {d.status !== 'Invoiced' && (
-                        <button className="btn-ghost btn-sm text-red-500" title="Delete" onClick={() => onDelete(d)}>
-                          <Trash2 size={15} />
-                        </button>
-                      )}
-                    </div>
-                  </td>
-                </tr>
+                    </td>
+                  </tr>
                 )
               })}
             </tbody>
@@ -310,8 +337,7 @@ export function DeliveriesPage() {
               d.lines.map<InvoiceLine>((l) => ({
                 id: uid('l_'),
                 jobId: l.jobId,
-                description:
-                  invoiceFor.length > 1 ? `${l.description} — ${d.dcNo}` : l.description,
+                description: invoiceFor.length > 1 ? `${l.description} — ${d.dcNo}` : l.description,
                 quantity: l.quantity,
                 rate: 0,
               })),
@@ -355,7 +381,10 @@ function DcForm({ dc, onClose }: { dc: DeliveryChallan | null; onClose: () => vo
     setLines((ls) => ls.map((l) => (l.id === id ? { ...l, ...patch } : l)))
   }
   function addLine() {
-    setLines((ls) => [...ls, { id: uid('dl_'), description: '', quantity: 1, unit: units[0] ?? 'Nos' }])
+    setLines((ls) => [
+      ...ls,
+      { id: uid('dl_'), description: '', quantity: 1, unit: units[0] ?? 'Nos' },
+    ])
   }
   function removeLine(id: string) {
     setLines((ls) => (ls.length > 1 ? ls.filter((l) => l.id !== id) : ls))
@@ -519,7 +548,10 @@ function DcForm({ dc, onClose }: { dc: DeliveryChallan | null; onClose: () => vo
                     </select>
                   </td>
                   <td className="px-2 py-1.5 text-right">
-                    <button className="btn-ghost btn-sm text-red-500" onClick={() => removeLine(l.id)}>
+                    <button
+                      className="btn-ghost btn-sm text-red-500"
+                      onClick={() => removeLine(l.id)}
+                    >
                       <Trash2 size={15} />
                     </button>
                   </td>

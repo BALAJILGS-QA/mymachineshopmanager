@@ -7,8 +7,7 @@ import { currency, todayISO } from '@/lib/format'
 import { Field, Input, Select, Textarea } from '@/components/ui/primitives'
 import { Modal } from '@/components/ui/Modal'
 import { useToast } from '@/components/ui/Toast'
-
-const METHODS: PaymentMethod[] = ['Cash', 'Bank Transfer', 'UPI', 'Cheque', 'Other']
+import { PAYMENT_METHODS as METHODS } from '@/constants/domain'
 
 export function PaymentForm({
   invoice,
@@ -35,17 +34,13 @@ export function PaymentForm({
   const openInvoices = useMemo(
     () =>
       invoices.filter(
-        (inv) =>
-          inv.companyId === companyId &&
-          ['Unpaid', 'Partially Paid'].includes(inv.status),
+        (inv) => inv.companyId === companyId && ['Unpaid', 'Partially Paid'].includes(inv.status),
       ),
     [invoices, companyId],
   )
 
   const selectedInvoice = invoices.find((i) => i.id === invoiceId)
-  const outstanding = selectedInvoice
-    ? computeInvoice(selectedInvoice, payments).outstanding
-    : 0
+  const outstanding = selectedInvoice ? computeInvoice(selectedInvoice, payments).outstanding : 0
 
   function submit() {
     try {

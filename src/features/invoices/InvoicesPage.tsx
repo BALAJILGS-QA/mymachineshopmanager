@@ -1,17 +1,8 @@
 import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import {
-  Ban,
-  Download,
-  FileDown,
-  FileText,
-  Pencil,
-  Plus,
-  Printer,
-  Wallet,
-} from 'lucide-react'
+import { Ban, Download, FileDown, FileText, Pencil, Plus, Printer, Wallet } from 'lucide-react'
 import { downloadInvoicePdf } from './invoicePdf'
-import type { Invoice, InvoiceStatus } from '@/types'
+import type { Invoice } from '@/types'
 import { invoiceRepo, BusinessRuleError } from '@/data/repo'
 import { useDb } from '@/data/store'
 import { computeInvoice } from '@/data/computations'
@@ -27,8 +18,7 @@ import { useConfirm } from '@/components/ui/ConfirmDialog'
 import { useCompanyName } from '@/features/shared/lookups'
 import { InvoiceForm } from './InvoiceForm'
 import { PaymentForm } from '@/features/payments/PaymentForm'
-
-const STATUSES: InvoiceStatus[] = ['Draft', 'Unpaid', 'Partially Paid', 'Paid', 'Cancelled']
+import { INVOICE_STATUSES as STATUSES } from '@/constants/domain'
 
 export function InvoicesPage() {
   const invoices = useDb((db) => db.invoices)
@@ -109,7 +99,11 @@ export function InvoicesPage() {
         <CompanyFilter value={company} onChange={setCompany} />
         <div>
           <label className="label">Status</label>
-          <Select value={status} onChange={(e) => setStatus(e.target.value)} className="min-w-[9rem]">
+          <Select
+            value={status}
+            onChange={(e) => setStatus(e.target.value)}
+            className="min-w-[9rem]"
+          >
             <option value="">All statuses</option>
             {STATUSES.map((s) => (
               <option key={s}>{s}</option>
@@ -211,9 +205,7 @@ export function InvoicesPage() {
       {editing !== undefined && (
         <InvoiceForm invoice={editing} onClose={() => setEditing(undefined)} />
       )}
-      {payFor && (
-        <PaymentForm invoice={payFor} onClose={() => setPayFor(null)} />
-      )}
+      {payFor && <PaymentForm invoice={payFor} onClose={() => setPayFor(null)} />}
     </div>
   )
 }

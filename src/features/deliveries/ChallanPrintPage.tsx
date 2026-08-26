@@ -4,8 +4,7 @@ import { useDb } from '@/data/store'
 import { fmtDate, qty } from '@/lib/format'
 import { Badge } from '@/components/ui/primitives'
 import { downloadChallanPdf } from './challanPdf'
-
-const STATUS_TONE: Record<string, string> = { Open: 'amber', Invoiced: 'green', Cancelled: 'red' }
+import { DC_STATUS_TONE as STATUS_TONE } from '@/constants/domain'
 
 export function ChallanPrintPage() {
   const { id } = useParams()
@@ -45,12 +44,18 @@ export function ChallanPrintPage() {
         <div className="flex items-start justify-between border-b border-slate-200 pb-5">
           <div>
             <h1 className="text-xl font-bold text-slate-900">{shop.name || 'Machine Shop'}</h1>
-            {shop.address && <p className="mt-1 whitespace-pre-line text-xs text-slate-500">{shop.address}</p>}
-            <p className="mt-1 text-xs text-slate-500">{[shop.phone, shop.email].filter(Boolean).join(' · ')}</p>
+            {shop.address && (
+              <p className="mt-1 whitespace-pre-line text-xs text-slate-500">{shop.address}</p>
+            )}
+            <p className="mt-1 text-xs text-slate-500">
+              {[shop.phone, shop.email].filter(Boolean).join(' · ')}
+            </p>
             {shop.gstin && <p className="text-xs text-slate-500">GSTIN: {shop.gstin}</p>}
           </div>
           <div className="text-right">
-            <p className="text-lg font-bold uppercase tracking-wide text-slate-500">Delivery Challan</p>
+            <p className="text-lg font-bold uppercase tracking-wide text-slate-500">
+              Delivery Challan
+            </p>
             <p className="font-mono text-sm font-semibold text-slate-800">{dc.dcNo}</p>
             <p className="text-xs text-slate-500">{fmtDate(dc.date)}</p>
             <div className="mt-1 flex justify-end">
@@ -71,13 +76,17 @@ export function ChallanPrintPage() {
           <div className="text-right">
             {dc.reference && (
               <>
-                <p className="text-2xs font-semibold uppercase tracking-wide text-slate-500">Reference</p>
+                <p className="text-2xs font-semibold uppercase tracking-wide text-slate-500">
+                  Reference
+                </p>
                 <p className="mt-1 text-sm text-slate-700">{dc.reference}</p>
               </>
             )}
             {dc.vehicleNo && (
               <>
-                <p className="mt-2 text-2xs font-semibold uppercase tracking-wide text-slate-500">Vehicle No.</p>
+                <p className="mt-2 text-2xs font-semibold uppercase tracking-wide text-slate-500">
+                  Vehicle No.
+                </p>
                 <p className="mt-1 text-sm text-slate-700">{dc.vehicleNo}</p>
               </>
             )}

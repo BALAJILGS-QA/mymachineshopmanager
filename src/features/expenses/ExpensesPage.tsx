@@ -19,8 +19,7 @@ import { Pagination, usePagination } from '@/components/common/Pagination'
 import { useToast } from '@/components/ui/Toast'
 import { useConfirm } from '@/components/ui/ConfirmDialog'
 import { useCompanyName, useJobNo } from '@/features/shared/lookups'
-
-const METHODS: PaymentMethod[] = ['Cash', 'Bank Transfer', 'UPI', 'Cheque', 'Other']
+import { PAYMENT_METHODS as METHODS } from '@/constants/domain'
 
 export function ExpensesPage() {
   const expenses = useDb((db) => db.expenses)
@@ -95,7 +94,11 @@ export function ExpensesPage() {
         <SearchBox value={search} onChange={setSearch} placeholder="Search vendor, category…" />
         <div>
           <label className="label">Category</label>
-          <Select value={category} onChange={(e) => setCategory(e.target.value)} className="min-w-[10rem]">
+          <Select
+            value={category}
+            onChange={(e) => setCategory(e.target.value)}
+            className="min-w-[10rem]"
+          >
             <option value="">All categories</option>
             {categories.map((c) => (
               <option key={c}>{c}</option>
@@ -253,7 +256,10 @@ function ExpenseForm({ expense, onClose }: { expense: Expense | null; onClose: (
           />
         </Field>
         <Field label="Payment Method" required>
-          <Select value={form.method} onChange={(e) => set('method', e.target.value as PaymentMethod)}>
+          <Select
+            value={form.method}
+            onChange={(e) => set('method', e.target.value as PaymentMethod)}
+          >
             {METHODS.map((m) => (
               <option key={m}>{m}</option>
             ))}
