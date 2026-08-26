@@ -507,13 +507,19 @@ function HistoryModal({
   )
 }
 
-// Material master management: list + add/edit/deactivate.
+// Material master management: list + add/edit/deactivate, scoped by company.
 function MaterialsManager({ onClose }: { onClose: () => void }) {
-  const { data: materials = [] } = useMaterials()
+  const { data: allMaterials = [] } = useMaterials()
+  const { data: companies = [] } = useCompanies()
+  const companyName = useCompanyName()
   const deleteMaterial = useDeleteMaterial()
   const toast = useToast()
   const confirm = useConfirm()
   const [editing, setEditing] = useState<Material | null | undefined>(undefined)
+  const [fCompany, setFCompany] = useState('')
+  const materials = allMaterials.filter((m) =>
+    !fCompany ? true : fCompany === 'shared' ? !m.companyId : m.companyId === fCompany,
+  )
 
   async function onDelete(m: Material) {
     const ok = await confirm({
@@ -548,11 +554,27 @@ function MaterialsManager({ onClose }: { onClose: () => void }) {
           </>
         }
       >
+        <div className="mb-3">
+          <label className="label">Belongs to</label>
+          <select
+            className="input max-w-xs"
+            value={fCompany}
+            onChange={(e) => setFCompany(e.target.value)}
+          >
+            <option value="">All materials</option>
+            <option value="shared">Shared / Own</option>
+            {companies.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
+            ))}
+          </select>
+        </div>
         {materials.length === 0 ? (
           <EmptyState
             icon={<Boxes size={40} />}
-            title="No materials yet"
-            description="Add your first material."
+            title="No materials"
+            description="Add a material — pick a customer under “Belongs to”, or leave it shared/own."
           />
         ) : (
           <div className="overflow-x-auto rounded-lg border border-slate-200">
@@ -561,6 +583,7 @@ function MaterialsManager({ onClose }: { onClose: () => void }) {
                 <tr className="bg-slate-50 text-left text-2xs uppercase tracking-wide text-slate-500">
                   <th className="px-3 py-2">Code</th>
                   <th className="px-3 py-2">Name</th>
+                  <th className="px-3 py-2">Belongs to</th>
                   <th className="px-3 py-2">Unit</th>
                   <th className="px-3 py-2">Reorder</th>
                   <th className="px-3 py-2">Status</th>
@@ -572,6 +595,9 @@ function MaterialsManager({ onClose }: { onClose: () => void }) {
                   <tr key={m.id}>
                     <td className="px-3 py-1.5 font-mono text-xs text-slate-500">{m.code}</td>
                     <td className="px-3 py-1.5 font-medium text-slate-800">{m.name}</td>
+                    <td className="px-3 py-1.5 text-slate-600">
+                      {m.companyId ? companyName(m.companyId) : 'Shared / Own'}
+                    </td>
                     <td className="px-3 py-1.5">{m.unit}</td>
                     <td className="px-3 py-1.5 text-slate-500">{m.reorderLevel ?? '—'}</td>
                     <td className="px-3 py-1.5">

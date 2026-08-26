@@ -41,6 +41,7 @@ export interface Material extends AuditFields {
   id: ID
   code: string
   name: string
+  companyId?: ID // set = this customer's material; null = shared / own
   type?: string // grade / type
   unit: string
   description?: string

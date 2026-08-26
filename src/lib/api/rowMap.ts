@@ -35,6 +35,7 @@ export const maps = {
       id: 'id',
       code: 'code',
       name: 'name',
+      companyId: 'company_id',
       type: 'type',
       unit: 'unit',
       description: 'description',

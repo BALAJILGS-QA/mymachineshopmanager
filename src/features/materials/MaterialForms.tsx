@@ -25,9 +25,11 @@ import type { PaymentMethod } from '@/types'
 // ------------------------------------------------------------- Material master
 export function MaterialForm({
   material,
+  presetCompanyId,
   onClose,
 }: {
   material: Material | null
+  presetCompanyId?: string // pre-scope a new material to a customer (or '' for shared)
   onClose: () => void
 }) {
   const toast = useToast()
@@ -35,9 +37,12 @@ export function MaterialForm({
   const updateMaterial = useUpdateMaterial()
   const saving = createMaterial.isPending || updateMaterial.isPending
   const settings = useSettings().data ?? DEFAULT_SETTINGS
+  const { data: allCompanies = [] } = useCompanies()
+  const companies = allCompanies.filter((c) => c.active || c.id === material?.companyId)
   const [form, setForm] = useState({
     name: material?.name ?? '',
     code: material?.code ?? '',
+    companyId: material?.companyId ?? presetCompanyId ?? '',
     type: material?.type ?? '',
     unit: material?.unit ?? settings.units[0] ?? 'Nos',
     description: material?.description ?? '',
@@ -55,6 +60,7 @@ export function MaterialForm({
       const payload = {
         name: form.name,
         code: form.code || undefined,
+        companyId: form.companyId || undefined,
         type: form.type || undefined,
         unit: form.unit,
         description: form.description || undefined,
@@ -94,6 +100,16 @@ export function MaterialForm({
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <Field label="Material Name" required className="sm:col-span-2">
           <Input value={form.name} onChange={(e) => set('name', e.target.value)} autoFocus />
+        </Field>
+        <Field label="Belongs to" hint="A customer's part, or shared / own material">
+          <Select value={form.companyId} onChange={(e) => set('companyId', e.target.value)}>
+            <option value="">Shared / Own (Sree Balaji)</option>
+            {companies.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
+            ))}
+          </Select>
         </Field>
         <Field label="Material Code" hint="Blank to auto-generate">
           <Input value={form.code} onChange={(e) => set('code', e.target.value)} />
@@ -524,7 +540,7 @@ export function AddCustomerMaterialForm({ onClose }: { onClose: () => void }) {
   const { data: allCompanies = [] } = useCompanies()
   const companies = allCompanies.filter((c) => c.active)
   const { data: allMaterials = [] } = useMaterials()
-  const materials = allMaterials.filter((m) => m.active)
+  const [addingMaterial, setAddingMaterial] = useState(false)
   const [form, setForm] = useState({
     companyId: companies[0]?.id ?? '',
     whereFrom: '',
@@ -537,6 +553,10 @@ export function AddCustomerMaterialForm({ onClose }: { onClose: () => void }) {
   function set<K extends keyof typeof form>(k: K, v: (typeof form)[K]) {
     setForm((f) => ({ ...f, [k]: v }))
   }
+  // This customer's materials plus shared/own ones.
+  const materials = allMaterials.filter(
+    (m) => m.active && (!m.companyId || m.companyId === form.companyId),
+  )
   const material = materials.find((m) => m.id === form.materialId)
 
   async function submit() {
@@ -597,24 +617,46 @@ export function AddCustomerMaterialForm({ onClose }: { onClose: () => void }) {
           <Input type="date" value={form.date} onChange={(e) => set('date', e.target.value)} />
         </Field>
         <Field label="Material" required>
-          <Select value={form.materialId} onChange={(e) => set('materialId', e.target.value)}>
-            <option value="">Select…</option>
-            {materials.map((m) => (
-              <option key={m.id} value={m.id}>
-                {m.name} ({m.unit})
-              </option>
-            ))}
-          </Select>
+          <div className="flex gap-1.5">
+            <Select
+              value={form.materialId}
+              onChange={(e) => set('materialId', e.target.value)}
+              className="flex-1"
+            >
+              <option value="">Select…</option>
+              {materials.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.name} ({m.unit})
+                </option>
+              ))}
+            </Select>
+            <button
+              type="button"
+              className="btn-secondary btn-sm shrink-0"
+              onClick={() => setAddingMaterial(true)}
+              disabled={!form.companyId}
+              title="Add a new material for this company"
+            >
+              + New
+            </button>
+          </div>
         </Field>
-        <Field label={`Quantity ${material ? `(${material.unit})` : ''}`} required>
-          <Input
-            type="number"
-            step="0.001"
-            min={0}
-            value={form.quantity}
-            onChange={(e) => set('quantity', e.target.value)}
-          />
-        </Field>
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="Quantity" required>
+            <Input
+              type="number"
+              step="0.001"
+              min={0}
+              value={form.quantity}
+              onChange={(e) => set('quantity', e.target.value)}
+            />
+          </Field>
+          <Field label="Unit">
+            <div className="input flex items-center bg-slate-50 text-slate-700">
+              {material?.unit ?? '—'}
+            </div>
+          </Field>
+        </div>
         <Field label="Challan No">
           <Input value={form.challanNo} onChange={(e) => set('challanNo', e.target.value)} />
         </Field>
@@ -622,6 +664,13 @@ export function AddCustomerMaterialForm({ onClose }: { onClose: () => void }) {
           <Textarea rows={2} value={form.notes} onChange={(e) => set('notes', e.target.value)} />
         </Field>
       </div>
+      {addingMaterial && (
+        <MaterialForm
+          material={null}
+          presetCompanyId={form.companyId}
+          onClose={() => setAddingMaterial(false)}
+        />
+      )}
     </Modal>
   )
 }
@@ -631,7 +680,9 @@ export function AddOwnMaterialForm({ onClose }: { onClose: () => void }) {
   const toast = useToast()
   const createPurchase = useCreateOwnPurchase()
   const { data: allMaterials = [] } = useMaterials()
-  const materials = allMaterials.filter((m) => m.active)
+  // Own purchases use shared/own materials (not tied to a customer).
+  const materials = allMaterials.filter((m) => m.active && !m.companyId)
+  const [addingMaterial, setAddingMaterial] = useState(false)
   const [form, setForm] = useState({
     supplier: '',
     materialId: '',
@@ -698,24 +749,45 @@ export function AddOwnMaterialForm({ onClose }: { onClose: () => void }) {
           <Input type="date" value={form.date} onChange={(e) => set('date', e.target.value)} />
         </Field>
         <Field label="Material" required>
-          <Select value={form.materialId} onChange={(e) => set('materialId', e.target.value)}>
-            <option value="">Select…</option>
-            {materials.map((m) => (
-              <option key={m.id} value={m.id}>
-                {m.name} ({m.unit})
-              </option>
-            ))}
-          </Select>
+          <div className="flex gap-1.5">
+            <Select
+              value={form.materialId}
+              onChange={(e) => set('materialId', e.target.value)}
+              className="flex-1"
+            >
+              <option value="">Select…</option>
+              {materials.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.name} ({m.unit})
+                </option>
+              ))}
+            </Select>
+            <button
+              type="button"
+              className="btn-secondary btn-sm shrink-0"
+              onClick={() => setAddingMaterial(true)}
+              title="Add a new shared/own material"
+            >
+              + New
+            </button>
+          </div>
         </Field>
-        <Field label={`Quantity ${material ? `(${material.unit})` : ''}`} required>
-          <Input
-            type="number"
-            step="0.001"
-            min={0}
-            value={form.quantity}
-            onChange={(e) => set('quantity', e.target.value)}
-          />
-        </Field>
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="Quantity" required>
+            <Input
+              type="number"
+              step="0.001"
+              min={0}
+              value={form.quantity}
+              onChange={(e) => set('quantity', e.target.value)}
+            />
+          </Field>
+          <Field label="Unit">
+            <div className="input flex items-center bg-slate-50 text-slate-700">
+              {material?.unit ?? '—'}
+            </div>
+          </Field>
+        </div>
         <Field label="Material Cost (excl. GST)">
           <Input
             type="number"
@@ -753,6 +825,9 @@ export function AddOwnMaterialForm({ onClose }: { onClose: () => void }) {
           <Textarea rows={2} value={form.notes} onChange={(e) => set('notes', e.target.value)} />
         </Field>
       </div>
+      {addingMaterial && (
+        <MaterialForm material={null} presetCompanyId="" onClose={() => setAddingMaterial(false)} />
+      )}
     </Modal>
   )
 }
