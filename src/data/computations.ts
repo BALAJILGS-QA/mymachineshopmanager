@@ -4,34 +4,39 @@
 import type {
   Invoice,
   InvoiceComputed,
+  Material,
+  MaterialIssue,
+  MaterialReceipt,
   MaterialStock,
   Payment,
+  StockAdjustment,
 } from '@/types'
-import type { Database } from './db'
+
+// Minimal shape the stock derivations read. Any object with these collections
+// (the full store, or data assembled from Supabase queries) satisfies it.
+export interface StockDb {
+  materials: Material[]
+  receipts: MaterialReceipt[]
+  issues: MaterialIssue[]
+  adjustments: StockAdjustment[]
+}
 
 export function roundMoney(n: number): number {
   return Math.round((n + Number.EPSILON) * 100) / 100
 }
 
 export function invoiceSubtotal(inv: Invoice): number {
-  return roundMoney(
-    inv.lines.reduce((sum, l) => sum + l.quantity * l.rate, 0),
-  )
+  return roundMoney(inv.lines.reduce((sum, l) => sum + l.quantity * l.rate, 0))
 }
 
 // Payments allocated to a specific (non-cancelled) invoice.
 export function paidForInvoice(invoiceId: string, payments: Payment[]): number {
   return roundMoney(
-    payments
-      .filter((p) => p.invoiceId === invoiceId)
-      .reduce((sum, p) => sum + p.amount, 0),
+    payments.filter((p) => p.invoiceId === invoiceId).reduce((sum, p) => sum + p.amount, 0),
   )
 }
 
-export function computeInvoice(
-  inv: Invoice,
-  payments: Payment[],
-): InvoiceComputed {
+export function computeInvoice(inv: Invoice, payments: Payment[]): InvoiceComputed {
   const subtotal = invoiceSubtotal(inv)
   const taxable = Math.max(0, subtotal - (inv.discount || 0))
   // Prefer the CGST + SGST split when present; fall back to the combined rate.
@@ -47,10 +52,7 @@ export function computeInvoice(
 }
 
 // Derive the effective status from payments (Draft/Cancelled are preserved).
-export function deriveInvoiceStatus(
-  inv: Invoice,
-  payments: Payment[],
-): Invoice['status'] {
+export function deriveInvoiceStatus(inv: Invoice, payments: Payment[]): Invoice['status'] {
   if (inv.status === 'Draft' || inv.status === 'Cancelled') return inv.status
   const { total, paid } = computeInvoice(inv, payments)
   if (paid <= 0) return 'Unpaid'
@@ -65,17 +67,9 @@ export const SHOP_SCOPE = '__shop__'
 //   scope undefined     → overall (own + all customers)
 //   scope SHOP_SCOPE    → own (shop) stock only
 //   scope <companyId>   → that customer's stock only
-export function materialStock(
-  db: Database,
-  materialId: string,
-  companyId?: string,
-): MaterialStock {
+export function materialStock(db: StockDb, materialId: string, companyId?: string): MaterialStock {
   const matchCompany = (cid?: string) =>
-    companyId === undefined
-      ? true
-      : companyId === SHOP_SCOPE
-      ? cid == null
-      : cid === companyId
+    companyId === undefined ? true : companyId === SHOP_SCOPE ? cid == null : cid === companyId
 
   const received = db.receipts
     .filter((r) => r.materialId === materialId && matchCompany(r.companyId))
@@ -100,33 +94,26 @@ export function materialStock(
 }
 
 // Value of on-hand stock using receipt rates (weighted) — approximate.
-export function materialStockValue(db: Database, materialId: string): number {
+export function materialStockValue(db: StockDb, materialId: string): number {
   const receipts = db.receipts.filter((r) => r.materialId === materialId)
   const totalQty = receipts.reduce((s, r) => s + r.quantity, 0)
   if (totalQty === 0) return 0
-  const totalValue = receipts.reduce(
-    (s, r) => s + r.quantity * (r.rate ?? 0),
-    0,
-  )
+  const totalValue = receipts.reduce((s, r) => s + r.quantity * (r.rate ?? 0), 0)
   const avgRate = totalValue / totalQty
   const balance = materialStock(db, materialId).balance
   return roundMoney(balance * avgRate)
 }
 
-export function totalRawMaterialValue(db: Database): number {
-  return roundMoney(
-    db.materials.reduce((s, m) => s + materialStockValue(db, m.id), 0),
-  )
+export function totalRawMaterialValue(db: StockDb): number {
+  return roundMoney(db.materials.reduce((s, m) => s + materialStockValue(db, m.id), 0))
 }
 
 // Value of on-hand stock owned by a specific company, using that company's
 // weighted-average receipt rate per material.
-export function companyMaterialValue(db: Database, companyId: string): number {
+export function companyMaterialValue(db: StockDb, companyId: string): number {
   let total = 0
   for (const m of db.materials) {
-    const receipts = db.receipts.filter(
-      (r) => r.materialId === m.id && r.companyId === companyId,
-    )
+    const receipts = db.receipts.filter((r) => r.materialId === m.id && r.companyId === companyId)
     const qtyIn = receipts.reduce((s, r) => s + r.quantity, 0)
     if (qtyIn === 0) continue
     const avg = receipts.reduce((s, r) => s + r.quantity * (r.rate ?? 0), 0) / qtyIn

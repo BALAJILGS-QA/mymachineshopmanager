@@ -1,15 +1,20 @@
 import { jsPDF } from 'jspdf'
-import type { DeliveryChallan } from '@/types'
-import { getDb } from '@/data/db'
 import { fmtDate, qty } from '@/lib/format'
+import { listChallans } from './api/deliveriesApi'
+import { listCompanies } from '@/features/companies/api/companiesApi'
+import { getSettings } from '@/features/settings/api/settingsApi'
 
 // Build a clean, text-based (vector) delivery-challan PDF and trigger download.
-export function downloadChallanPdf(challanId: string): void {
-  const db = getDb()
-  const dc: DeliveryChallan | undefined = db.deliveryChallans.find((d) => d.id === challanId)
+export async function downloadChallanPdf(challanId: string): Promise<void> {
+  const [challans, companies, settings] = await Promise.all([
+    listChallans(),
+    listCompanies(),
+    getSettings(),
+  ])
+  const dc = challans.find((d) => d.id === challanId)
   if (!dc) return
-  const company = db.companies.find((c) => c.id === dc.companyId)
-  const shop = db.settings.company
+  const company = companies.find((c) => c.id === dc.companyId)
+  const shop = settings.company
 
   const doc = new jsPDF({ unit: 'pt', format: 'a4' })
   const W = doc.internal.pageSize.getWidth()

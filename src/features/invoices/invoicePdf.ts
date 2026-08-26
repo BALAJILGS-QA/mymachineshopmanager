@@ -1,8 +1,10 @@
 import { jsPDF } from 'jspdf'
-import type { Invoice } from '@/types'
-import { getDb } from '@/data/db'
 import { computeInvoice } from '@/data/computations'
 import { fmtDate, qty } from '@/lib/format'
+import { listInvoices } from './api/invoicesApi'
+import { listCompanies } from '@/features/companies/api/companiesApi'
+import { listPayments } from '@/features/payments/api/paymentsApi'
+import { getSettings } from '@/features/settings/api/settingsApi'
 
 // Standard PDF fonts are Latin-1, which lacks the ₹ glyph — use an ASCII money
 // formatter so amounts render correctly regardless of the configured symbol.
@@ -16,14 +18,19 @@ function money(n: number, symbol: string): string {
 }
 
 // Build a clean, text-based (vector) invoice PDF and trigger a download.
-export function downloadInvoicePdf(invoiceId: string): void {
-  const db = getDb()
-  const inv: Invoice | undefined = db.invoices.find((i) => i.id === invoiceId)
+export async function downloadInvoicePdf(invoiceId: string): Promise<void> {
+  const [invoices, companies, payments, settings] = await Promise.all([
+    listInvoices(),
+    listCompanies(),
+    listPayments(),
+    getSettings(),
+  ])
+  const inv = invoices.find((i) => i.id === invoiceId)
   if (!inv) return
-  const company = db.companies.find((c) => c.id === inv.companyId)
-  const shop = db.settings.company
-  const sym = db.settings.currencySymbol
-  const c = computeInvoice(inv, db.payments)
+  const company = companies.find((c) => c.id === inv.companyId)
+  const shop = settings.company
+  const sym = settings.currencySymbol
+  const c = computeInvoice(inv, payments)
 
   const doc = new jsPDF({ unit: 'pt', format: 'a4' })
   const W = doc.internal.pageSize.getWidth()
@@ -45,20 +52,31 @@ export function downloadInvoicePdf(invoiceId: string): void {
 
   y += 16
   doc.setFont('helvetica', 'normal').setFontSize(9).setTextColor(90)
-  const shopLines = [shop.address, [shop.phone, shop.email].filter(Boolean).join('  |  '), shop.gstin ? `GSTIN: ${shop.gstin}` : '']
-    .filter(Boolean)
-  shopLines.forEach((l) => { text(l, M, y); y += 12 })
+  const shopLines = [
+    shop.address,
+    [shop.phone, shop.email].filter(Boolean).join('  |  '),
+    shop.gstin ? `GSTIN: ${shop.gstin}` : '',
+  ].filter(Boolean)
+  shopLines.forEach((l) => {
+    text(l, M, y)
+    y += 12
+  })
 
   // ---- Invoice meta (right)
   let ry = 64
   doc.setFontSize(9).setTextColor(90)
-  text('Invoice No', W - M - 150, ry); doc.setFont('helvetica', 'bold').setTextColor(30)
-  text(inv.invoiceNo, W - M, ry, { align: 'right' }); ry += 13
+  text('Invoice No', W - M - 150, ry)
+  doc.setFont('helvetica', 'bold').setTextColor(30)
+  text(inv.invoiceNo, W - M, ry, { align: 'right' })
+  ry += 13
   doc.setFont('helvetica', 'normal').setTextColor(90)
-  text('Date', W - M - 150, ry); doc.setTextColor(30)
-  text(fmtDate(inv.date), W - M, ry, { align: 'right' }); ry += 13
+  text('Date', W - M - 150, ry)
+  doc.setTextColor(30)
+  text(fmtDate(inv.date), W - M, ry, { align: 'right' })
+  ry += 13
   doc.setTextColor(90)
-  text('Status', W - M - 150, ry); doc.setFont('helvetica', 'bold').setTextColor(30)
+  text('Status', W - M - 150, ry)
+  doc.setFont('helvetica', 'bold').setTextColor(30)
   text(inv.status, W - M, ry, { align: 'right' })
 
   y = Math.max(y, ry) + 18
@@ -78,7 +96,10 @@ export function downloadInvoicePdf(invoiceId: string): void {
     company?.gstin ? `GSTIN: ${company.gstin}` : '',
     inv.reference ? `Ref: ${inv.reference}` : '',
   ].filter(Boolean) as string[]
-  billLines.forEach((l) => { text(l, M, y); y += 12 })
+  billLines.forEach((l) => {
+    text(l, M, y)
+    y += 12
+  })
 
   y += 10
 
@@ -95,7 +116,10 @@ export function downloadInvoicePdf(invoiceId: string): void {
 
   doc.setFont('helvetica', 'normal').setFontSize(9).setTextColor(40)
   inv.lines.forEach((l, i) => {
-    if (y > 740) { doc.addPage(); y = 60 }
+    if (y > 740) {
+      doc.addPage()
+      y = 60
+    }
     const desc = doc.splitTextToSize(l.description, cols.qty - cols.desc - 12) as string[]
     text(String(i + 1), cols.idx, y)
     text(desc, cols.desc, y)
@@ -122,13 +146,16 @@ export function downloadInvoicePdf(invoiceId: string): void {
   {
     const taxable = Math.max(0, c.subtotal - (inv.discount || 0))
     if (inv.cgstPercent != null || inv.sgstPercent != null) {
-      if (inv.cgstPercent) row(`CGST (${inv.cgstPercent}%)`, money((taxable * inv.cgstPercent) / 100, sym))
-      if (inv.sgstPercent) row(`SGST (${inv.sgstPercent}%)`, money((taxable * inv.sgstPercent) / 100, sym))
+      if (inv.cgstPercent)
+        row(`CGST (${inv.cgstPercent}%)`, money((taxable * inv.cgstPercent) / 100, sym))
+      if (inv.sgstPercent)
+        row(`SGST (${inv.sgstPercent}%)`, money((taxable * inv.sgstPercent) / 100, sym))
     } else if (inv.taxPercent > 0) {
       row(`Tax (${inv.taxPercent}%)`, money(c.taxAmount, sym))
     }
   }
-  doc.setDrawColor(210).line(lx, y - 4, W - M, y - 4); y += 6
+  doc.setDrawColor(210).line(lx, y - 4, W - M, y - 4)
+  y += 6
   row('Total', money(c.total, sym), true)
   if (c.paid > 0) {
     row('Paid', money(c.paid, sym))
@@ -161,7 +188,8 @@ export function downloadInvoicePdf(invoiceId: string): void {
   if (inv.notes) {
     y += 10
     doc.setFont('helvetica', 'bold').setFontSize(8.5).setTextColor(120)
-    text('NOTES', M, y); y += 12
+    text('NOTES', M, y)
+    y += 12
     doc.setFont('helvetica', 'normal').setFontSize(9).setTextColor(90)
     const notes = doc.splitTextToSize(inv.notes, W - 2 * M) as string[]
     text(notes, M, y)

@@ -1,14 +1,16 @@
 import { useMemo, useState } from 'react'
 import { Download, Pencil, Plus, Receipt, Trash2 } from 'lucide-react'
 import type { Expense, PaymentMethod } from '@/types'
-import { previewNextNo } from '@/data/repo'
-import { useDb } from '@/data/store'
 import {
   useExpenses,
   useCreateExpense,
   useUpdateExpense,
   useDeleteExpense,
 } from './hooks/useExpenses'
+import { useCompanies } from '@/features/companies/hooks/useCompanies'
+import { useJobs } from '@/features/jobs/hooks/useJobs'
+import { useSettings } from '@/features/settings/hooks/useSettings'
+import { usePreviewNo } from '@/features/shared/usePreviewNo'
 import { toUserMessage } from '@/lib/api/errors'
 import { currency, fmtDate, todayISO } from '@/lib/format'
 import { downloadCsv } from '@/lib/csv'
@@ -30,7 +32,7 @@ import { PAYMENT_METHODS as METHODS } from '@/constants/domain'
 
 export function ExpensesPage() {
   const { data: expenses = [], isLoading } = useExpenses()
-  const categories = useDb((db) => db.settings.expenseCategories)
+  const categories = useSettings().data?.expenseCategories ?? []
   const deleteExpense = useDeleteExpense()
   const companyName = useCompanyName()
   const jobNo = useJobNo()
@@ -181,10 +183,10 @@ export function ExpensesPage() {
 
 function ExpenseForm({ expense, onClose }: { expense: Expense | null; onClose: () => void }) {
   const toast = useToast()
-  const categories = useDb((db) => db.settings.expenseCategories)
-  const companies = useDb((db) => db.companies)
-  const jobs = useDb((db) => db.jobs)
-  const settings = useDb((db) => db.settings)
+  const categories = useSettings().data?.expenseCategories ?? []
+  const { data: companies = [] } = useCompanies()
+  const { data: jobs = [] } = useJobs()
+  const expenseNoPreview = usePreviewNo('expense')
   const createExpense = useCreateExpense()
   const updateExpense = useUpdateExpense()
   const saving = createExpense.isPending || updateExpense.isPending
@@ -249,7 +251,7 @@ function ExpenseForm({ expense, onClose }: { expense: Expense | null; onClose: (
     >
       {!expense && (
         <p className="mb-3 rounded-lg bg-brand-50 px-3 py-2 text-xs text-brand-700">
-          Expense number will be <b>{previewNextNo('expense', settings.numbering.expense)}</b>
+          Expense number will be <b>{expenseNoPreview}</b>
         </p>
       )}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">

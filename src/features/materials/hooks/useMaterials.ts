@@ -1,6 +1,26 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { qk } from '@/lib/api/queryKeys'
+import { sb } from '@/lib/api/supabaseCrud'
+import { SHOP_SCOPE } from '@/data/computations'
 import * as api from '../api/materialsApi'
+
+// Balance of a material in an owner scope via the material_balance RPC.
+// scope: undefined/SHOP_SCOPE -> shop stock (company_id null); else a company id.
+export function useMaterialBalance(materialId: string, scope?: string) {
+  const companyId = !scope || scope === SHOP_SCOPE ? null : scope
+  return useQuery({
+    queryKey: ['materialBalance', materialId, companyId ?? 'shop'],
+    queryFn: async () => {
+      const { data, error } = await sb().rpc('material_balance', {
+        p_material_id: materialId,
+        p_company_id: companyId,
+      })
+      if (error) throw error
+      return Number(data)
+    },
+    enabled: !!materialId,
+  })
+}
 
 // ---- Materials master ----
 export function useMaterials() {

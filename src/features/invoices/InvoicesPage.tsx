@@ -3,8 +3,8 @@ import { useNavigate } from 'react-router-dom'
 import { Ban, Download, FileDown, FileText, Pencil, Plus, Printer, Wallet } from 'lucide-react'
 import { downloadInvoicePdf } from './invoicePdf'
 import type { Invoice } from '@/types'
-import { useDb } from '@/data/store'
 import { useInvoices, useSetInvoiceStatus } from './hooks/useInvoices'
+import { usePayments } from '@/features/payments/hooks/usePayments'
 import { toUserMessage } from '@/lib/api/errors'
 import { computeInvoice } from '@/data/computations'
 import { currency, fmtDate } from '@/lib/format'
@@ -23,7 +23,7 @@ import { INVOICE_STATUSES as STATUSES } from '@/constants/domain'
 
 export function InvoicesPage() {
   const { data: invoices = [], isLoading } = useInvoices()
-  const payments = useDb((db) => db.payments)
+  const { data: payments = [] } = usePayments()
   const setInvoiceStatus = useSetInvoiceStatus()
   const companyName = useCompanyName()
   const navigate = useNavigate()

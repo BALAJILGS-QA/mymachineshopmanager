@@ -14,9 +14,7 @@ import {
   Truck,
 } from 'lucide-react'
 import type { DeliveryChallan, DcLine, InvoiceLine } from '@/types'
-import { previewNextNo } from '@/data/repo'
 import { downloadChallanPdf } from './challanPdf'
-import { useDb } from '@/data/store'
 import {
   useChallans,
   useCreateChallan,
@@ -25,6 +23,12 @@ import {
   useSetChallanStatus,
   useReopenChallan,
 } from './hooks/useDeliveries'
+import { useInvoices } from '@/features/invoices/hooks/useInvoices'
+import { useCompanies } from '@/features/companies/hooks/useCompanies'
+import { useJobs } from '@/features/jobs/hooks/useJobs'
+import { useProducts, useSettings } from '@/features/settings/hooks/useSettings'
+import { usePreviewNo } from '@/features/shared/usePreviewNo'
+import { DEFAULT_SETTINGS } from '@/data/seed'
 import { toUserMessage } from '@/lib/api/errors'
 import { fmtDate, todayISO } from '@/lib/format'
 import { uid } from '@/lib/id'
@@ -41,7 +45,7 @@ import { DC_STATUS_TONE as STATUS_TONE } from '@/constants/domain'
 
 export function DeliveriesPage() {
   const { data: challans = [], isLoading } = useChallans()
-  const invoices = useDb((db) => db.invoices)
+  const { data: invoices = [] } = useInvoices()
   const deleteChallan = useDeleteChallan()
   const setChallanStatus = useSetChallanStatus()
   const reopenChallan = useReopenChallan()
@@ -384,11 +388,13 @@ function DcForm({ dc, onClose }: { dc: DeliveryChallan | null; onClose: () => vo
   const createChallan = useCreateChallan()
   const updateChallan = useUpdateChallan()
   const saving = createChallan.isPending || updateChallan.isPending
-  const companies = useDb((db) => db.companies.filter((c) => c.active || c.id === dc?.companyId))
-  const jobs = useDb((db) => db.jobs)
-  const products = useDb((db) => db.products.filter((p) => p.active))
-  const settings = useDb((db) => db.settings)
-  const units = settings.units
+  const { data: allCompanies = [] } = useCompanies()
+  const companies = allCompanies.filter((c) => c.active || c.id === dc?.companyId)
+  const { data: jobs = [] } = useJobs()
+  const { data: allProducts = [] } = useProducts()
+  const products = allProducts.filter((p) => p.active)
+  const units = useSettings().data?.units ?? DEFAULT_SETTINGS.units
+  const dcNoPreview = usePreviewNo('dc')
 
   const [companyId, setCompanyId] = useState(dc?.companyId ?? companies[0]?.id ?? '')
   const [date, setDate] = useState(dc?.date ?? todayISO())
@@ -467,7 +473,7 @@ function DcForm({ dc, onClose }: { dc: DeliveryChallan | null; onClose: () => vo
     >
       {!dc && (
         <p className="mb-3 rounded-lg bg-brand-50 px-3 py-2 text-xs text-brand-700">
-          Challan number will be <b>{previewNextNo('dc', settings.numbering.dc)}</b>
+          Challan number will be <b>{dcNoPreview}</b>
         </p>
       )}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">

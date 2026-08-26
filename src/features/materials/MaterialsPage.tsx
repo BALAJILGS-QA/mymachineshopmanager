@@ -11,11 +11,19 @@ import {
 } from 'lucide-react'
 import { clsx } from 'clsx'
 import type { Material } from '@/types'
-import { useDeleteMaterial, useRemoveReceipt, useRemoveIssue } from './hooks/useMaterials'
+import {
+  useDeleteMaterial,
+  useRemoveReceipt,
+  useRemoveIssue,
+  useMaterials,
+  useReceipts,
+  useIssues,
+  useAdjustments,
+} from './hooks/useMaterials'
+import { useChallans } from '@/features/deliveries/hooks/useDeliveries'
+import { useCompanies } from '@/features/companies/hooks/useCompanies'
 import { toUserMessage } from '@/lib/api/errors'
-import { useDb } from '@/data/store'
-import { materialStock, materialStockValue, SHOP_SCOPE } from '@/data/computations'
-import { getDb } from '@/data/db'
+import { materialStock, materialStockValue, SHOP_SCOPE, type StockDb } from '@/data/computations'
 import { currency, fmtDate, qty } from '@/lib/format'
 import { downloadCsv } from '@/lib/csv'
 import { PageHeader, ResponsiveTable } from '@/components/common/PageHeader'
@@ -46,14 +54,24 @@ export function ownerMatch(rowCompanyId: string | undefined, filter: string): bo
   return rowCompanyId === filter
 }
 
+// The collections the stock derivations read, assembled from Supabase queries.
+function useStockData() {
+  const { data: materials = [] } = useMaterials()
+  const { data: receipts = [] } = useReceipts()
+  const { data: issues = [] } = useIssues()
+  const { data: adjustments = [] } = useAdjustments()
+  const db: StockDb = { materials, receipts, issues, adjustments }
+  return { materials, receipts, issues, adjustments, db }
+}
+
 export function MaterialsPage() {
   const [tab, setTab] = useState<Tab>('stock')
   const [dialog, setDialog] = useState<Dialog>(null)
   const [editMaterial, setEditMaterial] = useState<Material | null>(null)
   const [fCompany, setFCompany] = useState('')
   const [fMaterial, setFMaterial] = useState('')
-  const companies = useDb((db) => db.companies)
-  const materials = useDb((db) => db.materials)
+  const { data: companies = [] } = useCompanies()
+  const { data: materials = [] } = useMaterials()
 
   return (
     <div>
@@ -170,13 +188,12 @@ export function MaterialsPage() {
 
 // ------------------------------------------------------------------- Stock tab
 function StockTab({ fCompany, fMaterial }: { fCompany: string; fMaterial: string }) {
-  const materialsAll = useDb((db) => db.materials)
+  const { materials: materialsAll, receipts, issues, adjustments, db } = useStockData()
   // Recompute whenever any stock txn changes.
-  const stampKey = useDb((db) => db.receipts.length + db.issues.length + db.adjustments.length)
+  const stampKey = receipts.length + issues.length + adjustments.length
   const companyName = useCompanyName()
 
   const rows = useMemo(() => {
-    const db = getDb()
     const materials = fMaterial ? materialsAll.filter((m) => m.id === fMaterial) : materialsAll
     return materials.map((m) => {
       const overall = materialStock(db, m.id)
@@ -326,10 +343,10 @@ function whenSort(dateOnly: string, createdAt?: string): number {
 const DC_TONE: Record<string, string> = { Open: 'amber', Invoiced: 'green', Cancelled: 'red' }
 
 function LedgerTab({ fCompany, fMaterial }: { fCompany: string; fMaterial: string }) {
-  const receipts = useDb((db) => db.receipts)
-  const issues = useDb((db) => db.issues)
-  const adjustments = useDb((db) => db.adjustments)
-  const challans = useDb((db) => db.deliveryChallans)
+  const { data: receipts = [] } = useReceipts()
+  const { data: issues = [] } = useIssues()
+  const { data: adjustments = [] } = useAdjustments()
+  const { data: challans = [] } = useChallans()
   const materialName = useMaterialName()
   const companyName = useCompanyName()
   const jobNo = useJobNo()
@@ -465,7 +482,7 @@ function LedgerTab({ fCompany, fMaterial }: { fCompany: string; fMaterial: strin
 
 // --------------------------------------------------------------- Materials tab
 function MaterialsTab({ onAdd, onEdit }: { onAdd: () => void; onEdit: (m: Material) => void }) {
-  const materials = useDb((db) => db.materials)
+  const { data: materials = [] } = useMaterials()
   const deleteMaterial = useDeleteMaterial()
   const toast = useToast()
   const confirm = useConfirm()
@@ -546,7 +563,7 @@ function MaterialsTab({ onAdd, onEdit }: { onAdd: () => void; onEdit: (m: Materi
 
 // ---------------------------------------------------------------- Receipts tab
 function ReceiptsTab({ fCompany, fMaterial }: { fCompany: string; fMaterial: string }) {
-  const allReceipts = useDb((db) => db.receipts)
+  const { data: allReceipts = [] } = useReceipts()
   const receipts = useMemo(
     () =>
       allReceipts.filter(
@@ -630,7 +647,7 @@ function ReceiptsTab({ fCompany, fMaterial }: { fCompany: string; fMaterial: str
 
 // ------------------------------------------------------------------ Issues tab
 function IssuesTab({ fCompany, fMaterial }: { fCompany: string; fMaterial: string }) {
-  const allIssues = useDb((db) => db.issues)
+  const { data: allIssues = [] } = useIssues()
   const issues = useMemo(
     () =>
       allIssues.filter(
@@ -707,7 +724,7 @@ function IssuesTab({ fCompany, fMaterial }: { fCompany: string; fMaterial: strin
 
 // ------------------------------------------------------------- Adjustments tab
 function AdjustmentsTab({ fCompany, fMaterial }: { fCompany: string; fMaterial: string }) {
-  const allAdjustments = useDb((db) => db.adjustments)
+  const { data: allAdjustments = [] } = useAdjustments()
   const adjustments = useMemo(
     () =>
       allAdjustments.filter(

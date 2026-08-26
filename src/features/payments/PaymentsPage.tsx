@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { Download, Plus, Trash2, Wallet } from 'lucide-react'
-import { useDb } from '@/data/store'
 import { usePayments, useDeletePayment } from './hooks/usePayments'
+import { useInvoices } from '@/features/invoices/hooks/useInvoices'
 import { toUserMessage } from '@/lib/api/errors'
 import { currency, fmtDate } from '@/lib/format'
 import { downloadCsv } from '@/lib/csv'
@@ -22,7 +22,7 @@ import { PaymentForm } from './PaymentForm'
 
 export function PaymentsPage() {
   const { data: payments = [], isLoading } = usePayments()
-  const invoices = useDb((db) => db.invoices)
+  const { data: invoices = [] } = useInvoices()
   const deletePayment = useDeletePayment()
   const companyName = useCompanyName()
   const toast = useToast()

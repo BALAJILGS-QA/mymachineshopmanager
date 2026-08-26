@@ -1,7 +1,7 @@
 import { Search } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { Card, Select } from '@/components/ui/primitives'
-import { useDb } from '@/data/store'
+import { useCompanies } from '@/features/companies/hooks/useCompanies'
 
 export function FilterBar({ children }: { children: ReactNode }) {
   return (
@@ -40,7 +40,7 @@ export function CompanyFilter({
   value: string
   onChange: (v: string) => void
 }) {
-  const companies = useDb((db) => db.companies)
+  const { data: companies = [] } = useCompanies()
   return (
     <div>
       <label className="label">Company</label>
@@ -71,7 +71,12 @@ export function DateRangeFilter({
     <>
       <div>
         <label className="label">From</label>
-        <input type="date" className="input" value={from} onChange={(e) => onFrom(e.target.value)} />
+        <input
+          type="date"
+          className="input"
+          value={from}
+          onChange={(e) => onFrom(e.target.value)}
+        />
       </div>
       <div>
         <label className="label">To</label>

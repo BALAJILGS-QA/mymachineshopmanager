@@ -1,10 +1,9 @@
-import { useRef, useState } from 'react'
+import { useState } from 'react'
 import {
   ArrowLeft,
   ChevronRight,
   Coins,
   Database,
-  Download,
   Hash,
   KeyRound,
   Layers,
@@ -14,22 +13,18 @@ import {
   Save,
   Store,
   Tags,
-  Upload,
-  Wand2,
   Trash2,
   type LucideIcon,
 } from 'lucide-react'
-import { useDb } from '@/data/store'
 import {
+  useSettings,
   useUpdateSettings,
   useProducts,
   useCreateProduct,
   useDeleteProduct,
 } from './hooks/useSettings'
 import { toUserMessage } from '@/lib/api/errors'
-import { exportDb, importDb, resetDb, saveDb } from '@/data/db'
-import { buildInitialDb } from '@/data/seed'
-import { loadDemoData } from '@/data/demo'
+import { DEFAULT_SETTINGS } from '@/data/seed'
 import { currency, setCurrency } from '@/lib/format'
 import { PageHeader } from '@/components/common/PageHeader'
 import { Card, Field, Input, SectionTitle, Select, Textarea } from '@/components/ui/primitives'
@@ -82,14 +77,13 @@ const MENU: { key: SectionKey; title: string; desc: string; icon: LucideIcon }[]
     icon: Hash,
   },
   { key: 'password', title: 'Change Password', desc: 'Login credential', icon: KeyRound },
-  { key: 'data', title: 'Data & Backup', desc: 'Export, restore, reset', icon: Database },
+  { key: 'data', title: 'Data & Backup', desc: 'Cloud storage information', icon: Database },
 ]
 
 export function SettingsPage() {
-  const settings = useDb((db) => db.settings)
+  const settings = useSettings().data ?? DEFAULT_SETTINGS
   const updateSettings = useUpdateSettings()
   const toast = useToast()
-  const confirm = useConfirm()
   const [section, setSection] = useState<SectionKey | null>(null)
 
   const active = MENU.find((m) => m.key === section)
@@ -143,7 +137,7 @@ export function SettingsPage() {
       case 'password':
         return <ChangePassword />
       case 'data':
-        return <DataManagement toast={toast} confirm={confirm} />
+        return <DataManagement />
       default:
         return null
     }
@@ -197,7 +191,7 @@ export function SettingsPage() {
 // invoice and delivery-challan line items.
 function ProductsCard() {
   const { data: products = [] } = useProducts()
-  const units = useDb((db) => db.settings.units)
+  const units = useSettings().data?.units ?? DEFAULT_SETTINGS.units
   const createProduct = useCreateProduct()
   const deleteProduct = useDeleteProduct()
   const toast = useToast()
@@ -300,7 +294,7 @@ function ProductsCard() {
 }
 
 function CompanyProfile() {
-  const company = useDb((db) => db.settings.company)
+  const company = useSettings().data?.company ?? DEFAULT_SETTINGS.company
   const updateSettings = useUpdateSettings()
   const toast = useToast()
   const [form, setForm] = useState(company)
@@ -385,7 +379,7 @@ function CompanyProfile() {
 }
 
 function FinancialSettings() {
-  const settings = useDb((db) => db.settings)
+  const settings = useSettings().data ?? DEFAULT_SETTINGS
   const updateSettings = useUpdateSettings()
   const toast = useToast()
   const [form, setForm] = useState({
@@ -484,7 +478,7 @@ function FinancialSettings() {
 }
 
 function NumberingSettings() {
-  const numbering = useDb((db) => db.settings.numbering)
+  const numbering = useSettings().data?.numbering ?? DEFAULT_SETTINGS.numbering
   const updateSettings = useUpdateSettings()
   const toast = useToast()
   const [form, setForm] = useState(numbering)
@@ -600,98 +594,16 @@ function ChangePassword() {
   )
 }
 
-function DataManagement({
-  toast,
-  confirm,
-}: {
-  toast: ReturnType<typeof useToast>
-  confirm: ReturnType<typeof useConfirm>
-}) {
-  const fileRef = useRef<HTMLInputElement>(null)
-
-  function backup() {
-    const blob = new Blob([exportDb()], { type: 'application/json' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `cnc-shop-backup-${new Date().toISOString().slice(0, 10)}.json`
-    a.click()
-    URL.revokeObjectURL(url)
-    toast.success('Backup downloaded')
-  }
-
-  async function restore(file: File) {
-    try {
-      const text = await file.text()
-      importDb(text)
-      toast.success('Backup restored')
-      setTimeout(() => window.location.reload(), 400)
-    } catch {
-      toast.error('Invalid backup file')
-    }
-  }
-
-  async function demo() {
-    const ok = await confirm({
-      title: 'Load demo data',
-      message: 'This replaces all current data with a realistic sample dataset. Continue?',
-      danger: true,
-      confirmLabel: 'Load demo',
-    })
-    if (!ok) return
-    loadDemoData()
-    toast.success('Demo data loaded')
-    setTimeout(() => window.location.reload(), 400)
-  }
-
-  async function reset() {
-    const ok = await confirm({
-      title: 'Reset all data',
-      message: 'This permanently deletes all data and restores the initial companies. Continue?',
-      danger: true,
-      confirmLabel: 'Reset everything',
-    })
-    if (!ok) return
-    resetDb()
-    saveDb(buildInitialDb())
-    toast.success('Data reset')
-    setTimeout(() => window.location.reload(), 400)
-  }
-
+function DataManagement() {
   return (
     <Card className="p-4 lg:col-span-2">
-      <SectionTitle
-        title="Data & Backup"
-        subtitle="Data is stored locally in this browser. Back up regularly before treating it as your only record."
-      />
-      <div className="mt-3 flex flex-wrap gap-2">
-        <button className="btn-secondary" onClick={backup}>
-          <Download size={16} /> Download backup (JSON)
-        </button>
-        <button className="btn-secondary" onClick={() => fileRef.current?.click()}>
-          <Upload size={16} /> Restore backup
-        </button>
-        <button className="btn-secondary" onClick={demo}>
-          <Wand2 size={16} /> Load demo data
-        </button>
-        <button className="btn-danger" onClick={reset}>
-          <Trash2 size={16} /> Reset all data
-        </button>
-        <input
-          ref={fileRef}
-          type="file"
-          accept="application/json"
-          className="hidden"
-          onChange={(e) => {
-            const f = e.target.files?.[0]
-            if (f) void restore(f)
-            e.target.value = ''
-          }}
-        />
-      </div>
-      <p className="mt-3 flex items-center gap-1.5 text-2xs text-slate-500">
-        <Database size={13} /> For a hosted multi-user deployment, connect the repository layer to
-        Supabase (see docs/supabase-schema.sql).
+      <SectionTitle title="Data & Backup" subtitle="Your data is stored securely in the cloud." />
+      <p className="mt-3 flex items-start gap-2 text-xs text-slate-600">
+        <Database size={16} className="mt-0.5 shrink-0" />
+        <span>
+          All records are saved to the hosted Supabase database in real time. Point-in-time backups
+          and restores are managed from your Supabase project dashboard.
+        </span>
       </p>
     </Card>
   )

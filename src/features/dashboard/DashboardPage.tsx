@@ -15,19 +15,29 @@ import {
   CheckCircle2,
 } from 'lucide-react'
 import { format, startOfMonth } from 'date-fns'
-import { useDb } from '@/data/store'
-import { getDb } from '@/data/db'
 import {
   companyMaterialValue,
   computeInvoice,
   materialStock,
   totalRawMaterialValue,
+  type StockDb,
 } from '@/data/computations'
 import { currency, fmtDate, qty } from '@/lib/format'
 import { Card, Select } from '@/components/ui/primitives'
 import { PageHeader } from '@/components/common/PageHeader'
 import { JobStatusBadge, PriorityBadge } from '@/components/common/status'
 import { useCompanyName, useMaterialName } from '@/features/shared/lookups'
+import { useJobs } from '@/features/jobs/hooks/useJobs'
+import { useInvoices } from '@/features/invoices/hooks/useInvoices'
+import { usePayments } from '@/features/payments/hooks/usePayments'
+import { useExpenses } from '@/features/expenses/hooks/useExpenses'
+import { useCompanies } from '@/features/companies/hooks/useCompanies'
+import {
+  useMaterials,
+  useReceipts,
+  useIssues,
+  useAdjustments,
+} from '@/features/materials/hooks/useMaterials'
 import {
   Bar,
   BarChart,
@@ -55,40 +65,77 @@ function lastMonths(n: number) {
 }
 
 export function DashboardPage() {
-  const jobs = useDb((db) => db.jobs)
-  const invoices = useDb((db) => db.invoices)
-  const payments = useDb((db) => db.payments)
-  const expenses = useDb((db) => db.expenses)
-  const issues = useDb((db) => db.issues)
-  const materials = useDb((db) => db.materials)
-  const companies = useDb((db) => db.companies)
-  const stamp = useDb((db) => db.receipts.length + db.issues.length + db.adjustments.length)
+  const { data: jobs = [] } = useJobs()
+  const { data: invoices = [] } = useInvoices()
+  const { data: payments = [] } = usePayments()
+  const { data: expenses = [] } = useExpenses()
+  const { data: issues = [] } = useIssues()
+  const { data: materials = [] } = useMaterials()
+  const { data: companies = [] } = useCompanies()
+  const { data: receipts = [] } = useReceipts()
+  const { data: adjustments = [] } = useAdjustments()
+  const stockDb: StockDb = { materials, receipts, issues, adjustments }
+  const stamp = receipts.length + issues.length + adjustments.length
   const companyName = useCompanyName()
   const materialName = useMaterialName()
 
   const [company, setCompany] = useState('')
   const monthStart = format(startOfMonth(new Date()), 'yyyy-MM-dd')
 
-  const jobsF = useMemo(() => (company ? jobs.filter((j) => j.companyId === company) : jobs), [jobs, company])
-  const invoicesF = useMemo(() => (company ? invoices.filter((i) => i.companyId === company) : invoices), [invoices, company])
-  const paymentsF = useMemo(() => (company ? payments.filter((p) => p.companyId === company) : payments), [payments, company])
-  const expensesF = useMemo(() => (company ? expenses.filter((e) => e.companyId === company) : expenses), [expenses, company])
-  const issuesF = useMemo(() => (company ? issues.filter((i) => i.companyId === company) : issues), [issues, company])
+  const jobsF = useMemo(
+    () => (company ? jobs.filter((j) => j.companyId === company) : jobs),
+    [jobs, company],
+  )
+  const invoicesF = useMemo(
+    () => (company ? invoices.filter((i) => i.companyId === company) : invoices),
+    [invoices, company],
+  )
+  const paymentsF = useMemo(
+    () => (company ? payments.filter((p) => p.companyId === company) : payments),
+    [payments, company],
+  )
+  const expensesF = useMemo(
+    () => (company ? expenses.filter((e) => e.companyId === company) : expenses),
+    [expenses, company],
+  )
+  const issuesF = useMemo(
+    () => (company ? issues.filter((i) => i.companyId === company) : issues),
+    [issues, company],
+  )
 
   const kpi = useMemo(() => {
-    const db = getDb()
+    const db = stockDb
     const open = jobsF.filter((j) => ['Pending', 'Draft'].includes(j.status)).length
     const inProd = jobsF.filter((j) => j.status === 'In Progress').length
     const monthInvoices = invoicesF.filter((i) => i.status !== 'Cancelled' && i.date >= monthStart)
-    const invoicedThisMonth = monthInvoices.reduce((s, i) => s + computeInvoice(i, payments).total, 0)
-    const gstThisMonth = monthInvoices.reduce((s, i) => s + computeInvoice(i, payments).taxAmount, 0)
+    const invoicedThisMonth = monthInvoices.reduce(
+      (s, i) => s + computeInvoice(i, payments).total,
+      0,
+    )
+    const gstThisMonth = monthInvoices.reduce(
+      (s, i) => s + computeInvoice(i, payments).taxAmount,
+      0,
+    )
     const rawValue = company ? companyMaterialValue(db, company) : totalRawMaterialValue(db)
     const pending = invoicesF
       .filter((i) => i.status !== 'Cancelled')
       .reduce((s, i) => s + computeInvoice(i, payments).outstanding, 0)
-    const paymentsThisMonth = paymentsF.filter((p) => p.date >= monthStart).reduce((s, p) => s + p.amount, 0)
-    const expensesThisMonth = expensesF.filter((e) => e.date >= monthStart).reduce((s, e) => s + e.amount, 0)
-    return { open, inProd, invoicedThisMonth, gstThisMonth, rawValue, pending, paymentsThisMonth, expensesThisMonth }
+    const paymentsThisMonth = paymentsF
+      .filter((p) => p.date >= monthStart)
+      .reduce((s, p) => s + p.amount, 0)
+    const expensesThisMonth = expensesF
+      .filter((e) => e.date >= monthStart)
+      .reduce((s, e) => s + e.amount, 0)
+    return {
+      open,
+      inProd,
+      invoicedThisMonth,
+      gstThisMonth,
+      rawValue,
+      pending,
+      paymentsThisMonth,
+      expensesThisMonth,
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [jobsF, invoicesF, paymentsF, expensesF, payments, stamp, monthStart, company])
 
@@ -140,7 +187,9 @@ export function DashboardPage() {
 
   const expenseByCategory = useMemo(() => {
     const map = new Map<string, number>()
-    expensesF.filter((e) => e.date >= monthStart).forEach((e) => map.set(e.category, (map.get(e.category) ?? 0) + e.amount))
+    expensesF
+      .filter((e) => e.date >= monthStart)
+      .forEach((e) => map.set(e.category, (map.get(e.category) ?? 0) + e.amount))
     return [...map.entries()].map(([name, value]) => ({ name, value }))
   }, [expensesF, monthStart])
 
@@ -157,7 +206,7 @@ export function DashboardPage() {
   )
 
   const lowStock = useMemo(() => {
-    const db = getDb()
+    const db = stockDb
     return materials
       .map((m) => ({ m, bal: materialStock(db, m.id, company || undefined).balance }))
       .filter(({ m, bal }) => bal < 0 || (m.reorderLevel !== undefined && bal <= m.reorderLevel))
@@ -165,8 +214,14 @@ export function DashboardPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [materials, stamp, company])
 
-  const recentPayments = useMemo(() => [...paymentsF].sort((a, b) => (a.date < b.date ? 1 : -1)).slice(0, 5), [paymentsF])
-  const recentIssues = useMemo(() => [...issuesF].sort((a, b) => (a.date < b.date ? 1 : -1)).slice(0, 5), [issuesF])
+  const recentPayments = useMemo(
+    () => [...paymentsF].sort((a, b) => (a.date < b.date ? 1 : -1)).slice(0, 5),
+    [paymentsF],
+  )
+  const recentIssues = useMemo(
+    () => [...issuesF].sort((a, b) => (a.date < b.date ? 1 : -1)).slice(0, 5),
+    [issuesF],
+  )
 
   const scopeLabel = company ? companyName(company) : 'All companies'
 
@@ -194,20 +249,77 @@ export function DashboardPage() {
 
       {/* KPI cards */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-4">
-        <Kpi icon={FileText} tone="blue" label="Invoiced (month)" value={currency(kpi.invoicedThisMonth)} to="/app/invoices" />
-        <Kpi icon={Percent} tone="violet" label="GST (month)" value={currency(kpi.gstThisMonth)} to="/app/reports" />
-        <Kpi icon={Wallet} tone="green" label="Payments (month)" value={currency(kpi.paymentsThisMonth)} to="/app/payments" />
-        <Kpi icon={IndianRupee} tone="red" label="Pending Payments" value={currency(kpi.pending)} to="/app/invoices" />
-        <Kpi icon={Receipt} tone="amber" label="Expenses (month)" value={currency(kpi.expensesThisMonth)} to="/app/expenses" />
-        <Kpi icon={ClipboardList} tone="amber" label="Open Job Orders" value={String(kpi.open)} to="/app/jobs" />
-        <Kpi icon={Factory} tone="blue" label="In Production" value={String(kpi.inProd)} to="/app/production" />
-        <Kpi icon={PackageX} tone="violet" label="Raw Material Value" value={currency(kpi.rawValue)} to="/app/materials" />
-        <Kpi icon={CheckCircle2} tone="green" label="Net (month)" value={currency(kpi.paymentsThisMonth - kpi.expensesThisMonth)} to="/app/reports" />
+        <Kpi
+          icon={FileText}
+          tone="blue"
+          label="Invoiced (month)"
+          value={currency(kpi.invoicedThisMonth)}
+          to="/app/invoices"
+        />
+        <Kpi
+          icon={Percent}
+          tone="violet"
+          label="GST (month)"
+          value={currency(kpi.gstThisMonth)}
+          to="/app/reports"
+        />
+        <Kpi
+          icon={Wallet}
+          tone="green"
+          label="Payments (month)"
+          value={currency(kpi.paymentsThisMonth)}
+          to="/app/payments"
+        />
+        <Kpi
+          icon={IndianRupee}
+          tone="red"
+          label="Pending Payments"
+          value={currency(kpi.pending)}
+          to="/app/invoices"
+        />
+        <Kpi
+          icon={Receipt}
+          tone="amber"
+          label="Expenses (month)"
+          value={currency(kpi.expensesThisMonth)}
+          to="/app/expenses"
+        />
+        <Kpi
+          icon={ClipboardList}
+          tone="amber"
+          label="Open Job Orders"
+          value={String(kpi.open)}
+          to="/app/jobs"
+        />
+        <Kpi
+          icon={Factory}
+          tone="blue"
+          label="In Production"
+          value={String(kpi.inProd)}
+          to="/app/production"
+        />
+        <Kpi
+          icon={PackageX}
+          tone="violet"
+          label="Raw Material Value"
+          value={currency(kpi.rawValue)}
+          to="/app/materials"
+        />
+        <Kpi
+          icon={CheckCircle2}
+          tone="green"
+          label="Net (month)"
+          value={currency(kpi.paymentsThisMonth - kpi.expensesThisMonth)}
+          to="/app/reports"
+        />
       </div>
 
       {/* Charts row 1 */}
       <div className="mt-4 grid grid-cols-1 gap-3 lg:grid-cols-3">
-        <ChartCard title="Invoices raised vs Payments received (6 months)" className="lg:col-span-2">
+        <ChartCard
+          title="Invoices raised vs Payments received (6 months)"
+          className="lg:col-span-2"
+        >
           <BarChart data={invVsPay} barGap={2}>
             <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#eef2f7" />
             <XAxis dataKey="label" tick={{ fontSize: 11 }} tickLine={false} axisLine={false} />
@@ -218,9 +330,20 @@ export function DashboardPage() {
             <Bar dataKey="received" name="Received" fill="#587200" radius={[3, 3, 0, 0]} />
           </BarChart>
         </ChartCard>
-        <ChartCard title="Expenses by category (month)" empty={expenseByCategory.length === 0} emptyText="No expenses this month">
+        <ChartCard
+          title="Expenses by category (month)"
+          empty={expenseByCategory.length === 0}
+          emptyText="No expenses this month"
+        >
           <PieChart>
-            <Pie data={expenseByCategory} dataKey="value" nameKey="name" innerRadius={40} outerRadius={72} paddingAngle={2}>
+            <Pie
+              data={expenseByCategory}
+              dataKey="value"
+              nameKey="name"
+              innerRadius={40}
+              outerRadius={72}
+              paddingAngle={2}
+            >
               {expenseByCategory.map((_, i) => (
                 <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
               ))}
@@ -232,7 +355,11 @@ export function DashboardPage() {
 
       {/* Charts row 2 */}
       <div className="mt-3 grid grid-cols-1 gap-3 lg:grid-cols-2">
-        <ChartCard title="Materials dispatched per month (qty issued)" empty={dispatched.every((d) => d.qty === 0)} emptyText="No material issues in this period">
+        <ChartCard
+          title="Materials dispatched per month (qty issued)"
+          empty={dispatched.every((d) => d.qty === 0)}
+          emptyText="No material issues in this period"
+        >
           <BarChart data={dispatched}>
             <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#eef2f7" />
             <XAxis dataKey="label" tick={{ fontSize: 11 }} tickLine={false} axisLine={false} />
@@ -281,7 +408,11 @@ export function DashboardPage() {
         </Card>
 
         <Card className="p-4">
-          <ListHeader title="Low / negative stock" to="/app/materials" icon={<AlertTriangle size={15} className="text-amber-500" />} />
+          <ListHeader
+            title="Low / negative stock"
+            to="/app/materials"
+            icon={<AlertTriangle size={15} className="text-amber-500" />}
+          />
           {lowStock.length === 0 ? (
             <Empty text="All stock above reorder levels" />
           ) : (
@@ -290,9 +421,13 @@ export function DashboardPage() {
                 <div key={m.id} className="flex items-center justify-between py-2">
                   <div>
                     <p className="text-sm font-medium text-slate-800">{m.name}</p>
-                    <p className="text-2xs text-slate-600">Reorder at {m.reorderLevel ?? 0} {m.unit}</p>
+                    <p className="text-2xs text-slate-600">
+                      Reorder at {m.reorderLevel ?? 0} {m.unit}
+                    </p>
                   </div>
-                  <span className={`text-sm font-semibold ${bal < 0 ? 'text-red-600' : 'text-amber-600'}`}>
+                  <span
+                    className={`text-sm font-semibold ${bal < 0 ? 'text-red-600' : 'text-amber-600'}`}
+                  >
                     {qty(bal)} {m.unit}
                   </span>
                 </div>
@@ -311,9 +446,13 @@ export function DashboardPage() {
                 <div key={p.id} className="flex items-center justify-between py-2">
                   <div>
                     <p className="text-sm font-medium text-slate-800">{companyName(p.companyId)}</p>
-                    <p className="text-2xs text-slate-600">{fmtDate(p.date)} · {p.method}</p>
+                    <p className="text-2xs text-slate-600">
+                      {fmtDate(p.date)} · {p.method}
+                    </p>
                   </div>
-                  <span className="text-sm font-semibold text-emerald-600">{currency(p.amount)}</span>
+                  <span className="text-sm font-semibold text-emerald-600">
+                    {currency(p.amount)}
+                  </span>
                 </div>
               ))}
             </div>
@@ -321,7 +460,11 @@ export function DashboardPage() {
         </Card>
 
         <Card className="p-4">
-          <ListHeader title="Recent material dispatches" to="/app/materials" icon={<Send size={15} className="text-violet-500" />} />
+          <ListHeader
+            title="Recent material dispatches"
+            to="/app/materials"
+            icon={<Send size={15} className="text-violet-500" />}
+          />
           {recentIssues.length === 0 ? (
             <Empty text="No material issues yet" />
           ) : (
@@ -329,10 +472,16 @@ export function DashboardPage() {
               {recentIssues.map((it) => (
                 <div key={it.id} className="flex items-center justify-between py-2">
                   <div>
-                    <p className="text-sm font-medium text-slate-800">{materialName(it.materialId)}</p>
-                    <p className="text-2xs text-slate-600">{fmtDate(it.date)} · {it.issueNo}</p>
+                    <p className="text-sm font-medium text-slate-800">
+                      {materialName(it.materialId)}
+                    </p>
+                    <p className="text-2xs text-slate-600">
+                      {fmtDate(it.date)} · {it.issueNo}
+                    </p>
                   </div>
-                  <span className="text-sm font-semibold text-slate-700">{qty(it.quantity)} {it.unit}</span>
+                  <span className="text-sm font-semibold text-slate-700">
+                    {qty(it.quantity)} {it.unit}
+                  </span>
                 </div>
               ))}
             </div>
@@ -366,8 +515,13 @@ function Kpi({
   to: string
 }) {
   return (
-    <Link to={to} className="card p-3.5 transition duration-200 hover:-translate-y-0.5 hover:shadow-md">
-      <div className={`mb-2 inline-flex h-8 w-8 items-center justify-center rounded-lg ${TONES[tone]}`}>
+    <Link
+      to={to}
+      className="card p-3.5 transition duration-200 hover:-translate-y-0.5 hover:shadow-md"
+    >
+      <div
+        className={`mb-2 inline-flex h-8 w-8 items-center justify-center rounded-lg ${TONES[tone]}`}
+      >
         <Icon size={17} />
       </div>
       <p className="text-lg font-bold leading-tight text-slate-900">{value}</p>
@@ -412,7 +566,10 @@ function ListHeader({ title, to, icon }: { title: string; to: string; icon?: Rea
         {icon}
         {title}
       </h3>
-      <Link to={to} className="flex items-center gap-0.5 text-2xs font-medium text-brand-600 hover:underline">
+      <Link
+        to={to}
+        className="flex items-center gap-0.5 text-2xs font-medium text-brand-600 hover:underline"
+      >
         View all <ArrowRight size={12} />
       </Link>
     </div>

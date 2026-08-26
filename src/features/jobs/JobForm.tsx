@@ -1,9 +1,10 @@
 import { useState } from 'react'
 import type { JobOrder, JobPriority, JobStatus, MaterialOwnerType } from '@/types'
-import { stockRepo, previewNextNo } from '@/data/repo'
 import { SHOP_SCOPE } from '@/data/computations'
-import { useDb } from '@/data/store'
 import { useCreateJob, useUpdateJob } from './hooks/useJobs'
+import { useCompanies } from '@/features/companies/hooks/useCompanies'
+import { useMaterials, useMaterialBalance } from '@/features/materials/hooks/useMaterials'
+import { usePreviewNo } from '@/features/shared/usePreviewNo'
 import { toUserMessage } from '@/lib/api/errors'
 import { todayISO, qty } from '@/lib/format'
 import { Field, Input, Select, Textarea } from '@/components/ui/primitives'
@@ -16,9 +17,11 @@ export function JobForm({ job, onClose }: { job: JobOrder | null; onClose: () =>
   const createJob = useCreateJob()
   const updateJob = useUpdateJob()
   const saving = createJob.isPending || updateJob.isPending
-  const companies = useDb((db) => db.companies.filter((c) => c.active || c.id === job?.companyId))
-  const materials = useDb((db) => db.materials.filter((m) => m.active))
-  const settings = useDb((db) => db.settings)
+  const { data: allCompanies = [] } = useCompanies()
+  const companies = allCompanies.filter((c) => c.active || c.id === job?.companyId)
+  const { data: allMaterials = [] } = useMaterials()
+  const materials = allMaterials.filter((m) => m.active)
+  const jobNoPreview = usePreviewNo('job')
 
   const [form, setForm] = useState({
     companyId: job?.companyId ?? companies[0]?.id ?? '',
@@ -37,6 +40,9 @@ export function JobForm({ job, onClose }: { job: JobOrder | null; onClose: () =>
     status: job?.status ?? ('Pending' as JobStatus),
     notes: job?.notes ?? '',
   })
+
+  const consumeScope = form.materialOwner === 'Company' ? form.companyId : SHOP_SCOPE
+  const { data: scopeBalance = 0 } = useMaterialBalance(form.materialId, consumeScope)
 
   function set<K extends keyof typeof form>(k: K, v: (typeof form)[K]) {
     setForm((f) => ({ ...f, [k]: v }))
@@ -98,7 +104,7 @@ export function JobForm({ job, onClose }: { job: JobOrder | null; onClose: () =>
     >
       {!job && (
         <p className="mb-3 rounded-lg bg-brand-50 px-3 py-2 text-xs text-brand-700">
-          Job number will be <b>{previewNextNo('job', settings.numbering.job)}</b>
+          Job number will be <b>{jobNoPreview}</b>
         </p>
       )}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -146,10 +152,9 @@ export function JobForm({ job, onClose }: { job: JobOrder | null; onClose: () =>
               label="Material Qty to Consume"
               hint={(() => {
                 const m = materials.find((x) => x.id === form.materialId)
-                const scope = form.materialOwner === 'Company' ? form.companyId : SHOP_SCOPE
                 const bal =
                   form.materialId && (form.materialOwner === 'Shop' || form.companyId)
-                    ? stockRepo.balance(form.materialId, scope).balance
+                    ? scopeBalance
                     : 0
                 return m
                   ? `In ${form.materialOwner === 'Company' ? 'customer' : 'own'} stock: ${qty(bal)} ${m.unit} — issued on create`

@@ -1,13 +1,14 @@
 import { useMemo, useState } from 'react'
 import { Building2, Pencil, Plus, Search, Trash2 } from 'lucide-react'
 import type { Company } from '@/types'
-import { useDb } from '@/data/store'
 import {
   useCompanies,
   useCreateCompany,
   useUpdateCompany,
   useDeleteCompany,
 } from './hooks/useCompanies'
+import { useJobs } from '@/features/jobs/hooks/useJobs'
+import { useInvoices } from '@/features/invoices/hooks/useInvoices'
 import { toUserMessage } from '@/lib/api/errors'
 import { PageHeader, ResponsiveTable } from '@/components/common/PageHeader'
 import { Badge, Card, EmptyState, Field, Input, Textarea } from '@/components/ui/primitives'
@@ -18,8 +19,8 @@ import { useConfirm } from '@/components/ui/ConfirmDialog'
 
 export function CompaniesPage() {
   const { data: companies = [], isLoading } = useCompanies()
-  const jobs = useDb((db) => db.jobs)
-  const invoices = useDb((db) => db.invoices)
+  const { data: jobs = [] } = useJobs()
+  const { data: invoices = [] } = useInvoices()
   const deleteCompany = useDeleteCompany()
   const toast = useToast()
   const confirm = useConfirm()

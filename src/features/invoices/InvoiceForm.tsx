@@ -3,11 +3,14 @@ import { clsx } from 'clsx'
 import { Plus, Trash2 } from 'lucide-react'
 import type { Invoice, InvoiceLine } from '@/types'
 import { useCreateInvoice, useUpdateInvoice } from './hooks/useInvoices'
+import { useCompanies } from '@/features/companies/hooks/useCompanies'
+import { useJobs } from '@/features/jobs/hooks/useJobs'
+import { useProducts, useSettings } from '@/features/settings/hooks/useSettings'
+import { usePreviewNo } from '@/features/shared/usePreviewNo'
 import { toUserMessage } from '@/lib/api/errors'
-import { useDb } from '@/data/store'
 import { invoiceSubtotal, roundMoney } from '@/data/computations'
 import { currency, fmtDateTime, todayISO } from '@/lib/format'
-import { previewNextNo } from '@/data/repo'
+import { DEFAULT_SETTINGS } from '@/data/seed'
 import { uid } from '@/lib/id'
 import { Field, Input, Select, Textarea } from '@/components/ui/primitives'
 import { Modal } from '@/components/ui/Modal'
@@ -28,19 +31,18 @@ export function InvoiceForm({
   const createInvoice = useCreateInvoice()
   const updateInvoice = useUpdateInvoice()
   const saving = createInvoice.isPending || updateInvoice.isPending
-  const companies = useDb((db) =>
-    db.companies.filter((c) => c.active || c.id === invoice?.companyId),
-  )
-  const jobs = useDb((db) => db.jobs)
-  const products = useDb((db) => db.products.filter((p) => p.active))
-  const settings = useDb((db) => db.settings)
+  const { data: allCompanies = [] } = useCompanies()
+  const companies = allCompanies.filter((c) => c.active || c.id === invoice?.companyId)
+  const { data: jobs = [] } = useJobs()
+  const { data: allProducts = [] } = useProducts()
+  const products = allProducts.filter((p) => p.active)
+  const settings = useSettings().data ?? DEFAULT_SETTINGS
+  const invoiceNoPreview = usePreviewNo('invoice')
 
   const defCgst = settings.defaultCgstPercent ?? (settings.defaultTaxPercent || 0) / 2
   const defSgst = settings.defaultSgstPercent ?? (settings.defaultTaxPercent || 0) / 2
 
-  const [invoiceNo, setInvoiceNo] = useState(
-    invoice?.invoiceNo ?? previewNextNo('invoice', settings.numbering.invoice),
-  )
+  const [invoiceNo, setInvoiceNo] = useState(invoice?.invoiceNo ?? '')
   const [companyId, setCompanyId] = useState(
     invoice?.companyId ?? prefill?.companyId ?? companies[0]?.id ?? '',
   )
@@ -179,8 +181,12 @@ export function InvoiceForm({
       )}
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-        <Field label="Invoice Number" required hint="Auto-sequenced; editable">
-          <Input value={invoiceNo} onChange={(e) => setInvoiceNo(e.target.value)} />
+        <Field label="Invoice Number" hint="Leave blank to auto-number">
+          <Input
+            value={invoiceNo}
+            placeholder={invoiceNoPreview}
+            onChange={(e) => setInvoiceNo(e.target.value)}
+          />
         </Field>
         <Field label="Company" required>
           <Select value={companyId} onChange={(e) => setCompanyId(e.target.value)}>

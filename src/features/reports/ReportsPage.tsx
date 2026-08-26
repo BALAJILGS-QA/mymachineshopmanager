@@ -1,29 +1,32 @@
 import { useMemo, useState } from 'react'
 import { Download } from 'lucide-react'
-import { useDb } from '@/data/store'
-import { getDb } from '@/data/db'
-import { computeInvoice, jobPendingQty, materialStock, materialStockValue } from '@/data/computations'
+import {
+  computeInvoice,
+  jobPendingQty,
+  materialStock,
+  materialStockValue,
+  type StockDb,
+} from '@/data/computations'
+import { useJobs } from '@/features/jobs/hooks/useJobs'
+import { useInvoices } from '@/features/invoices/hooks/useInvoices'
+import { usePayments } from '@/features/payments/hooks/usePayments'
+import { useExpenses } from '@/features/expenses/hooks/useExpenses'
+import {
+  useMaterials,
+  useReceipts,
+  useIssues,
+  useAdjustments,
+} from '@/features/materials/hooks/useMaterials'
 import { currency, fmtDate, qty } from '@/lib/format'
 import { downloadCsv, type CsvColumn } from '@/lib/csv'
 import { PageHeader, ResponsiveTable } from '@/components/common/PageHeader'
 import { Card, Select } from '@/components/ui/primitives'
-import {
-  CompanyFilter,
-  DateRangeFilter,
-  FilterBar,
-  inRange,
-} from '@/components/common/Filters'
+import { CompanyFilter, DateRangeFilter, FilterBar, inRange } from '@/components/common/Filters'
 import { Pagination, usePagination } from '@/components/common/Pagination'
 import { useCompanyName, useMaterialName } from '@/features/shared/lookups'
 
 type ReportKey =
-  | 'jobs'
-  | 'stock'
-  | 'movement'
-  | 'invoices'
-  | 'payments'
-  | 'expenses'
-  | 'outstanding'
+  'jobs' | 'stock' | 'movement' | 'invoices' | 'payments' | 'expenses' | 'outstanding'
 
 const REPORTS: { key: ReportKey; label: string }[] = [
   { key: 'jobs', label: 'Job Order Report' },
@@ -36,7 +39,18 @@ const REPORTS: { key: ReportKey; label: string }[] = [
 ]
 
 export function ReportsPage() {
-  const db = useDb((d) => d)
+  const { data: jobs = [] } = useJobs()
+  const { data: materials = [] } = useMaterials()
+  const { data: invoices = [] } = useInvoices()
+  const { data: payments = [] } = usePayments()
+  const { data: expenses = [] } = useExpenses()
+  const { data: receipts = [] } = useReceipts()
+  const { data: issues = [] } = useIssues()
+  const { data: adjustments = [] } = useAdjustments()
+  const db = useMemo(
+    () => ({ jobs, materials, invoices, payments, expenses, receipts, issues, adjustments }),
+    [jobs, materials, invoices, payments, expenses, receipts, issues, adjustments],
+  )
   const companyName = useCompanyName()
   const materialName = useMaterialName()
 
@@ -49,11 +63,13 @@ export function ReportsPage() {
 
   const { columns, rows, footer } = useMemo(() => {
     const matchCompany = (cid?: string) => !company || cid === company
-    const store = getDb()
+    const store: StockDb = { materials, receipts, issues, adjustments }
 
     switch (report) {
       case 'jobs': {
-        const rows = db.jobs.filter((j) => matchCompany(j.companyId) && inRange(j.orderDate, from, to))
+        const rows = db.jobs.filter(
+          (j) => matchCompany(j.companyId) && inRange(j.orderDate, from, to),
+        )
         const cols: CsvColumn<(typeof rows)[number]>[] = [
           { header: 'Job No', value: (j) => j.jobNo },
           { header: 'Company', value: (j) => companyName(j.companyId) },
@@ -83,16 +99,44 @@ export function ReportsPage() {
         return { columns: cols, rows, footer: `Total value ${currency(totalVal)}` }
       }
       case 'movement': {
-        type Move = { date: string; type: string; ref: string; material: string; company: string; qty: number }
+        type Move = {
+          date: string
+          type: string
+          ref: string
+          material: string
+          company: string
+          qty: number
+        }
         const moves: Move[] = []
         db.receipts.forEach((r) =>
-          moves.push({ date: r.date, type: 'Receipt', ref: r.receiptNo, material: materialName(r.materialId), company: r.companyId ? companyName(r.companyId) : 'Shop', qty: r.quantity }),
+          moves.push({
+            date: r.date,
+            type: 'Receipt',
+            ref: r.receiptNo,
+            material: materialName(r.materialId),
+            company: r.companyId ? companyName(r.companyId) : 'Shop',
+            qty: r.quantity,
+          }),
         )
         db.issues.forEach((i) =>
-          moves.push({ date: i.date, type: 'Issue', ref: i.issueNo, material: materialName(i.materialId), company: companyName(i.companyId), qty: -i.quantity }),
+          moves.push({
+            date: i.date,
+            type: 'Issue',
+            ref: i.issueNo,
+            material: materialName(i.materialId),
+            company: companyName(i.companyId),
+            qty: -i.quantity,
+          }),
         )
         db.adjustments.forEach((a) =>
-          moves.push({ date: a.date, type: 'Adjustment', ref: a.adjNo, material: materialName(a.materialId), company: a.companyId ? companyName(a.companyId) : 'Overall', qty: a.quantity }),
+          moves.push({
+            date: a.date,
+            type: 'Adjustment',
+            ref: a.adjNo,
+            material: materialName(a.materialId),
+            company: a.companyId ? companyName(a.companyId) : 'Overall',
+            qty: a.quantity,
+          }),
         )
         const rows = moves
           .filter((m) => inRange(m.date, from, to))
@@ -124,7 +168,9 @@ export function ReportsPage() {
         return { columns: cols, rows, footer: `Invoiced ${currency(total)}` }
       }
       case 'payments': {
-        const rows = db.payments.filter((p) => matchCompany(p.companyId) && inRange(p.date, from, to))
+        const rows = db.payments.filter(
+          (p) => matchCompany(p.companyId) && inRange(p.date, from, to),
+        )
         const cols: CsvColumn<(typeof rows)[number]>[] = [
           { header: 'Payment', value: (p) => p.paymentNo },
           { header: 'Date', value: (p) => p.date },
@@ -137,7 +183,9 @@ export function ReportsPage() {
         return { columns: cols, rows, footer: `Received ${currency(total)}` }
       }
       case 'expenses': {
-        const rows = db.expenses.filter((e) => matchCompany(e.companyId) && inRange(e.date, from, to))
+        const rows = db.expenses.filter(
+          (e) => matchCompany(e.companyId) && inRange(e.date, from, to),
+        )
         const cols: CsvColumn<(typeof rows)[number]>[] = [
           { header: 'Expense', value: (e) => e.expenseNo },
           { header: 'Date', value: (e) => e.date },
@@ -150,7 +198,9 @@ export function ReportsPage() {
       }
       case 'outstanding': {
         const rows = db.invoices
-          .filter((i) => matchCompany(i.companyId) && ['Unpaid', 'Partially Paid'].includes(i.status))
+          .filter(
+            (i) => matchCompany(i.companyId) && ['Unpaid', 'Partially Paid'].includes(i.status),
+          )
           .map((i) => ({ i, c: computeInvoice(i, db.payments) }))
           .filter((r) => r.c.outstanding > 0)
         const cols: CsvColumn<(typeof rows)[number]>[] = [
@@ -173,7 +223,9 @@ export function ReportsPage() {
     return ['Total', 'Paid', 'Outstanding', 'Amount', 'Value'].includes(header)
   }
   function isQty(header: string) {
-    return ['Ordered', 'Completed', 'Pending', 'Received', 'Issued', 'Balance', 'Qty'].includes(header)
+    return ['Ordered', 'Completed', 'Pending', 'Received', 'Issued', 'Balance', 'Qty'].includes(
+      header,
+    )
   }
 
   return (
@@ -185,7 +237,13 @@ export function ReportsPage() {
           <button
             className="btn-primary"
             onClick={() =>
-              downloadCsv(REPORTS.find((r) => r.key === report)!.label.replace(/\s+/g, '-').toLowerCase(), rows as never[], columns as CsvColumn<never>[])
+              downloadCsv(
+                REPORTS.find((r) => r.key === report)!
+                  .label.replace(/\s+/g, '-')
+                  .toLowerCase(),
+                rows as never[],
+                columns as CsvColumn<never>[],
+              )
             }
           >
             <Download size={16} /> Export CSV
@@ -196,7 +254,11 @@ export function ReportsPage() {
       <FilterBar>
         <div>
           <label className="label">Report</label>
-          <Select value={report} onChange={(e) => setReport(e.target.value as ReportKey)} className="min-w-[12rem]">
+          <Select
+            value={report}
+            onChange={(e) => setReport(e.target.value as ReportKey)}
+            className="min-w-[12rem]"
+          >
             {REPORTS.map((r) => (
               <option key={r.key} value={r.key}>
                 {r.label}
@@ -216,13 +278,18 @@ export function ReportsPage() {
           <span className="text-xs font-medium text-slate-500">{footer}</span>
         </div>
         {rows.length === 0 ? (
-          <p className="py-12 text-center text-sm text-slate-500">No data for the selected filters.</p>
+          <p className="py-12 text-center text-sm text-slate-500">
+            No data for the selected filters.
+          </p>
         ) : (
           <ResponsiveTable>
             <thead>
               <tr className="border-b border-slate-100">
                 {columns.map((c) => (
-                  <th key={c.header} className={`th ${isMoney(c.header) || isQty(c.header) ? 'text-right' : ''}`}>
+                  <th
+                    key={c.header}
+                    className={`th ${isMoney(c.header) || isQty(c.header) ? 'text-right' : ''}`}
+                  >
                     {c.header}
                   </th>
                 ))}
@@ -236,12 +303,15 @@ export function ReportsPage() {
                     const display = isMoney(c.header)
                       ? currency(Number(raw))
                       : isQty(c.header)
-                      ? qty(Number(raw))
-                      : c.header.toLowerCase().includes('date') && raw
-                      ? fmtDate(String(raw))
-                      : raw ?? '—'
+                        ? qty(Number(raw))
+                        : c.header.toLowerCase().includes('date') && raw
+                          ? fmtDate(String(raw))
+                          : (raw ?? '—')
                     return (
-                      <td key={c.header} className={`td ${isMoney(c.header) || isQty(c.header) ? 'text-right' : ''}`}>
+                      <td
+                        key={c.header}
+                        className={`td ${isMoney(c.header) || isQty(c.header) ? 'text-right' : ''}`}
+                      >
                         {display as never}
                       </td>
                     )

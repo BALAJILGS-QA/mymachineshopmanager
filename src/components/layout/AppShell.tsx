@@ -4,7 +4,9 @@ import { LogOut, Menu, MoreHorizontal, X } from 'lucide-react'
 import { clsx } from 'clsx'
 import { NAV_ITEMS, MOBILE_PRIMARY, type NavItem } from './nav'
 import { useAuth } from '@/features/auth/auth'
-import { useDb } from '@/data/store'
+import { useSettings } from '@/features/settings/hooks/useSettings'
+import { useUsers } from '@/features/approvals/hooks/useUsers'
+import { DEFAULT_SETTINGS } from '@/data/seed'
 import { Logo } from '@/components/ui/Logo'
 import { applyAppSeo } from '@/lib/seo'
 import type { ReactNode } from 'react'
@@ -51,7 +53,8 @@ function SidebarLinks({
 function Brand() {
   // Brand reflects the configured shop profile so a rename in Settings shows
   // everywhere the shell renders (sidebar + mobile drawer).
-  const company = useDb((db) => db.settings.company)
+  const { data: settings } = useSettings()
+  const company = settings?.company ?? DEFAULT_SETTINGS.company
   return (
     <div className="flex items-center gap-2.5 px-4 py-4">
       <Logo size={38} className="shrink-0 rounded-[28%] shadow-sm" />
@@ -63,8 +66,10 @@ function Brand() {
 
 export function AppShell({ children }: { children: ReactNode }) {
   const { session, logout, isSuperAdmin } = useAuth()
-  const company = useDb((db) => db.settings.company)
-  const pendingCount = useDb((db) => db.users.filter((u) => u.status === 'pending').length)
+  const { data: settings } = useSettings()
+  const company = settings?.company ?? DEFAULT_SETTINGS.company
+  const { data: users = [] } = useUsers()
+  const pendingCount = users.filter((u) => u.status === 'pending').length
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [moreOpen, setMoreOpen] = useState(false)
   const location = useLocation()
@@ -99,10 +104,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       {/* Mobile drawer */}
       {drawerOpen && (
         <div className="fixed inset-0 z-40 lg:hidden">
-          <div
-            className="absolute inset-0 bg-slate-900/40"
-            onClick={() => setDrawerOpen(false)}
-          />
+          <div className="absolute inset-0 bg-slate-900/40" onClick={() => setDrawerOpen(false)} />
           <aside className="absolute inset-y-0 left-0 flex w-64 flex-col bg-white shadow-xl">
             <div className="flex items-center justify-between">
               <Brand />
@@ -113,7 +115,11 @@ export function AppShell({ children }: { children: ReactNode }) {
                 <X size={20} />
               </button>
             </div>
-            <SidebarLinks items={navItems} pendingCount={pendingCount} onNavigate={() => setDrawerOpen(false)} />
+            <SidebarLinks
+              items={navItems}
+              pendingCount={pendingCount}
+              onNavigate={() => setDrawerOpen(false)}
+            />
             <div className="border-t border-slate-100 p-3">
               <button onClick={logout} className="btn-secondary w-full">
                 <LogOut size={16} /> Sign out
@@ -138,16 +144,14 @@ export function AppShell({ children }: { children: ReactNode }) {
         <div className="flex items-center gap-2.5">
           <div className="hidden text-right leading-tight sm:block">
             <p className="text-xs font-semibold text-slate-900">{session?.username}</p>
-            <p className="text-2xs text-slate-600">{session?.role === 'SuperAdmin' ? 'Super Admin' : 'User'}</p>
+            <p className="text-2xs text-slate-600">
+              {session?.role === 'SuperAdmin' ? 'Super Admin' : 'User'}
+            </p>
           </div>
           <div className="h-8 w-8 rounded-full bg-brand-100 text-center text-sm font-bold leading-8 text-brand-800 ring-1 ring-brand-300">
             {session?.username?.[0]?.toUpperCase() ?? 'A'}
           </div>
-          <button
-            onClick={logout}
-            className="btn-secondary btn-sm"
-            title="Sign out"
-          >
+          <button onClick={logout} className="btn-secondary btn-sm" title="Sign out">
             <LogOut size={15} />
             <span className="hidden sm:inline">Sign out</span>
           </button>
@@ -193,17 +197,19 @@ export function AppShell({ children }: { children: ReactNode }) {
           <div className="absolute inset-x-0 bottom-0 rounded-t-2xl bg-white p-3">
             <div className="mx-auto mb-2 h-1 w-10 rounded-full bg-slate-200" />
             <div className="grid grid-cols-3 gap-2">
-              {navItems.filter((n) => !MOBILE_PRIMARY.includes(n.to)).map((item) => (
-                <NavLink
-                  key={item.to}
-                  to={item.to}
-                  onClick={() => setMoreOpen(false)}
-                  className="flex flex-col items-center gap-1 rounded-xl bg-slate-100 py-3 text-2xs font-semibold text-slate-800 ring-1 ring-slate-200"
-                >
-                  <item.icon size={20} />
-                  {item.short}
-                </NavLink>
-              ))}
+              {navItems
+                .filter((n) => !MOBILE_PRIMARY.includes(n.to))
+                .map((item) => (
+                  <NavLink
+                    key={item.to}
+                    to={item.to}
+                    onClick={() => setMoreOpen(false)}
+                    className="flex flex-col items-center gap-1 rounded-xl bg-slate-100 py-3 text-2xs font-semibold text-slate-800 ring-1 ring-slate-200"
+                  >
+                    <item.icon size={20} />
+                    {item.short}
+                  </NavLink>
+                ))}
             </div>
           </div>
         </div>

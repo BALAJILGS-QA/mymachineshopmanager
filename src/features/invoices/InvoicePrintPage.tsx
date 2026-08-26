@@ -1,18 +1,24 @@
 import { useParams, useNavigate } from 'react-router-dom'
 import { ArrowLeft, Download, Printer } from 'lucide-react'
-import { useDb } from '@/data/store'
 import { computeInvoice } from '@/data/computations'
 import { currency, fmtDate, qty } from '@/lib/format'
 import { InvoiceStatusBadge } from '@/components/common/status'
 import { downloadInvoicePdf } from './invoicePdf'
+import { useInvoices } from './hooks/useInvoices'
+import { usePayments } from '@/features/payments/hooks/usePayments'
+import { useCompanies } from '@/features/companies/hooks/useCompanies'
+import { useSettings } from '@/features/settings/hooks/useSettings'
+import { DEFAULT_SETTINGS } from '@/data/seed'
 
 export function InvoicePrintPage() {
   const { id } = useParams()
   const navigate = useNavigate()
-  const invoice = useDb((db) => db.invoices.find((i) => i.id === id))
-  const company = useDb((db) => db.companies.find((c) => c.id === invoice?.companyId))
-  const shop = useDb((db) => db.settings.company)
-  const payments = useDb((db) => db.payments)
+  const { data: invoices = [] } = useInvoices()
+  const invoice = invoices.find((i) => i.id === id)
+  const { data: companies = [] } = useCompanies()
+  const company = companies.find((c) => c.id === invoice?.companyId)
+  const shop = useSettings().data?.company ?? DEFAULT_SETTINGS.company
+  const { data: payments = [] } = usePayments()
 
   if (!invoice) {
     return (
@@ -47,7 +53,9 @@ export function InvoicePrintPage() {
         <div className="flex items-start justify-between border-b border-slate-200 pb-5">
           <div>
             <h1 className="text-xl font-bold text-slate-900">{shop.name || 'CNC Machine Shop'}</h1>
-            {shop.address && <p className="mt-1 whitespace-pre-line text-xs text-slate-500">{shop.address}</p>}
+            {shop.address && (
+              <p className="mt-1 whitespace-pre-line text-xs text-slate-500">{shop.address}</p>
+            )}
             <p className="mt-1 text-xs text-slate-500">
               {[shop.phone, shop.email].filter(Boolean).join(' · ')}
             </p>
@@ -76,7 +84,9 @@ export function InvoicePrintPage() {
           </div>
           {invoice.reference && (
             <div className="text-right">
-              <p className="text-2xs font-semibold uppercase tracking-wide text-slate-500">Reference</p>
+              <p className="text-2xs font-semibold uppercase tracking-wide text-slate-500">
+                Reference
+              </p>
               <p className="mt-1 text-sm text-slate-700">{invoice.reference}</p>
             </div>
           )}
@@ -99,7 +109,9 @@ export function InvoicePrintPage() {
                 <td className="px-2 py-2 text-slate-700">{l.description}</td>
                 <td className="px-2 py-2 text-right">{qty(l.quantity)}</td>
                 <td className="px-2 py-2 text-right">{currency(l.rate)}</td>
-                <td className="px-2 py-2 text-right font-medium">{currency(l.quantity * l.rate)}</td>
+                <td className="px-2 py-2 text-right font-medium">
+                  {currency(l.quantity * l.rate)}
+                </td>
               </tr>
             ))}
           </tbody>
@@ -108,7 +120,9 @@ export function InvoicePrintPage() {
         <div className="mt-4 flex justify-end">
           <div className="w-64 space-y-1.5 text-sm">
             <Row label="Subtotal" value={currency(c.subtotal)} />
-            {invoice.discount > 0 && <Row label="Discount" value={`- ${currency(invoice.discount)}`} />}
+            {invoice.discount > 0 && (
+              <Row label="Discount" value={`- ${currency(invoice.discount)}`} />
+            )}
             {(() => {
               const taxable = Math.max(0, c.subtotal - (invoice.discount || 0))
               const cg = invoice.cgstPercent
@@ -150,7 +164,9 @@ export function InvoicePrintPage() {
             <p className="mt-1 text-sm font-medium text-slate-800">{invoice.dcReference || '—'}</p>
           </div>
           <div>
-            <p className="text-2xs font-semibold uppercase tracking-wide text-slate-500">Shipped To</p>
+            <p className="text-2xs font-semibold uppercase tracking-wide text-slate-500">
+              Shipped To
+            </p>
             <p className="mt-1 text-sm font-semibold text-slate-800">{company?.name}</p>
             <p className="whitespace-pre-line text-xs text-slate-500">
               {invoice.shippingAddress || invoice.billingAddress || company?.billingAddress || '—'}

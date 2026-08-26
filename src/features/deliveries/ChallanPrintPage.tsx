@@ -1,17 +1,22 @@
 import { useParams, useNavigate } from 'react-router-dom'
 import { ArrowLeft, Download, Printer } from 'lucide-react'
-import { useDb } from '@/data/store'
 import { fmtDate, qty } from '@/lib/format'
 import { Badge } from '@/components/ui/primitives'
 import { downloadChallanPdf } from './challanPdf'
 import { DC_STATUS_TONE as STATUS_TONE } from '@/constants/domain'
+import { useChallans } from './hooks/useDeliveries'
+import { useCompanies } from '@/features/companies/hooks/useCompanies'
+import { useSettings } from '@/features/settings/hooks/useSettings'
+import { DEFAULT_SETTINGS } from '@/data/seed'
 
 export function ChallanPrintPage() {
   const { id } = useParams()
   const navigate = useNavigate()
-  const dc = useDb((db) => db.deliveryChallans.find((d) => d.id === id))
-  const company = useDb((db) => db.companies.find((c) => c.id === dc?.companyId))
-  const shop = useDb((db) => db.settings.company)
+  const { data: challans = [] } = useChallans()
+  const dc = challans.find((d) => d.id === id)
+  const { data: companies = [] } = useCompanies()
+  const company = companies.find((c) => c.id === dc?.companyId)
+  const shop = useSettings().data?.company ?? DEFAULT_SETTINGS.company
 
   if (!dc) {
     return (

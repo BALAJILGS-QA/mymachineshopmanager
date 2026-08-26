@@ -1,14 +1,18 @@
 import { useState } from 'react'
 import type { Material, MaterialOwnerType } from '@/types'
-import { stockRepo } from '@/data/repo'
-import { useDb } from '@/data/store'
 import {
   useCreateMaterial,
   useUpdateMaterial,
   useCreateReceipt,
   useCreateIssue,
   useCreateAdjustment,
+  useMaterials,
+  useMaterialBalance,
 } from './hooks/useMaterials'
+import { useCompanies } from '@/features/companies/hooks/useCompanies'
+import { useJobs } from '@/features/jobs/hooks/useJobs'
+import { useSettings } from '@/features/settings/hooks/useSettings'
+import { DEFAULT_SETTINGS } from '@/data/seed'
 import { toUserMessage } from '@/lib/api/errors'
 import { todayISO, qty } from '@/lib/format'
 import { Field, Input, Select, Textarea } from '@/components/ui/primitives'
@@ -27,7 +31,7 @@ export function MaterialForm({
   const createMaterial = useCreateMaterial()
   const updateMaterial = useUpdateMaterial()
   const saving = createMaterial.isPending || updateMaterial.isPending
-  const settings = useDb((db) => db.settings)
+  const settings = useSettings().data ?? DEFAULT_SETTINGS
   const [form, setForm] = useState({
     name: material?.name ?? '',
     code: material?.code ?? '',
@@ -149,8 +153,10 @@ export function MaterialForm({
 export function ReceiptForm({ onClose }: { onClose: () => void }) {
   const toast = useToast()
   const createReceipt = useCreateReceipt()
-  const materials = useDb((db) => db.materials.filter((m) => m.active))
-  const companies = useDb((db) => db.companies.filter((c) => c.active))
+  const { data: allMaterials = [] } = useMaterials()
+  const materials = allMaterials.filter((m) => m.active)
+  const { data: allCompanies = [] } = useCompanies()
+  const companies = allCompanies.filter((c) => c.active)
   const [form, setForm] = useState({
     date: todayISO(),
     materialId: materials[0]?.id ?? '',
@@ -287,8 +293,10 @@ export function ReceiptForm({ onClose }: { onClose: () => void }) {
 export function IssueForm({ onClose }: { onClose: () => void }) {
   const toast = useToast()
   const createIssue = useCreateIssue()
-  const materials = useDb((db) => db.materials.filter((m) => m.active))
-  const jobs = useDb((db) => db.jobs.filter((j) => !['Cancelled', 'Delivered'].includes(j.status)))
+  const { data: allMaterials = [] } = useMaterials()
+  const materials = allMaterials.filter((m) => m.active)
+  const { data: allJobs = [] } = useJobs()
+  const jobs = allJobs.filter((j) => !['Cancelled', 'Delivered'].includes(j.status))
   const [form, setForm] = useState({
     date: todayISO(),
     materialId: materials[0]?.id ?? '',
@@ -299,7 +307,8 @@ export function IssueForm({ onClose }: { onClose: () => void }) {
   const [override, setOverride] = useState(false)
 
   const material = materials.find((m) => m.id === form.materialId)
-  const balance = form.materialId ? stockRepo.balance(form.materialId).balance : 0
+  // Issues draw from own (shop) stock; show that balance.
+  const { data: balance = 0 } = useMaterialBalance(form.materialId)
 
   function set<K extends keyof typeof form>(k: K, v: (typeof form)[K]) {
     setForm((f) => ({ ...f, [k]: v }))
@@ -401,8 +410,9 @@ export function IssueForm({ onClose }: { onClose: () => void }) {
 export function AdjustmentForm({ onClose }: { onClose: () => void }) {
   const toast = useToast()
   const createAdjustment = useCreateAdjustment()
-  const materials = useDb((db) => db.materials.filter((m) => m.active))
-  const companies = useDb((db) => db.companies)
+  const { data: allMaterials = [] } = useMaterials()
+  const materials = allMaterials.filter((m) => m.active)
+  const { data: companies = [] } = useCompanies()
   const [form, setForm] = useState({
     date: todayISO(),
     materialId: materials[0]?.id ?? '',

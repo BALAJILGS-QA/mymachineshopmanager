@@ -1,8 +1,9 @@
 import { useMemo, useState } from 'react'
 import type { Invoice, PaymentMethod } from '@/types'
-import { previewNextNo } from '@/data/repo'
-import { useDb } from '@/data/store'
-import { useCreatePayment } from './hooks/usePayments'
+import { useCreatePayment, usePayments } from './hooks/usePayments'
+import { useCompanies } from '@/features/companies/hooks/useCompanies'
+import { useInvoices } from '@/features/invoices/hooks/useInvoices'
+import { usePreviewNo } from '@/features/shared/usePreviewNo'
 import { toUserMessage } from '@/lib/api/errors'
 import { computeInvoice } from '@/data/computations'
 import { currency, todayISO } from '@/lib/format'
@@ -20,10 +21,11 @@ export function PaymentForm({
 }) {
   const toast = useToast()
   const createPayment = useCreatePayment()
-  const companies = useDb((db) => db.companies.filter((c) => c.active))
-  const invoices = useDb((db) => db.invoices)
-  const payments = useDb((db) => db.payments)
-  const settings = useDb((db) => db.settings)
+  const { data: allCompanies = [] } = useCompanies()
+  const companies = allCompanies.filter((c) => c.active)
+  const { data: invoices = [] } = useInvoices()
+  const { data: payments = [] } = usePayments()
+  const paymentNoPreview = usePreviewNo('payment')
 
   const [companyId, setCompanyId] = useState(invoice?.companyId ?? companies[0]?.id ?? '')
   const [invoiceId, setInvoiceId] = useState(invoice?.id ?? '')
@@ -81,7 +83,7 @@ export function PaymentForm({
       }
     >
       <p className="mb-3 rounded-lg bg-brand-50 px-3 py-2 text-xs text-brand-700">
-        Payment ID will be <b>{previewNextNo('payment', settings.numbering.payment)}</b>
+        Payment ID will be <b>{paymentNoPreview}</b>
       </p>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <Field label="Company" required>
