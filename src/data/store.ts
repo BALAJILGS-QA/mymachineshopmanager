@@ -3,21 +3,13 @@
 // invalidation. Selectors keep re-renders scoped.
 
 import { useSyncExternalStore } from 'react'
-import {
-  getDb,
-  loadDb,
-  subscribe,
-  saveDb,
-  replaceLocal,
-  hasDb,
-  getRevision,
-  setPersistHook,
-} from './db'
+import { getDb, loadDb, subscribe, saveDb, replaceLocal, hasDb, getRevision } from './db'
 import type { Database } from './db'
 import { buildInitialDb, DEFAULT_SETTINGS } from './seed'
 import { setCurrency } from '@/lib/format'
 import { isSupabaseEnabled } from './supabase'
-import { loadAll, primeSyncBaseline, syncThrough } from './backend'
+import { loadAll } from './backend'
+import { setNumberingCache } from '@/lib/api/numbering'
 
 // Ensure a valid in-memory DB exists so getDb()/selectors never throw. In
 // Supabase mode this local DB is transient and replaced by hydrateFromRemote().
@@ -39,19 +31,20 @@ export function ensureDb(): void {
   setCurrency(db.settings.currencySymbol, db.settings.currency)
 }
 
-// After a Supabase session exists, pull the full dataset, replace the local
-// store, prime the sync baseline, then enable write-through. Registering the
-// persist hook only here guarantees the initial local seed is never synced.
+// After a Supabase session exists, pull the full dataset into the local store so
+// the (still store-backed) readers have data during the Part B/C transition.
+// NOTE: the write-through sync hook is intentionally NOT installed anymore — all
+// writes now go directly to Supabase via the feature api layer, so the store is a
+// read-only cache. This removes any risk of the store clobbering Supabase.
 export async function hydrateFromRemote(): Promise<void> {
   if (!isSupabaseEnabled()) return
   const remote = await loadAll()
   if (remote) {
     replaceLocal(remote)
-    primeSyncBaseline(remote)
     const s = getDb().settings
     setCurrency(s.currencySymbol, s.currency)
+    setNumberingCache(s.numbering)
   }
-  setPersistHook(syncThrough)
 }
 
 // Subscribe to the store's revision (a stable number, so getSnapshot is cached

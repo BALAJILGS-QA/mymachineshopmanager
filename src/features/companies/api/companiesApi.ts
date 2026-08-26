@@ -1,37 +1,37 @@
-// Companies data-access (service) layer. Async by contract so the hooks/UI above
-// never change when this is later re-pointed from the local repo to direct
-// Supabase calls (Phase 5b). Today it delegates to companyRepo — the single
-// mutation path that owns the business rules (uniqueness, referential guards,
-// audit, code generation).
+// Companies data-access - Supabase-direct. Simple CRUD (no cross-row rules):
+// uniqueness/FK are enforced by the schema; the company code is minted from the
+// server counter (race-safe) when the user doesn't supply one.
 
-import { companyRepo } from '@/data/repo'
-import { supabase } from '@/data/supabase'
+import { uid } from '@/lib/id'
+import { maps } from '@/lib/api/rowMap'
+import { selectAll, insertRow, updateRow, deleteRow } from '@/lib/api/supabaseCrud'
 import { nextCode } from '@/lib/api/numbering'
 import type { Company } from '@/types'
 
-export type CompanyCreateInput = Parameters<typeof companyRepo.create>[0]
-export type CompanyUpdateInput = Parameters<typeof companyRepo.update>[1]
+export type CompanyCreateInput = Omit<Company, 'id' | 'code' | 'createdAt' | 'updatedAt'> & {
+  code?: string
+}
+export type CompanyUpdateInput = Partial<Company>
 
 export async function listCompanies(): Promise<Company[]> {
-  return companyRepo.list()
+  return selectAll<Company>(maps.companies)
 }
 
 export async function createCompany(input: CompanyCreateInput): Promise<Company> {
-  const provided = input.code?.trim()
-  // Server-authoritative code when the user didn't supply one — race-safe across
-  // clients (replaces the old client-side app_state counter). The repo still
-  // enforces uniqueness and persists the row. Offline (no Supabase) falls back to
-  // the repo's local sequence so dev/demo still works.
-  if (!provided && supabase) {
-    return companyRepo.create({ ...input, code: await nextCode('companyCode', 'C') })
-  }
-  return companyRepo.create(provided ? { ...input, code: provided } : input)
+  const code = input.code?.trim() || (await nextCode('companyCode', 'C'))
+  return insertRow<Company>(maps.companies, {
+    ...input,
+    id: uid('cmp_'),
+    code,
+    name: input.name.trim(),
+    active: input.active ?? true,
+  })
 }
 
 export async function updateCompany(id: string, patch: CompanyUpdateInput): Promise<Company> {
-  return companyRepo.update(id, patch)
+  return updateRow<Company>(maps.companies, id, patch)
 }
 
 export async function deleteCompany(id: string): Promise<void> {
-  companyRepo.remove(id)
+  return deleteRow(maps.companies, id)
 }
