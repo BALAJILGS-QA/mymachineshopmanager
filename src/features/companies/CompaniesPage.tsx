@@ -1,8 +1,14 @@
 import { useMemo, useState } from 'react'
 import { Building2, Pencil, Plus, Search, Trash2 } from 'lucide-react'
 import type { Company } from '@/types'
-import { companyRepo, BusinessRuleError } from '@/data/repo'
 import { useDb } from '@/data/store'
+import {
+  useCompanies,
+  useCreateCompany,
+  useUpdateCompany,
+  useDeleteCompany,
+} from './hooks/useCompanies'
+import { toUserMessage } from '@/lib/api/errors'
 import { PageHeader, ResponsiveTable } from '@/components/common/PageHeader'
 import { Badge, Card, EmptyState, Field, Input, Textarea } from '@/components/ui/primitives'
 import { Modal } from '@/components/ui/Modal'
@@ -11,9 +17,10 @@ import { useToast } from '@/components/ui/Toast'
 import { useConfirm } from '@/components/ui/ConfirmDialog'
 
 export function CompaniesPage() {
-  const companies = useDb((db) => db.companies)
+  const { data: companies = [], isLoading } = useCompanies()
   const jobs = useDb((db) => db.jobs)
   const invoices = useDb((db) => db.invoices)
+  const deleteCompany = useDeleteCompany()
   const toast = useToast()
   const confirm = useConfirm()
   const [search, setSearch] = useState('')
@@ -44,10 +51,10 @@ export function CompaniesPage() {
     })
     if (!ok) return
     try {
-      companyRepo.remove(c.id)
+      await deleteCompany.mutateAsync(c.id)
       toast.success('Company deleted')
     } catch (e) {
-      toast.error(e instanceof BusinessRuleError ? e.message : 'Delete failed')
+      toast.error(toUserMessage(e, 'Delete failed'))
     }
   }
 
@@ -76,7 +83,9 @@ export function CompaniesPage() {
       </Card>
 
       <Card>
-        {filtered.length === 0 ? (
+        {isLoading ? (
+          <div className="p-8 text-center text-sm text-slate-500">Loading companies…</div>
+        ) : filtered.length === 0 ? (
           <EmptyState
             icon={<Building2 size={40} />}
             title="No companies found"
@@ -143,14 +152,11 @@ export function CompaniesPage() {
   )
 }
 
-function CompanyForm({
-  company,
-  onClose,
-}: {
-  company: Company | null
-  onClose: () => void
-}) {
+function CompanyForm({ company, onClose }: { company: Company | null; onClose: () => void }) {
   const toast = useToast()
+  const createCompany = useCreateCompany()
+  const updateCompany = useUpdateCompany()
+  const saving = createCompany.isPending || updateCompany.isPending
   const [form, setForm] = useState({
     name: company?.name ?? '',
     code: company?.code ?? '',
@@ -167,18 +173,18 @@ function CompanyForm({
     setForm((f) => ({ ...f, [k]: v }))
   }
 
-  function submit() {
+  async function submit() {
     try {
       if (company) {
-        companyRepo.update(company.id, form)
+        await updateCompany.mutateAsync({ id: company.id, patch: form })
         toast.success('Company updated')
       } else {
-        companyRepo.create(form)
+        await createCompany.mutateAsync(form)
         toast.success('Company created')
       }
       onClose()
     } catch (e) {
-      toast.error(e instanceof BusinessRuleError ? e.message : 'Save failed')
+      toast.error(toUserMessage(e, 'Save failed'))
     }
   }
 
@@ -192,8 +198,8 @@ function CompanyForm({
           <button className="btn-secondary" onClick={onClose}>
             Cancel
           </button>
-          <button className="btn-primary" onClick={submit}>
-            {company ? 'Save changes' : 'Create company'}
+          <button className="btn-primary" onClick={submit} disabled={saving}>
+            {saving ? 'Saving…' : company ? 'Save changes' : 'Create company'}
           </button>
         </>
       }
@@ -206,7 +212,10 @@ function CompanyForm({
           <Input value={form.code} onChange={(e) => set('code', e.target.value)} />
         </Field>
         <Field label="Contact Person">
-          <Input value={form.contactPerson} onChange={(e) => set('contactPerson', e.target.value)} />
+          <Input
+            value={form.contactPerson}
+            onChange={(e) => set('contactPerson', e.target.value)}
+          />
         </Field>
         <Field label="Phone">
           <Input value={form.phone} onChange={(e) => set('phone', e.target.value)} />
