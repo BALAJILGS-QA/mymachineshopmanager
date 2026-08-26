@@ -11,7 +11,23 @@ export function useCreateChallan() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: (input: api.DcCreateInput) => api.createChallan(input),
-    onSuccess: () => qc.invalidateQueries({ queryKey: qk.deliveries.all }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: qk.deliveries.all })
+      qc.invalidateQueries({ queryKey: qk.stock.all }) // dispatch deducted stock
+    },
+  })
+}
+
+// Cancelling reverses the dispatched inventory.
+export function useCancelChallan() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (id: string) => api.cancelChallan(id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: qk.deliveries.all })
+      qc.invalidateQueries({ queryKey: qk.stock.all })
+      qc.invalidateQueries({ queryKey: qk.invoices.all })
+    },
   })
 }
 

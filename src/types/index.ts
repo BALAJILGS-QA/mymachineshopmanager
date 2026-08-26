@@ -7,22 +7,11 @@ export type ISODate = string // YYYY-MM-DD
 export type ISODateTime = string // full ISO timestamp
 
 export type JobStatus =
-  | 'Draft'
-  | 'Pending'
-  | 'In Progress'
-  | 'On Hold'
-  | 'Completed'
-  | 'Delivered'
-  | 'Cancelled'
+  'Draft' | 'Pending' | 'In Progress' | 'On Hold' | 'Completed' | 'Delivered' | 'Cancelled'
 
 export type JobPriority = 'Low' | 'Normal' | 'High' | 'Urgent'
 
-export type InvoiceStatus =
-  | 'Draft'
-  | 'Unpaid'
-  | 'Partially Paid'
-  | 'Paid'
-  | 'Cancelled'
+export type InvoiceStatus = 'Draft' | 'Unpaid' | 'Partially Paid' | 'Paid' | 'Cancelled'
 
 export type PaymentMethod = 'Cash' | 'Bank Transfer' | 'UPI' | 'Cheque' | 'Other'
 
@@ -160,6 +149,8 @@ export type DcStatus = 'Open' | 'Invoiced' | 'Cancelled'
 export interface DcLine {
   id: ID
   jobId?: ID
+  materialId?: ID // the inventory material this line dispatches
+  ownerType?: MaterialOwnerType // 'Company' = customer's stock, 'Shop' = own stock
   description: string
   quantity: number
   unit: string
@@ -223,6 +214,41 @@ export interface Expense extends AuditFields {
   companyId?: ID
   jobId?: ID
   notes?: string
+}
+
+// A purchase of the shop's OWN raw material (cost + GST), linked to the stock
+// receipt it created and the expense it recorded.
+export interface OwnMaterialPurchase extends AuditFields {
+  id: ID
+  supplier?: string
+  materialId: ID
+  purchaseDate: ISODate
+  quantity: number
+  unit: string
+  totalCost: number
+  totalGst: number
+  totalAmount: number
+  notes?: string
+  receiptId?: ID
+  expenseId?: ID
+}
+
+// One row of the unified inventory ledger view (receipts + issues + adjustments).
+export interface InventoryLedgerRow {
+  id: ID
+  materialId: ID
+  companyId?: ID // null = own/shop stock
+  ownership: 'Shop' | 'Company'
+  txnType: 'Receipt' | 'Issue' | 'Adjustment'
+  qtyIn: number
+  qtyOut: number
+  unit: string
+  date: ISODate
+  docNo: string
+  referenceType?: string
+  referenceId?: ID
+  note?: string
+  createdAt: ISODateTime
 }
 
 export interface AuditLog {

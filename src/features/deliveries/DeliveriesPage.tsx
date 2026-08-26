@@ -22,13 +22,13 @@ import {
   useDeleteChallan,
   useSetChallanStatus,
   useReopenChallan,
+  useCancelChallan,
 } from './hooks/useDeliveries'
 import { useInvoices } from '@/features/invoices/hooks/useInvoices'
 import { useCompanies } from '@/features/companies/hooks/useCompanies'
 import { useJobs } from '@/features/jobs/hooks/useJobs'
-import { useProducts, useSettings } from '@/features/settings/hooks/useSettings'
+import { useMaterials } from '@/features/materials/hooks/useMaterials'
 import { usePreviewNo } from '@/features/shared/usePreviewNo'
-import { DEFAULT_SETTINGS } from '@/data/seed'
 import { toUserMessage } from '@/lib/api/errors'
 import { fmtDate, todayISO } from '@/lib/format'
 import { uid } from '@/lib/id'
@@ -48,6 +48,7 @@ export function DeliveriesPage() {
   const { data: invoices = [] } = useInvoices()
   const deleteChallan = useDeleteChallan()
   const setChallanStatus = useSetChallanStatus()
+  const cancelChallan = useCancelChallan()
   const reopenChallan = useReopenChallan()
   const companyName = useCompanyName()
   const toast = useToast()
@@ -148,8 +149,8 @@ export function DeliveriesPage() {
     })
     if (!ok) return
     try {
-      await setChallanStatus.mutateAsync({ id: d.id, status: 'Cancelled' })
-      toast.success('Challan cancelled')
+      await cancelChallan.mutateAsync(d.id)
+      toast.success('Challan cancelled — stock restored')
     } catch (e) {
       toast.error(toUserMessage(e, 'Cancel failed'))
     }
@@ -391,10 +392,10 @@ function DcForm({ dc, onClose }: { dc: DeliveryChallan | null; onClose: () => vo
   const { data: allCompanies = [] } = useCompanies()
   const companies = allCompanies.filter((c) => c.active || c.id === dc?.companyId)
   const { data: jobs = [] } = useJobs()
-  const { data: allProducts = [] } = useProducts()
-  const products = allProducts.filter((p) => p.active)
-  const units = useSettings().data?.units ?? DEFAULT_SETTINGS.units
+  const { data: allMaterials = [] } = useMaterials()
+  const materials = allMaterials.filter((m) => m.active)
   const dcNoPreview = usePreviewNo('dc')
+  const isEdit = !!dc // existing challan already dispatched -> lines are locked
 
   const [companyId, setCompanyId] = useState(dc?.companyId ?? companies[0]?.id ?? '')
   const [date, setDate] = useState(dc?.date ?? todayISO())
@@ -402,52 +403,74 @@ function DcForm({ dc, onClose }: { dc: DeliveryChallan | null; onClose: () => vo
   const [reference, setReference] = useState(dc?.reference ?? '')
   const [vehicleNo, setVehicleNo] = useState(dc?.vehicleNo ?? '')
   const [notes, setNotes] = useState(dc?.notes ?? '')
-  const [lines, setLines] = useState<DcLine[]>(
-    dc?.lines ?? [{ id: uid('dl_'), description: '', quantity: 1, unit: units[0] ?? 'Nos' }],
-  )
+  const emptyLine = (): DcLine => ({
+    id: uid('dl_'),
+    materialId: '',
+    ownerType: 'Company',
+    description: '',
+    quantity: 1,
+    unit: 'Nos',
+  })
+  const [lines, setLines] = useState<DcLine[]>(dc?.lines ?? [emptyLine()])
 
   function updateLine(id: string, patch: Partial<DcLine>) {
     setLines((ls) => ls.map((l) => (l.id === id ? { ...l, ...patch } : l)))
   }
+  function pickMaterial(id: string, materialId: string) {
+    const m = materials.find((x) => x.id === materialId)
+    updateLine(id, {
+      materialId,
+      description: m?.name ?? '',
+      unit: m?.unit ?? 'Nos',
+    })
+  }
   function addLine() {
-    setLines((ls) => [
-      ...ls,
-      { id: uid('dl_'), description: '', quantity: 1, unit: units[0] ?? 'Nos' },
-    ])
+    setLines((ls) => [...ls, emptyLine()])
   }
   function removeLine(id: string) {
     setLines((ls) => (ls.length > 1 ? ls.filter((l) => l.id !== id) : ls))
   }
-  function addProductLine(productId: string) {
-    const p = products.find((x) => x.id === productId)
-    if (!p) return
-    setLines((ls) => [
-      ...ls.filter((l) => l.description),
-      { id: uid('dl_'), description: p.name, quantity: 1, unit: p.unit || units[0] || 'Nos' },
-    ])
-  }
 
   async function submit() {
     try {
-      const payload = {
+      if (isEdit) {
+        // Lines are immutable after dispatch; only metadata is editable.
+        await updateChallan.mutateAsync({
+          id: dc.id,
+          patch: {
+            reference: reference || undefined,
+            vehicleNo: vehicleNo || undefined,
+            notes: notes || undefined,
+          },
+        })
+        toast.success('Challan updated')
+        onClose()
+        return
+      }
+      const cleaned = lines.filter((l) => l.materialId && Number(l.quantity) > 0)
+      if (!cleaned.length) {
+        toast.error('Add at least one item with a material and quantity')
+        return
+      }
+      await createChallan.mutateAsync({
         date,
         companyId,
         jobId: jobId || undefined,
         reference: reference || undefined,
         vehicleNo: vehicleNo || undefined,
-        lines: lines
-          .filter((l) => l.description.trim())
-          .map((l) => ({ ...l, quantity: Number(l.quantity) })),
         notes: notes || undefined,
-        status: dc?.status ?? ('Open' as const),
-      }
-      if (dc) {
-        await updateChallan.mutateAsync({ id: dc.id, patch: payload })
-        toast.success('Challan updated')
-      } else {
-        await createChallan.mutateAsync(payload)
-        toast.success('Challan created')
-      }
+        status: 'Open',
+        lines: cleaned.map((l) => ({
+          id: l.id,
+          materialId: l.materialId,
+          ownerType: l.ownerType,
+          description: l.description,
+          quantity: Number(l.quantity),
+          unit: l.unit,
+          jobId: jobId || undefined,
+        })),
+      })
+      toast.success('Challan created — stock dispatched')
       onClose()
     } catch (e) {
       toast.error(toUserMessage(e, 'Save failed'))
@@ -466,19 +489,29 @@ function DcForm({ dc, onClose }: { dc: DeliveryChallan | null; onClose: () => vo
             Cancel
           </button>
           <button className="btn-primary" onClick={submit} disabled={saving}>
-            {saving ? 'Saving…' : dc ? 'Save changes' : 'Create challan'}
+            {saving ? 'Saving…' : dc ? 'Save changes' : 'Create & dispatch'}
           </button>
         </>
       }
     >
-      {!dc && (
+      {!dc ? (
         <p className="mb-3 rounded-lg bg-brand-50 px-3 py-2 text-xs text-brand-700">
-          Challan number will be <b>{dcNoPreview}</b>
+          Challan number will be <b>{dcNoPreview}</b> — creating this challan dispatches the items
+          and reduces stock.
+        </p>
+      ) : (
+        <p className="mb-3 rounded-lg bg-slate-100 px-3 py-2 text-xs text-slate-600">
+          Items are locked once dispatched. To change items, cancel this challan (which restores
+          stock) and create a new one.
         </p>
       )}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         <Field label="Company" required>
-          <Select value={companyId} onChange={(e) => setCompanyId(e.target.value)}>
+          <Select
+            value={companyId}
+            onChange={(e) => setCompanyId(e.target.value)}
+            disabled={isEdit}
+          >
             <option value="">Select…</option>
             {companies.map((c) => (
               <option key={c.id} value={c.id}>
@@ -488,10 +521,15 @@ function DcForm({ dc, onClose }: { dc: DeliveryChallan | null; onClose: () => vo
           </Select>
         </Field>
         <Field label="Date" required>
-          <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+          <Input
+            type="date"
+            value={date}
+            onChange={(e) => setDate(e.target.value)}
+            disabled={isEdit}
+          />
         </Field>
         <Field label="Job (optional)">
-          <Select value={jobId} onChange={(e) => setJobId(e.target.value)}>
+          <Select value={jobId} onChange={(e) => setJobId(e.target.value)} disabled={isEdit}>
             <option value="">—</option>
             {jobs.map((j) => (
               <option key={j.id} value={j.id}>
@@ -510,38 +548,21 @@ function DcForm({ dc, onClose }: { dc: DeliveryChallan | null; onClose: () => vo
 
       <div className="mt-4">
         <div className="mb-1 flex items-center justify-between gap-2">
-          <label className="label mb-0">Items</label>
-          <div className="flex items-center gap-2">
-            {products.length > 0 && (
-              <Select
-                value=""
-                onChange={(e) => {
-                  if (e.target.value) addProductLine(e.target.value)
-                  e.target.value = ''
-                }}
-                className="h-8 py-1 text-xs"
-                aria-label="Add from rate list"
-              >
-                <option value="">+ Add from rate list…</option>
-                {products.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.name}
-                  </option>
-                ))}
-              </Select>
-            )}
+          <label className="label mb-0">Items (dispatched from stock)</label>
+          {!isEdit && (
             <button className="btn-ghost btn-sm text-brand-600" onClick={addLine}>
               <Plus size={14} /> Add item
             </button>
-          </div>
+          )}
         </div>
         <div className="overflow-x-auto rounded-lg border border-slate-200">
-          <table className="w-full min-w-[30rem]">
+          <table className="w-full min-w-[34rem]">
             <thead>
               <tr className="bg-slate-50">
-                <th className="th">Description</th>
-                <th className="th w-28 text-right">Qty</th>
-                <th className="th w-28">Unit</th>
+                <th className="th">Material</th>
+                <th className="th w-36">From stock</th>
+                <th className="th w-24 text-right">Qty</th>
+                <th className="th w-16">Unit</th>
                 <th className="th w-10"></th>
               </tr>
             </thead>
@@ -549,40 +570,62 @@ function DcForm({ dc, onClose }: { dc: DeliveryChallan | null; onClose: () => vo
               {lines.map((l) => (
                 <tr key={l.id}>
                   <td className="px-2 py-1.5">
-                    <input
-                      className="input"
-                      placeholder="Item"
-                      value={l.description}
-                      onChange={(e) => updateLine(l.id, { description: e.target.value })}
-                    />
+                    {isEdit ? (
+                      <span className="text-sm text-slate-700">{l.description || '—'}</span>
+                    ) : (
+                      <select
+                        className="input"
+                        value={l.materialId ?? ''}
+                        onChange={(e) => pickMaterial(l.id, e.target.value)}
+                      >
+                        <option value="">Select material…</option>
+                        {materials.map((m) => (
+                          <option key={m.id} value={m.id}>
+                            {m.name} ({m.unit})
+                          </option>
+                        ))}
+                      </select>
+                    )}
+                  </td>
+                  <td className="px-2 py-1.5">
+                    {isEdit ? (
+                      <span className="text-2xs text-slate-500">
+                        {l.ownerType === 'Shop' ? 'Own (shop)' : 'Customer'}
+                      </span>
+                    ) : (
+                      <select
+                        className="input"
+                        value={l.ownerType ?? 'Company'}
+                        onChange={(e) =>
+                          updateLine(l.id, { ownerType: e.target.value as DcLine['ownerType'] })
+                        }
+                      >
+                        <option value="Company">This customer's stock</option>
+                        <option value="Shop">Own (shop) stock</option>
+                      </select>
+                    )}
                   </td>
                   <td className="px-2 py-1.5">
                     <input
                       type="number"
                       step="0.001"
+                      min={0}
                       className="input text-right"
                       value={l.quantity}
+                      disabled={isEdit}
                       onChange={(e) => updateLine(l.id, { quantity: Number(e.target.value) })}
                     />
                   </td>
-                  <td className="px-2 py-1.5">
-                    <select
-                      className="input"
-                      value={l.unit}
-                      onChange={(e) => updateLine(l.id, { unit: e.target.value })}
-                    >
-                      {units.map((u) => (
-                        <option key={u}>{u}</option>
-                      ))}
-                    </select>
-                  </td>
+                  <td className="px-2 py-1.5 text-slate-600">{l.unit}</td>
                   <td className="px-2 py-1.5 text-right">
-                    <button
-                      className="btn-ghost btn-sm text-red-500"
-                      onClick={() => removeLine(l.id)}
-                    >
-                      <Trash2 size={15} />
-                    </button>
+                    {!isEdit && (
+                      <button
+                        className="btn-ghost btn-sm text-red-500"
+                        onClick={() => removeLine(l.id)}
+                      >
+                        <Trash2 size={15} />
+                      </button>
+                    )}
                   </td>
                 </tr>
               ))}

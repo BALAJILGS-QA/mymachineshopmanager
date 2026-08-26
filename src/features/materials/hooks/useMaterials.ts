@@ -109,3 +109,26 @@ export function useRemoveIssue() {
     onSuccess: () => invalidateStock(qc),
   })
 }
+
+// ---- Own material purchases + ledger ----
+export function useOwnPurchases() {
+  return useQuery({ queryKey: qk.stock.ownPurchases, queryFn: api.listOwnPurchases })
+}
+
+export function useCreateOwnPurchase() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (input: api.OwnPurchaseInput) => api.createOwnPurchase(input),
+    onSuccess: () => {
+      invalidateStock(qc) // receipts/ledger/ownPurchases (prefix)
+      qc.invalidateQueries({ queryKey: qk.expenses.all }) // linked expense
+    },
+  })
+}
+
+export function useLedger(filter: api.LedgerFilter = {}) {
+  return useQuery({
+    queryKey: [...qk.stock.ledger, filter],
+    queryFn: () => api.listLedger(filter),
+  })
+}

@@ -5,7 +5,16 @@ import { uid } from '@/lib/id'
 import { maps, fromRow, type Row } from '@/lib/api/rowMap'
 import { sb, selectAll, insertRow, updateRow, deleteRow } from '@/lib/api/supabaseCrud'
 import { nextCode, nextNumberedDoc } from '@/lib/api/numbering'
-import type { Material, MaterialIssue, MaterialReceipt, StockAdjustment } from '@/types'
+import { SHOP_SCOPE } from '@/data/computations'
+import type {
+  InventoryLedgerRow,
+  Material,
+  MaterialIssue,
+  MaterialReceipt,
+  OwnMaterialPurchase,
+  PaymentMethod,
+  StockAdjustment,
+} from '@/types'
 
 export type MaterialCreateInput = Omit<Material, 'id' | 'code' | 'createdAt' | 'updatedAt'> & {
   code?: string
@@ -93,4 +102,64 @@ export async function removeReceipt(id: string): Promise<void> {
 }
 export async function removeIssue(id: string): Promise<void> {
   return deleteRow(maps.issues, id)
+}
+
+// ---- Own material purchases (stock receipt + expense, atomic) ----
+export interface OwnPurchaseInput {
+  supplier?: string
+  materialId: string
+  purchaseDate: string
+  quantity: number
+  unit: string
+  totalCost: number
+  totalGst: number
+  method: PaymentMethod
+  notes?: string
+}
+
+export async function listOwnPurchases(): Promise<OwnMaterialPurchase[]> {
+  return selectAll<OwnMaterialPurchase>(maps.ownPurchases)
+}
+
+export async function createOwnPurchase(input: OwnPurchaseInput): Promise<OwnMaterialPurchase> {
+  const { data, error } = await sb().rpc('create_own_material_purchase', {
+    p_id: uid('opur_'),
+    p_supplier: input.supplier ?? null,
+    p_material_id: input.materialId,
+    p_purchase_date: input.purchaseDate,
+    p_quantity: input.quantity,
+    p_unit: input.unit,
+    p_total_cost: input.totalCost,
+    p_total_gst: input.totalGst,
+    p_notes: input.notes ?? null,
+    p_method: input.method,
+    p_receipt_id: uid('rcp_'),
+    p_receipt_no: await nextNumberedDoc('receipt'),
+    p_expense_id: uid('exp_'),
+    p_expense_no: await nextNumberedDoc('expense'),
+  })
+  if (error) throw error
+  return fromRow<OwnMaterialPurchase>((data as Row[])[0], maps.ownPurchases)
+}
+
+// ---- Inventory ledger (unified transaction history) ----
+export interface LedgerFilter {
+  materialId?: string
+  scope?: string // undefined = all, SHOP_SCOPE = own/shop, else a company id
+  from?: string
+  to?: string
+  txnType?: string
+}
+
+export async function listLedger(f: LedgerFilter = {}): Promise<InventoryLedgerRow[]> {
+  let q = sb().from('inventory_ledger').select('*')
+  if (f.materialId) q = q.eq('material_id', f.materialId)
+  if (f.scope === SHOP_SCOPE) q = q.is('company_id', null)
+  else if (f.scope) q = q.eq('company_id', f.scope)
+  if (f.txnType) q = q.eq('txn_type', f.txnType)
+  if (f.from) q = q.gte('date', f.from)
+  if (f.to) q = q.lte('date', f.to)
+  const { data, error } = await q.order('created_at', { ascending: false }).limit(500)
+  if (error) throw error
+  return (data ?? []).map((r) => fromRow<InventoryLedgerRow>(r as Row, maps.inventoryLedger))
 }

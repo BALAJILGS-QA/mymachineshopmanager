@@ -6,6 +6,7 @@ import {
   useCreateReceipt,
   useCreateIssue,
   useCreateAdjustment,
+  useCreateOwnPurchase,
   useMaterials,
   useMaterialBalance,
 } from './hooks/useMaterials'
@@ -14,10 +15,12 @@ import { useJobs } from '@/features/jobs/hooks/useJobs'
 import { useSettings } from '@/features/settings/hooks/useSettings'
 import { DEFAULT_SETTINGS } from '@/data/seed'
 import { toUserMessage } from '@/lib/api/errors'
-import { todayISO, qty } from '@/lib/format'
+import { todayISO, qty, currency } from '@/lib/format'
 import { Field, Input, Select, Textarea } from '@/components/ui/primitives'
 import { Modal } from '@/components/ui/Modal'
 import { useToast } from '@/components/ui/Toast'
+import { PAYMENT_METHODS } from '@/constants/domain'
+import type { PaymentMethod } from '@/types'
 
 // ------------------------------------------------------------- Material master
 export function MaterialForm({
@@ -508,6 +511,246 @@ export function AdjustmentForm({ onClose }: { onClose: () => void }) {
         </div>
         <Field label="Reason" required>
           <Textarea rows={2} value={form.reason} onChange={(e) => set('reason', e.target.value)} />
+        </Field>
+      </div>
+    </Modal>
+  )
+}
+
+// -------------------------------------------------- Add customer material (receipt)
+export function AddCustomerMaterialForm({ onClose }: { onClose: () => void }) {
+  const toast = useToast()
+  const createReceipt = useCreateReceipt()
+  const { data: allCompanies = [] } = useCompanies()
+  const companies = allCompanies.filter((c) => c.active)
+  const { data: allMaterials = [] } = useMaterials()
+  const materials = allMaterials.filter((m) => m.active)
+  const [form, setForm] = useState({
+    companyId: companies[0]?.id ?? '',
+    whereFrom: '',
+    date: todayISO(),
+    materialId: '',
+    quantity: '',
+    challanNo: '',
+    notes: '',
+  })
+  function set<K extends keyof typeof form>(k: K, v: (typeof form)[K]) {
+    setForm((f) => ({ ...f, [k]: v }))
+  }
+  const material = materials.find((m) => m.id === form.materialId)
+
+  async function submit() {
+    try {
+      if (!form.companyId) return toast.error('Select a company')
+      if (!form.materialId) return toast.error('Select a material')
+      const q = Number(form.quantity)
+      if (!(q > 0)) return toast.error('Quantity must be greater than zero')
+      await createReceipt.mutateAsync({
+        date: form.date,
+        materialId: form.materialId,
+        ownerType: 'Company',
+        companyId: form.companyId,
+        supplier: form.whereFrom.trim() || undefined,
+        quantity: q,
+        unit: material?.unit ?? 'Nos',
+        reference: form.challanNo.trim() || undefined,
+        notes: form.notes.trim() || undefined,
+      })
+      toast.success('Customer material received into stock')
+      onClose()
+    } catch (e) {
+      toast.error(toUserMessage(e, 'Save failed'))
+    }
+  }
+
+  return (
+    <Modal
+      open
+      onClose={onClose}
+      title="Add Customer Material"
+      footer={
+        <>
+          <button className="btn-secondary" onClick={onClose}>
+            Cancel
+          </button>
+          <button className="btn-primary" onClick={submit} disabled={createReceipt.isPending}>
+            {createReceipt.isPending ? 'Saving…' : 'Receive material'}
+          </button>
+        </>
+      }
+    >
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <Field label="Company" required>
+          <Select value={form.companyId} onChange={(e) => set('companyId', e.target.value)}>
+            <option value="">Select…</option>
+            {companies.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
+            ))}
+          </Select>
+        </Field>
+        <Field label="Where From" hint="e.g. Customer supplied / Flowra Stores">
+          <Input value={form.whereFrom} onChange={(e) => set('whereFrom', e.target.value)} />
+        </Field>
+        <Field label="From Date" required>
+          <Input type="date" value={form.date} onChange={(e) => set('date', e.target.value)} />
+        </Field>
+        <Field label="Material" required>
+          <Select value={form.materialId} onChange={(e) => set('materialId', e.target.value)}>
+            <option value="">Select…</option>
+            {materials.map((m) => (
+              <option key={m.id} value={m.id}>
+                {m.name} ({m.unit})
+              </option>
+            ))}
+          </Select>
+        </Field>
+        <Field label={`Quantity ${material ? `(${material.unit})` : ''}`} required>
+          <Input
+            type="number"
+            step="0.001"
+            min={0}
+            value={form.quantity}
+            onChange={(e) => set('quantity', e.target.value)}
+          />
+        </Field>
+        <Field label="Challan No">
+          <Input value={form.challanNo} onChange={(e) => set('challanNo', e.target.value)} />
+        </Field>
+        <Field label="Notes" className="sm:col-span-2">
+          <Textarea rows={2} value={form.notes} onChange={(e) => set('notes', e.target.value)} />
+        </Field>
+      </div>
+    </Modal>
+  )
+}
+
+// ------------------------------------------------ Add own material (purchase + expense)
+export function AddOwnMaterialForm({ onClose }: { onClose: () => void }) {
+  const toast = useToast()
+  const createPurchase = useCreateOwnPurchase()
+  const { data: allMaterials = [] } = useMaterials()
+  const materials = allMaterials.filter((m) => m.active)
+  const [form, setForm] = useState({
+    supplier: '',
+    materialId: '',
+    date: todayISO(),
+    quantity: '',
+    totalCost: '',
+    totalGst: '',
+    method: 'Bank Transfer' as PaymentMethod,
+    notes: '',
+  })
+  function set<K extends keyof typeof form>(k: K, v: (typeof form)[K]) {
+    setForm((f) => ({ ...f, [k]: v }))
+  }
+  const material = materials.find((m) => m.id === form.materialId)
+  const total = (Number(form.totalCost) || 0) + (Number(form.totalGst) || 0)
+
+  async function submit() {
+    try {
+      if (!form.materialId) return toast.error('Select a material')
+      const q = Number(form.quantity)
+      if (!(q > 0)) return toast.error('Quantity must be greater than zero')
+      await createPurchase.mutateAsync({
+        supplier: form.supplier.trim() || undefined,
+        materialId: form.materialId,
+        purchaseDate: form.date,
+        quantity: q,
+        unit: material?.unit ?? 'Nos',
+        totalCost: Number(form.totalCost) || 0,
+        totalGst: Number(form.totalGst) || 0,
+        method: form.method,
+        notes: form.notes.trim() || undefined,
+      })
+      toast.success('Own material purchased — stock + expense recorded')
+      onClose()
+    } catch (e) {
+      toast.error(toUserMessage(e, 'Save failed'))
+    }
+  }
+
+  return (
+    <Modal
+      open
+      onClose={onClose}
+      title="Add Own Material"
+      footer={
+        <>
+          <button className="btn-secondary" onClick={onClose}>
+            Cancel
+          </button>
+          <button className="btn-primary" onClick={submit} disabled={createPurchase.isPending}>
+            {createPurchase.isPending ? 'Saving…' : 'Record purchase'}
+          </button>
+        </>
+      }
+    >
+      <p className="mb-3 rounded-lg bg-brand-50 px-3 py-2 text-xs text-brand-700">
+        Adds to own (shop) stock and records a linked expense automatically.
+      </p>
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <Field label="Where Purchased" hint="Supplier">
+          <Input value={form.supplier} onChange={(e) => set('supplier', e.target.value)} />
+        </Field>
+        <Field label="Date of Purchase" required>
+          <Input type="date" value={form.date} onChange={(e) => set('date', e.target.value)} />
+        </Field>
+        <Field label="Material" required>
+          <Select value={form.materialId} onChange={(e) => set('materialId', e.target.value)}>
+            <option value="">Select…</option>
+            {materials.map((m) => (
+              <option key={m.id} value={m.id}>
+                {m.name} ({m.unit})
+              </option>
+            ))}
+          </Select>
+        </Field>
+        <Field label={`Quantity ${material ? `(${material.unit})` : ''}`} required>
+          <Input
+            type="number"
+            step="0.001"
+            min={0}
+            value={form.quantity}
+            onChange={(e) => set('quantity', e.target.value)}
+          />
+        </Field>
+        <Field label="Material Cost (excl. GST)">
+          <Input
+            type="number"
+            step="0.01"
+            min={0}
+            value={form.totalCost}
+            onChange={(e) => set('totalCost', e.target.value)}
+          />
+        </Field>
+        <Field label="Total GST">
+          <Input
+            type="number"
+            step="0.01"
+            min={0}
+            value={form.totalGst}
+            onChange={(e) => set('totalGst', e.target.value)}
+          />
+        </Field>
+        <Field label="Payment Method">
+          <Select
+            value={form.method}
+            onChange={(e) => set('method', e.target.value as PaymentMethod)}
+          >
+            {PAYMENT_METHODS.map((m) => (
+              <option key={m}>{m}</option>
+            ))}
+          </Select>
+        </Field>
+        <Field label="Total (cost + GST)">
+          <div className="input flex items-center bg-slate-50 font-semibold text-slate-800">
+            {currency(total)}
+          </div>
+        </Field>
+        <Field label="Notes" className="sm:col-span-2">
+          <Textarea rows={2} value={form.notes} onChange={(e) => set('notes', e.target.value)} />
         </Field>
       </div>
     </Modal>

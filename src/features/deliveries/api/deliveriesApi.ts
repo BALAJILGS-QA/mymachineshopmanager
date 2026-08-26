@@ -4,7 +4,7 @@
 
 import { uid } from '@/lib/id'
 import { maps, fromRow, type Row } from '@/lib/api/rowMap'
-import { sb, selectAll, insertRow, updateRow, deleteRow } from '@/lib/api/supabaseCrud'
+import { sb, selectAll, updateRow, deleteRow } from '@/lib/api/supabaseCrud'
 import { nextNumberedDoc } from '@/lib/api/numbering'
 import type { DeliveryChallan, DcStatus } from '@/types'
 
@@ -15,13 +15,30 @@ export async function listChallans(): Promise<DeliveryChallan[]> {
   return selectAll<DeliveryChallan>(maps.deliveryChallans)
 }
 
+// Creating a challan atomically dispatches its lines (deducts inventory) via the
+// server RPC. Each line must carry materialId + ownerType; the RPC validates
+// stock, locks per material, and rolls back everything on any shortfall.
 export async function createChallan(input: DcCreateInput): Promise<DeliveryChallan> {
-  return insertRow<DeliveryChallan>(maps.deliveryChallans, {
-    ...input,
-    id: uid('dc_'),
-    dcNo: await nextNumberedDoc('dc'),
-    status: input.status ?? 'Open',
+  const { data, error } = await sb().rpc('create_challan_with_dispatch', {
+    p_id: uid('dc_'),
+    p_dc_no: await nextNumberedDoc('dc'),
+    p_date: input.date,
+    p_company_id: input.companyId,
+    p_job_id: input.jobId ?? null,
+    p_reference: input.reference ?? null,
+    p_vehicle_no: input.vehicleNo ?? null,
+    p_notes: input.notes ?? null,
+    p_lines: input.lines,
   })
+  if (error) throw error
+  return fromRow<DeliveryChallan>((data as Row[])[0], maps.deliveryChallans)
+}
+
+// Cancelling reverses the dispatched inventory (compensating adjustments).
+export async function cancelChallan(id: string): Promise<DeliveryChallan> {
+  const { data, error } = await sb().rpc('cancel_challan', { p_id: id })
+  if (error) throw error
+  return fromRow<DeliveryChallan>((data as Row[])[0], maps.deliveryChallans)
 }
 
 export async function updateChallan(id: string, patch: DcUpdateInput): Promise<DeliveryChallan> {
