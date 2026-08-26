@@ -2,9 +2,8 @@ import { useMemo, useState } from 'react'
 import { Navigate } from 'react-router-dom'
 import { Check, ShieldCheck, UserCheck, X } from 'lucide-react'
 import type { AppUser, UserStatus } from '@/types'
-import { userRepo, BusinessRuleError } from '@/data/repo'
-import { setRemoteApproval } from '@/data/backend'
-import { useDb } from '@/data/store'
+import { useUsers, useApproveUser, useRejectUser } from './hooks/useUsers'
+import { toUserMessage } from '@/lib/api/errors'
 import { useAuth } from '@/features/auth/auth'
 import { fmtDate } from '@/lib/format'
 import { PageHeader, ResponsiveTable } from '@/components/common/PageHeader'
@@ -21,8 +20,10 @@ const FILTERS: { key: UserStatus | 'all'; label: string }[] = [
 ]
 
 export function ApprovalsPage() {
-  const { isSuperAdmin, session, supabaseMode } = useAuth()
-  const users = useDb((db) => db.users)
+  const { isSuperAdmin, session } = useAuth()
+  const { data: users = [] } = useUsers()
+  const approveUser = useApproveUser()
+  const rejectUser = useRejectUser()
   const toast = useToast()
   const confirm = useConfirm()
   const [filter, setFilter] = useState<UserStatus | 'all'>('pending')
@@ -42,11 +43,10 @@ export function ApprovalsPage() {
 
   async function onApprove(u: AppUser) {
     try {
-      userRepo.approve(u.id, session?.username ?? 'admin')
-      if (supabaseMode) await setRemoteApproval(u.email, true)
+      await approveUser.mutateAsync({ id: u.id, by: session?.username ?? 'admin', email: u.email })
       toast.success(`${u.fullName || u.email} approved`)
     } catch (e) {
-      toast.error(e instanceof BusinessRuleError ? e.message : 'Approve failed')
+      toast.error(toUserMessage(e, 'Approve failed'))
     }
   }
 
@@ -59,11 +59,10 @@ export function ApprovalsPage() {
     })
     if (!ok) return
     try {
-      userRepo.reject(u.id, session?.username ?? 'admin')
-      if (supabaseMode) await setRemoteApproval(u.email, false)
+      await rejectUser.mutateAsync({ id: u.id, by: session?.username ?? 'admin', email: u.email })
       toast.success('Registration rejected')
     } catch (e) {
-      toast.error(e instanceof BusinessRuleError ? e.message : 'Reject failed')
+      toast.error(toUserMessage(e, 'Reject failed'))
     }
   }
 

@@ -1,7 +1,15 @@
 import { useState } from 'react'
 import type { Material, MaterialOwnerType } from '@/types'
-import { materialRepo, stockRepo, BusinessRuleError } from '@/data/repo'
+import { stockRepo } from '@/data/repo'
 import { useDb } from '@/data/store'
+import {
+  useCreateMaterial,
+  useUpdateMaterial,
+  useCreateReceipt,
+  useCreateIssue,
+  useCreateAdjustment,
+} from './hooks/useMaterials'
+import { toUserMessage } from '@/lib/api/errors'
 import { todayISO, qty } from '@/lib/format'
 import { Field, Input, Select, Textarea } from '@/components/ui/primitives'
 import { Modal } from '@/components/ui/Modal'
@@ -16,6 +24,9 @@ export function MaterialForm({
   onClose: () => void
 }) {
   const toast = useToast()
+  const createMaterial = useCreateMaterial()
+  const updateMaterial = useUpdateMaterial()
+  const saving = createMaterial.isPending || updateMaterial.isPending
   const settings = useDb((db) => db.settings)
   const [form, setForm] = useState({
     name: material?.name ?? '',
@@ -32,7 +43,7 @@ export function MaterialForm({
     setForm((f) => ({ ...f, [k]: v }))
   }
 
-  function submit() {
+  async function submit() {
     try {
       const payload = {
         name: form.name,
@@ -45,15 +56,15 @@ export function MaterialForm({
         active: form.active,
       }
       if (material) {
-        materialRepo.update(material.id, payload)
+        await updateMaterial.mutateAsync({ id: material.id, patch: payload })
         toast.success('Material updated')
       } else {
-        materialRepo.create(payload)
+        await createMaterial.mutateAsync(payload)
         toast.success('Material added')
       }
       onClose()
     } catch (e) {
-      toast.error(e instanceof BusinessRuleError ? e.message : 'Save failed')
+      toast.error(toUserMessage(e, 'Save failed'))
     }
   }
 
@@ -67,8 +78,8 @@ export function MaterialForm({
           <button className="btn-secondary" onClick={onClose}>
             Cancel
           </button>
-          <button className="btn-primary" onClick={submit}>
-            {material ? 'Save changes' : 'Add material'}
+          <button className="btn-primary" onClick={submit} disabled={saving}>
+            {saving ? 'Saving…' : material ? 'Save changes' : 'Add material'}
           </button>
         </>
       }
@@ -137,6 +148,7 @@ export function MaterialForm({
 // ---------------------------------------------------------------- Receipt form
 export function ReceiptForm({ onClose }: { onClose: () => void }) {
   const toast = useToast()
+  const createReceipt = useCreateReceipt()
   const materials = useDb((db) => db.materials.filter((m) => m.active))
   const companies = useDb((db) => db.companies.filter((c) => c.active))
   const [form, setForm] = useState({
@@ -157,9 +169,9 @@ export function ReceiptForm({ onClose }: { onClose: () => void }) {
     setForm((f) => ({ ...f, [k]: v }))
   }
 
-  function submit() {
+  async function submit() {
     try {
-      stockRepo.receipt({
+      await createReceipt.mutateAsync({
         date: form.date,
         materialId: form.materialId,
         ownerType: form.ownerType,
@@ -175,7 +187,7 @@ export function ReceiptForm({ onClose }: { onClose: () => void }) {
       toast.success('Material received into stock')
       onClose()
     } catch (e) {
-      toast.error(e instanceof BusinessRuleError ? e.message : 'Save failed')
+      toast.error(toUserMessage(e, 'Save failed'))
     }
   }
 
@@ -189,8 +201,8 @@ export function ReceiptForm({ onClose }: { onClose: () => void }) {
           <button className="btn-secondary" onClick={onClose}>
             Cancel
           </button>
-          <button className="btn-primary" onClick={submit}>
-            Receive
+          <button className="btn-primary" onClick={submit} disabled={createReceipt.isPending}>
+            {createReceipt.isPending ? 'Saving…' : 'Receive'}
           </button>
         </>
       }
@@ -247,7 +259,10 @@ export function ReceiptForm({ onClose }: { onClose: () => void }) {
             onChange={(e) => set('rate', e.target.value)}
           />
         </Field>
-        <Field label="Received from (source)" hint="Where the material came to your shop floor from">
+        <Field
+          label="Received from (source)"
+          hint="Where the material came to your shop floor from"
+        >
           <Input
             value={form.supplier}
             placeholder="Supplier / customer / branch…"
@@ -271,10 +286,9 @@ export function ReceiptForm({ onClose }: { onClose: () => void }) {
 // ------------------------------------------------------------------ Issue form
 export function IssueForm({ onClose }: { onClose: () => void }) {
   const toast = useToast()
+  const createIssue = useCreateIssue()
   const materials = useDb((db) => db.materials.filter((m) => m.active))
-  const jobs = useDb((db) =>
-    db.jobs.filter((j) => !['Cancelled', 'Delivered'].includes(j.status)),
-  )
+  const jobs = useDb((db) => db.jobs.filter((j) => !['Cancelled', 'Delivered'].includes(j.status)))
   const [form, setForm] = useState({
     date: todayISO(),
     materialId: materials[0]?.id ?? '',
@@ -291,10 +305,10 @@ export function IssueForm({ onClose }: { onClose: () => void }) {
     setForm((f) => ({ ...f, [k]: v }))
   }
 
-  function submit() {
+  async function submit() {
     try {
-      stockRepo.issue(
-        {
+      await createIssue.mutateAsync({
+        input: {
           date: form.date,
           materialId: form.materialId,
           jobId: form.jobId,
@@ -303,11 +317,11 @@ export function IssueForm({ onClose }: { onClose: () => void }) {
           note: form.note || undefined,
         },
         override,
-      )
+      })
       toast.success('Material issued to job')
       onClose()
     } catch (e) {
-      toast.error(e instanceof BusinessRuleError ? e.message : 'Save failed')
+      toast.error(toUserMessage(e, 'Save failed'))
     }
   }
 
@@ -321,8 +335,8 @@ export function IssueForm({ onClose }: { onClose: () => void }) {
           <button className="btn-secondary" onClick={onClose}>
             Cancel
           </button>
-          <button className="btn-primary" onClick={submit}>
-            Issue
+          <button className="btn-primary" onClick={submit} disabled={createIssue.isPending}>
+            {createIssue.isPending ? 'Saving…' : 'Issue'}
           </button>
         </>
       }
@@ -386,6 +400,7 @@ export function IssueForm({ onClose }: { onClose: () => void }) {
 // ------------------------------------------------------------- Adjustment form
 export function AdjustmentForm({ onClose }: { onClose: () => void }) {
   const toast = useToast()
+  const createAdjustment = useCreateAdjustment()
   const materials = useDb((db) => db.materials.filter((m) => m.active))
   const companies = useDb((db) => db.companies)
   const [form, setForm] = useState({
@@ -402,11 +417,10 @@ export function AdjustmentForm({ onClose }: { onClose: () => void }) {
     setForm((f) => ({ ...f, [k]: v }))
   }
 
-  function submit() {
+  async function submit() {
     try {
-      const signed =
-        (form.direction === 'decrease' ? -1 : 1) * Math.abs(Number(form.quantity))
-      stockRepo.adjust({
+      const signed = (form.direction === 'decrease' ? -1 : 1) * Math.abs(Number(form.quantity))
+      await createAdjustment.mutateAsync({
         date: form.date,
         materialId: form.materialId,
         companyId: form.companyId || undefined,
@@ -417,7 +431,7 @@ export function AdjustmentForm({ onClose }: { onClose: () => void }) {
       toast.success('Stock adjusted')
       onClose()
     } catch (e) {
-      toast.error(e instanceof BusinessRuleError ? e.message : 'Save failed')
+      toast.error(toUserMessage(e, 'Save failed'))
     }
   }
 
@@ -432,8 +446,8 @@ export function AdjustmentForm({ onClose }: { onClose: () => void }) {
           <button className="btn-secondary" onClick={onClose}>
             Cancel
           </button>
-          <button className="btn-primary" onClick={submit}>
-            Apply adjustment
+          <button className="btn-primary" onClick={submit} disabled={createAdjustment.isPending}>
+            {createAdjustment.isPending ? 'Saving…' : 'Apply adjustment'}
           </button>
         </>
       }

@@ -11,7 +11,8 @@ import {
 } from 'lucide-react'
 import { clsx } from 'clsx'
 import type { Material } from '@/types'
-import { materialRepo, stockRepo, BusinessRuleError } from '@/data/repo'
+import { useDeleteMaterial, useRemoveReceipt, useRemoveIssue } from './hooks/useMaterials'
+import { toUserMessage } from '@/lib/api/errors'
 import { useDb } from '@/data/store'
 import { materialStock, materialStockValue, SHOP_SCOPE } from '@/data/computations'
 import { getDb } from '@/data/db'
@@ -81,7 +82,9 @@ export function MaterialsPage() {
             onClick={() => setTab(t.key)}
             className={clsx(
               'whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium transition',
-              tab === t.key ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700',
+              tab === t.key
+                ? 'bg-white text-slate-900 shadow-sm'
+                : 'text-slate-500 hover:text-slate-700',
             )}
           >
             {t.label}
@@ -169,9 +172,7 @@ export function MaterialsPage() {
 function StockTab({ fCompany, fMaterial }: { fCompany: string; fMaterial: string }) {
   const materialsAll = useDb((db) => db.materials)
   // Recompute whenever any stock txn changes.
-  const stampKey = useDb(
-    (db) => db.receipts.length + db.issues.length + db.adjustments.length,
-  )
+  const stampKey = useDb((db) => db.receipts.length + db.issues.length + db.adjustments.length)
   const companyName = useCompanyName()
 
   const rows = useMemo(() => {
@@ -182,14 +183,19 @@ function StockTab({ fCompany, fMaterial }: { fCompany: string; fMaterial: string
       const ownBalance = materialStock(db, m.id, SHOP_SCOPE).balance
       // per-company breakdown
       const companyIds = new Set<string>()
-      db.receipts.filter((r) => r.materialId === m.id && r.companyId).forEach((r) => companyIds.add(r.companyId!))
-      db.issues.filter((i) => i.materialId === m.id && i.companyId).forEach((i) => companyIds.add(i.companyId!))
+      db.receipts
+        .filter((r) => r.materialId === m.id && r.companyId)
+        .forEach((r) => companyIds.add(r.companyId!))
+      db.issues
+        .filter((i) => i.materialId === m.id && i.companyId)
+        .forEach((i) => companyIds.add(i.companyId!))
       let perCompany = [...companyIds].map((cid) => ({
         companyId: cid,
         balance: materialStock(db, m.id, cid).balance,
       }))
       // Company filter narrows the breakdown to the chosen scope.
-      if (fCompany && fCompany !== SHOP_SCOPE) perCompany = perCompany.filter((pc) => pc.companyId === fCompany)
+      if (fCompany && fCompany !== SHOP_SCOPE)
+        perCompany = perCompany.filter((pc) => pc.companyId === fCompany)
       return {
         material: m,
         overall,
@@ -402,7 +408,17 @@ function LedgerTab({ fCompany, fMaterial }: { fCompany: string; fMaterial: strin
     }
 
     return out.sort((a, b) => b.ts - a.ts)
-  }, [receipts, issues, adjustments, challans, fCompany, fMaterial, materialName, companyName, jobNo])
+  }, [
+    receipts,
+    issues,
+    adjustments,
+    challans,
+    fCompany,
+    fMaterial,
+    materialName,
+    companyName,
+    jobNo,
+  ])
 
   const pg = usePagination(rows)
 
@@ -448,14 +464,9 @@ function LedgerTab({ fCompany, fMaterial }: { fCompany: string; fMaterial: strin
 }
 
 // --------------------------------------------------------------- Materials tab
-function MaterialsTab({
-  onAdd,
-  onEdit,
-}: {
-  onAdd: () => void
-  onEdit: (m: Material) => void
-}) {
+function MaterialsTab({ onAdd, onEdit }: { onAdd: () => void; onEdit: (m: Material) => void }) {
   const materials = useDb((db) => db.materials)
+  const deleteMaterial = useDeleteMaterial()
   const toast = useToast()
   const confirm = useConfirm()
 
@@ -468,10 +479,10 @@ function MaterialsTab({
     })
     if (!ok) return
     try {
-      materialRepo.remove(m.id)
+      await deleteMaterial.mutateAsync(m.id)
       toast.success('Material deleted')
     } catch (e) {
-      toast.error(e instanceof BusinessRuleError ? e.message : 'Delete failed')
+      toast.error(toUserMessage(e, 'Delete failed'))
     }
   }
 
@@ -508,7 +519,11 @@ function MaterialsTab({
                 <td className="td text-right">{m.defaultRate ? currency(m.defaultRate) : '—'}</td>
                 <td className="td text-right">{m.reorderLevel ?? '—'}</td>
                 <td className="td">
-                  {m.active ? <Badge tone="green">Active</Badge> : <Badge tone="gray">Inactive</Badge>}
+                  {m.active ? (
+                    <Badge tone="green">Active</Badge>
+                  ) : (
+                    <Badge tone="gray">Inactive</Badge>
+                  )}
                 </td>
                 <td className="td">
                   <div className="flex justify-end gap-1">
@@ -541,15 +556,23 @@ function ReceiptsTab({ fCompany, fMaterial }: { fCompany: string; fMaterial: str
   )
   const materialName = useMaterialName()
   const companyName = useCompanyName()
+  const removeReceipt = useRemoveReceipt()
   const confirm = useConfirm()
   const toast = useToast()
   const pg = usePagination(receipts)
 
   async function del(id: string) {
-    const ok = await confirm({ message: 'Delete this receipt? Stock will be reduced.', danger: true })
+    const ok = await confirm({
+      message: 'Delete this receipt? Stock will be reduced.',
+      danger: true,
+    })
     if (!ok) return
-    stockRepo.removeReceipt(id)
-    toast.success('Receipt deleted')
+    try {
+      await removeReceipt.mutateAsync(id)
+      toast.success('Receipt deleted')
+    } catch (e) {
+      toast.error(toUserMessage(e, 'Delete failed'))
+    }
   }
 
   return (
@@ -578,7 +601,11 @@ function ReceiptsTab({ fCompany, fMaterial }: { fCompany: string; fMaterial: str
                 <td className="td">{fmtDate(r.date)}</td>
                 <td className="td font-medium">{materialName(r.materialId)}</td>
                 <td className="td">
-                  {r.ownerType === 'Shop' ? <Badge tone="slate">Shop</Badge> : companyName(r.companyId)}
+                  {r.ownerType === 'Shop' ? (
+                    <Badge tone="slate">Shop</Badge>
+                  ) : (
+                    companyName(r.companyId)
+                  )}
                 </td>
                 <td className="td">{r.supplier || '—'}</td>
                 <td className="td text-right font-semibold">
@@ -614,15 +641,23 @@ function IssuesTab({ fCompany, fMaterial }: { fCompany: string; fMaterial: strin
   const materialName = useMaterialName()
   const jobNo = useJobNo()
   const companyName = useCompanyName()
+  const removeIssue = useRemoveIssue()
   const confirm = useConfirm()
   const toast = useToast()
   const pg = usePagination(issues)
 
   async function del(id: string) {
-    const ok = await confirm({ message: 'Delete this issue? Stock will be restored.', danger: true })
+    const ok = await confirm({
+      message: 'Delete this issue? Stock will be restored.',
+      danger: true,
+    })
     if (!ok) return
-    stockRepo.removeIssue(id)
-    toast.success('Issue deleted')
+    try {
+      await removeIssue.mutateAsync(id)
+      toast.success('Issue deleted')
+    } catch (e) {
+      toast.error(toUserMessage(e, 'Delete failed'))
+    }
   }
 
   return (
@@ -708,7 +743,13 @@ function AdjustmentsTab({ fCompany, fMaterial }: { fCompany: string; fMaterial: 
                 <td className="td font-medium">{materialName(a.materialId)}</td>
                 <td className="td">{a.companyId ? companyName(a.companyId) : 'Overall'}</td>
                 <td className="td text-right">
-                  <span className={a.quantity < 0 ? 'font-semibold text-red-600' : 'font-semibold text-emerald-600'}>
+                  <span
+                    className={
+                      a.quantity < 0
+                        ? 'font-semibold text-red-600'
+                        : 'font-semibold text-emerald-600'
+                    }
+                  >
                     {a.quantity > 0 ? '+' : ''}
                     {qty(a.quantity)} {a.unit}
                   </span>

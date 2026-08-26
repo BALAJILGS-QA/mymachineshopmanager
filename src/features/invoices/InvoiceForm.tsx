@@ -2,7 +2,8 @@ import { useMemo, useState } from 'react'
 import { clsx } from 'clsx'
 import { Plus, Trash2 } from 'lucide-react'
 import type { Invoice, InvoiceLine } from '@/types'
-import { invoiceRepo, BusinessRuleError } from '@/data/repo'
+import { useCreateInvoice, useUpdateInvoice } from './hooks/useInvoices'
+import { toUserMessage } from '@/lib/api/errors'
 import { useDb } from '@/data/store'
 import { invoiceSubtotal, roundMoney } from '@/data/computations'
 import { currency, fmtDateTime, todayISO } from '@/lib/format'
@@ -24,7 +25,12 @@ export function InvoiceForm({
   onCreated?: (invoiceId: string) => void
 }) {
   const toast = useToast()
-  const companies = useDb((db) => db.companies.filter((c) => c.active || c.id === invoice?.companyId))
+  const createInvoice = useCreateInvoice()
+  const updateInvoice = useUpdateInvoice()
+  const saving = createInvoice.isPending || updateInvoice.isPending
+  const companies = useDb((db) =>
+    db.companies.filter((c) => c.active || c.id === invoice?.companyId),
+  )
   const jobs = useDb((db) => db.jobs)
   const products = useDb((db) => db.products.filter((p) => p.active))
   const settings = useDb((db) => db.settings)
@@ -35,7 +41,9 @@ export function InvoiceForm({
   const [invoiceNo, setInvoiceNo] = useState(
     invoice?.invoiceNo ?? previewNextNo('invoice', settings.numbering.invoice),
   )
-  const [companyId, setCompanyId] = useState(invoice?.companyId ?? prefill?.companyId ?? companies[0]?.id ?? '')
+  const [companyId, setCompanyId] = useState(
+    invoice?.companyId ?? prefill?.companyId ?? companies[0]?.id ?? '',
+  )
   const [date, setDate] = useState(invoice?.date ?? todayISO())
   const [reference, setReference] = useState(invoice?.reference ?? prefill?.reference ?? '')
   const [dcReference, setDcReference] = useState(invoice?.dcReference ?? prefill?.dcReference ?? '')
@@ -44,12 +52,15 @@ export function InvoiceForm({
   const [shippingAddress, setShippingAddress] = useState(invoice?.shippingAddress ?? '')
   const [discount, setDiscount] = useState(String(invoice?.discount ?? 0))
   // CGST / SGST default to half of the configured tax rate; both editable.
-  const [cgst, setCgst] = useState(String(invoice?.cgstPercent ?? (invoice ? (invoice.taxPercent || 0) / 2 : defCgst)))
-  const [sgst, setSgst] = useState(String(invoice?.sgstPercent ?? (invoice ? (invoice.taxPercent || 0) / 2 : defSgst)))
+  const [cgst, setCgst] = useState(
+    String(invoice?.cgstPercent ?? (invoice ? (invoice.taxPercent || 0) / 2 : defCgst)),
+  )
+  const [sgst, setSgst] = useState(
+    String(invoice?.sgstPercent ?? (invoice ? (invoice.taxPercent || 0) / 2 : defSgst)),
+  )
   const [notes, setNotes] = useState(invoice?.notes ?? '')
   const [lines, setLines] = useState<InvoiceLine[]>(
-    invoice?.lines ??
-      prefill?.lines ?? [{ id: uid('l_'), description: '', quantity: 1, rate: 0 }],
+    invoice?.lines ?? prefill?.lines ?? [{ id: uid('l_'), description: '', quantity: 1, rate: 0 }],
   )
 
   // Eligible jobs: completed/delivered for the selected company, not fully invoiced.
@@ -105,7 +116,7 @@ export function InvoiceForm({
   const sgstAmount = roundMoney((taxable * sgstNum) / 100)
   const total = roundMoney(taxable + cgstAmount + sgstAmount)
 
-  function submit(asDraft: boolean) {
+  async function submit(asDraft: boolean) {
     try {
       const payload = {
         invoiceNo: invoiceNo.trim() || undefined,
@@ -126,16 +137,16 @@ export function InvoiceForm({
         shippingAddress: sameAsBilling ? undefined : shippingAddress.trim() || undefined,
       }
       if (invoice) {
-        invoiceRepo.update(invoice.id, payload)
+        await updateInvoice.mutateAsync({ id: invoice.id, patch: payload })
         toast.success('Invoice updated')
       } else {
-        const created = invoiceRepo.create(payload)
+        const created = await createInvoice.mutateAsync(payload)
         toast.success('Invoice created')
         onCreated?.(created.id)
       }
       onClose()
     } catch (e) {
-      toast.error(e instanceof BusinessRuleError ? e.message : 'Save failed')
+      toast.error(toUserMessage(e, 'Save failed'))
     }
   }
 
@@ -151,12 +162,12 @@ export function InvoiceForm({
             Cancel
           </button>
           {!invoice && (
-            <button className="btn-secondary" onClick={() => submit(true)}>
+            <button className="btn-secondary" onClick={() => submit(true)} disabled={saving}>
               Save as draft
             </button>
           )}
-          <button className="btn-primary" onClick={() => submit(false)}>
-            {invoice ? 'Save changes' : 'Create invoice'}
+          <button className="btn-primary" onClick={() => submit(false)} disabled={saving}>
+            {saving ? 'Saving…' : invoice ? 'Save changes' : 'Create invoice'}
           </button>
         </>
       }
@@ -243,11 +254,7 @@ export function InvoiceForm({
           <label className="label">Add from completed job</label>
           <div className="flex flex-wrap gap-1.5">
             {eligibleJobs.map((j) => (
-              <button
-                key={j.id}
-                className="btn-secondary btn-sm"
-                onClick={() => addJobLine(j.id)}
-              >
+              <button key={j.id} className="btn-secondary btn-sm" onClick={() => addJobLine(j.id)}>
                 <Plus size={13} /> {j.jobNo} · {j.partName}
               </button>
             ))}
@@ -322,9 +329,7 @@ export function InvoiceForm({
                       onChange={(e) => updateLine(l.id, { rate: Number(e.target.value) })}
                     />
                   </td>
-                  <td className="td text-right font-medium">
-                    {currency(l.quantity * l.rate)}
-                  </td>
+                  <td className="td text-right font-medium">{currency(l.quantity * l.rate)}</td>
                   <td className="px-2 py-1.5 text-right">
                     <button
                       className="btn-ghost btn-sm text-red-500"

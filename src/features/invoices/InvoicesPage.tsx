@@ -3,8 +3,9 @@ import { useNavigate } from 'react-router-dom'
 import { Ban, Download, FileDown, FileText, Pencil, Plus, Printer, Wallet } from 'lucide-react'
 import { downloadInvoicePdf } from './invoicePdf'
 import type { Invoice } from '@/types'
-import { invoiceRepo, BusinessRuleError } from '@/data/repo'
 import { useDb } from '@/data/store'
+import { useInvoices, useSetInvoiceStatus } from './hooks/useInvoices'
+import { toUserMessage } from '@/lib/api/errors'
 import { computeInvoice } from '@/data/computations'
 import { currency, fmtDate } from '@/lib/format'
 import { downloadCsv } from '@/lib/csv'
@@ -21,8 +22,9 @@ import { PaymentForm } from '@/features/payments/PaymentForm'
 import { INVOICE_STATUSES as STATUSES } from '@/constants/domain'
 
 export function InvoicesPage() {
-  const invoices = useDb((db) => db.invoices)
+  const { data: invoices = [], isLoading } = useInvoices()
   const payments = useDb((db) => db.payments)
+  const setInvoiceStatus = useSetInvoiceStatus()
   const companyName = useCompanyName()
   const navigate = useNavigate()
   const toast = useToast()
@@ -58,10 +60,10 @@ export function InvoicesPage() {
     })
     if (!ok) return
     try {
-      invoiceRepo.setStatus(inv.id, 'Cancelled')
+      await setInvoiceStatus.mutateAsync({ id: inv.id, status: 'Cancelled' })
       toast.success('Invoice cancelled')
     } catch (e) {
-      toast.error(e instanceof BusinessRuleError ? e.message : 'Failed')
+      toast.error(toUserMessage(e, 'Failed'))
     }
   }
 
@@ -113,7 +115,9 @@ export function InvoicesPage() {
       </FilterBar>
 
       <Card>
-        {rows.length === 0 ? (
+        {isLoading ? (
+          <div className="p-8 text-center text-sm text-slate-500">Loading invoices…</div>
+        ) : rows.length === 0 ? (
           <EmptyState
             icon={<FileText size={40} />}
             title="No invoices"

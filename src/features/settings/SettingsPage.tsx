@@ -19,8 +19,14 @@ import {
   Trash2,
   type LucideIcon,
 } from 'lucide-react'
-import { settingsRepo, productRepo, BusinessRuleError } from '@/data/repo'
 import { useDb } from '@/data/store'
+import {
+  useUpdateSettings,
+  useProducts,
+  useCreateProduct,
+  useDeleteProduct,
+} from './hooks/useSettings'
+import { toUserMessage } from '@/lib/api/errors'
 import { exportDb, importDb, resetDb, saveDb } from '@/data/db'
 import { buildInitialDb } from '@/data/seed'
 import { loadDemoData } from '@/data/demo'
@@ -44,18 +50,44 @@ type SectionKey =
 
 const MENU: { key: SectionKey; title: string; desc: string; icon: LucideIcon }[] = [
   { key: 'profile', title: 'Shop Profile', desc: 'Name, tagline, address & SEO', icon: Store },
-  { key: 'financial', title: 'Financial & Rules', desc: 'Currency, tax, CGST/SGST, policies', icon: Coins },
+  {
+    key: 'financial',
+    title: 'Financial & Rules',
+    desc: 'Currency, tax, CGST/SGST, policies',
+    icon: Coins,
+  },
   { key: 'units', title: 'Units', desc: 'Measurement units for materials', icon: Ruler },
-  { key: 'materialTypes', title: 'Material Types / Grades', desc: 'Grades for materials', icon: Layers },
-  { key: 'expenseCategories', title: 'Expense Categories', desc: 'Heads used for expenses', icon: Tags },
-  { key: 'products', title: 'Machining Rate List', desc: 'Parts and their rates', icon: ListChecks },
-  { key: 'numbering', title: 'Document Numbering', desc: 'Number formats for documents', icon: Hash },
+  {
+    key: 'materialTypes',
+    title: 'Material Types / Grades',
+    desc: 'Grades for materials',
+    icon: Layers,
+  },
+  {
+    key: 'expenseCategories',
+    title: 'Expense Categories',
+    desc: 'Heads used for expenses',
+    icon: Tags,
+  },
+  {
+    key: 'products',
+    title: 'Machining Rate List',
+    desc: 'Parts and their rates',
+    icon: ListChecks,
+  },
+  {
+    key: 'numbering',
+    title: 'Document Numbering',
+    desc: 'Number formats for documents',
+    icon: Hash,
+  },
   { key: 'password', title: 'Change Password', desc: 'Login credential', icon: KeyRound },
   { key: 'data', title: 'Data & Backup', desc: 'Export, restore, reset', icon: Database },
 ]
 
 export function SettingsPage() {
   const settings = useDb((db) => db.settings)
+  const updateSettings = useUpdateSettings()
   const toast = useToast()
   const confirm = useConfirm()
   const [section, setSection] = useState<SectionKey | null>(null)
@@ -75,7 +107,7 @@ export function SettingsPage() {
             subtitle="Measurement units for materials"
             value={settings.units}
             onSave={(units) => {
-              settingsRepo.update({ units })
+              updateSettings.mutate({ units })
               toast.success('Units updated')
             }}
           />
@@ -87,7 +119,7 @@ export function SettingsPage() {
             subtitle="Grades available when defining materials"
             value={settings.materialTypes}
             onSave={(materialTypes) => {
-              settingsRepo.update({ materialTypes })
+              updateSettings.mutate({ materialTypes })
               toast.success('Material types updated')
             }}
           />
@@ -99,7 +131,7 @@ export function SettingsPage() {
             subtitle="Categories used when recording expenses"
             value={settings.expenseCategories}
             onSave={(expenseCategories) => {
-              settingsRepo.update({ expenseCategories })
+              updateSettings.mutate({ expenseCategories })
               toast.success('Expense categories updated')
             }}
           />
@@ -164,29 +196,35 @@ export function SettingsPage() {
 // Machining rate list — e.g. "Open Well Bracket" ₹16.00. Used to prefill
 // invoice and delivery-challan line items.
 function ProductsCard() {
-  const products = useDb((db) => db.products)
+  const { data: products = [] } = useProducts()
   const units = useDb((db) => db.settings.units)
+  const createProduct = useCreateProduct()
+  const deleteProduct = useDeleteProduct()
   const toast = useToast()
   const confirm = useConfirm()
   const [name, setName] = useState('')
   const [rate, setRate] = useState('')
   const [unit, setUnit] = useState(units[0] ?? 'Nos')
 
-  function add() {
+  async function add() {
     try {
-      productRepo.create({ name, rate: Number(rate) || 0, unit, active: true })
+      await createProduct.mutateAsync({ name, rate: Number(rate) || 0, unit, active: true })
       setName('')
       setRate('')
       toast.success('Product added')
     } catch (e) {
-      toast.error(e instanceof BusinessRuleError ? e.message : 'Add failed')
+      toast.error(toUserMessage(e, 'Add failed'))
     }
   }
   async function remove(id: string, label: string) {
     const ok = await confirm({ message: `Remove "${label}" from the rate list?`, danger: true })
     if (!ok) return
-    productRepo.remove(id)
-    toast.success('Removed')
+    try {
+      await deleteProduct.mutateAsync(id)
+      toast.success('Removed')
+    } catch (e) {
+      toast.error(toUserMessage(e, 'Remove failed'))
+    }
   }
 
   return (
@@ -197,10 +235,20 @@ function ProductsCard() {
       />
       <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-end">
         <Field label="Part / Product" className="flex-1">
-          <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Open Well Bracket" />
+          <Input
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="Open Well Bracket"
+          />
         </Field>
         <Field label="Rate (₹)" className="w-28">
-          <Input type="number" step="0.01" value={rate} onChange={(e) => setRate(e.target.value)} placeholder="16.00" />
+          <Input
+            type="number"
+            step="0.01"
+            value={rate}
+            onChange={(e) => setRate(e.target.value)}
+            placeholder="16.00"
+          />
         </Field>
         <Field label="Unit" className="w-24">
           <select className="input" value={unit} onChange={(e) => setUnit(e.target.value)}>
@@ -234,7 +282,10 @@ function ProductsCard() {
                   <td className="td">{p.unit || '—'}</td>
                   <td className="td text-right">{currency(p.rate)}</td>
                   <td className="td text-right">
-                    <button className="btn-ghost btn-sm text-red-500" onClick={() => remove(p.id, p.name)}>
+                    <button
+                      className="btn-ghost btn-sm text-red-500"
+                      onClick={() => remove(p.id, p.name)}
+                    >
                       <Trash2 size={15} />
                     </button>
                   </td>
@@ -250,6 +301,7 @@ function ProductsCard() {
 
 function CompanyProfile() {
   const company = useDb((db) => db.settings.company)
+  const updateSettings = useUpdateSettings()
   const toast = useToast()
   const [form, setForm] = useState(company)
 
@@ -260,18 +312,30 @@ function CompanyProfile() {
         subtitle="Shop name & tagline show across every page and on printed invoices; SEO applies site-wide"
       />
       <div className="mt-3 space-y-3">
-        <Field label="Shop Name" hint="Displayed in the sidebar, browser tab and page metadata everywhere">
+        <Field
+          label="Shop Name"
+          hint="Displayed in the sidebar, browser tab and page metadata everywhere"
+        >
           <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
         </Field>
         <Field label="Address">
-          <Input value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} />
+          <Input
+            value={form.address}
+            onChange={(e) => setForm({ ...form, address: e.target.value })}
+          />
         </Field>
         <div className="grid grid-cols-2 gap-3">
           <Field label="Phone">
-            <Input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
+            <Input
+              value={form.phone}
+              onChange={(e) => setForm({ ...form, phone: e.target.value })}
+            />
           </Field>
           <Field label="Email">
-            <Input value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
+            <Input
+              value={form.email}
+              onChange={(e) => setForm({ ...form, email: e.target.value })}
+            />
           </Field>
         </div>
         <Field label="GSTIN">
@@ -309,7 +373,7 @@ function CompanyProfile() {
         <button
           className="btn-primary"
           onClick={() => {
-            settingsRepo.update({ company: form })
+            updateSettings.mutate({ company: form })
             toast.success('Shop profile saved — changes apply across all pages')
           }}
         >
@@ -322,6 +386,7 @@ function CompanyProfile() {
 
 function FinancialSettings() {
   const settings = useDb((db) => db.settings)
+  const updateSettings = useUpdateSettings()
   const toast = useToast()
   const [form, setForm] = useState({
     currency: settings.currency,
@@ -339,10 +404,16 @@ function FinancialSettings() {
       <div className="mt-3 space-y-3">
         <div className="grid grid-cols-2 gap-3">
           <Field label="Currency Code">
-            <Input value={form.currency} onChange={(e) => setForm({ ...form, currency: e.target.value })} />
+            <Input
+              value={form.currency}
+              onChange={(e) => setForm({ ...form, currency: e.target.value })}
+            />
           </Field>
           <Field label="Currency Symbol">
-            <Input value={form.currencySymbol} onChange={(e) => setForm({ ...form, currencySymbol: e.target.value })} />
+            <Input
+              value={form.currencySymbol}
+              onChange={(e) => setForm({ ...form, currencySymbol: e.target.value })}
+            />
           </Field>
         </div>
         <Field label="Default Tax %" hint="Combined GST used as a fallback">
@@ -392,7 +463,7 @@ function FinancialSettings() {
         <button
           className="btn-primary"
           onClick={() => {
-            settingsRepo.update({
+            updateSettings.mutate({
               currency: form.currency,
               currencySymbol: form.currencySymbol,
               defaultTaxPercent: Number(form.defaultTaxPercent) || 0,
@@ -414,6 +485,7 @@ function FinancialSettings() {
 
 function NumberingSettings() {
   const numbering = useDb((db) => db.settings.numbering)
+  const updateSettings = useUpdateSettings()
   const toast = useToast()
   const [form, setForm] = useState(numbering)
   const fields: { key: keyof typeof numbering; label: string }[] = [
@@ -443,7 +515,7 @@ function NumberingSettings() {
       <button
         className="btn-primary mt-3"
         onClick={() => {
-          settingsRepo.update({ numbering: form })
+          updateSettings.mutate({ numbering: form })
           toast.success('Numbering saved')
         }}
       >
@@ -618,8 +690,8 @@ function DataManagement({
         />
       </div>
       <p className="mt-3 flex items-center gap-1.5 text-2xs text-slate-500">
-        <Database size={13} /> For a hosted multi-user deployment, connect the repository layer to Supabase
-        (see docs/supabase-schema.sql).
+        <Database size={13} /> For a hosted multi-user deployment, connect the repository layer to
+        Supabase (see docs/supabase-schema.sql).
       </p>
     </Card>
   )

@@ -14,9 +14,18 @@ import {
   Truck,
 } from 'lucide-react'
 import type { DeliveryChallan, DcLine, InvoiceLine } from '@/types'
-import { dcRepo, previewNextNo, BusinessRuleError } from '@/data/repo'
+import { previewNextNo } from '@/data/repo'
 import { downloadChallanPdf } from './challanPdf'
 import { useDb } from '@/data/store'
+import {
+  useChallans,
+  useCreateChallan,
+  useUpdateChallan,
+  useDeleteChallan,
+  useSetChallanStatus,
+  useReopenChallan,
+} from './hooks/useDeliveries'
+import { toUserMessage } from '@/lib/api/errors'
 import { fmtDate, todayISO } from '@/lib/format'
 import { uid } from '@/lib/id'
 import { PageHeader, ResponsiveTable } from '@/components/common/PageHeader'
@@ -31,8 +40,11 @@ import { InvoiceForm } from '@/features/invoices/InvoiceForm'
 import { DC_STATUS_TONE as STATUS_TONE } from '@/constants/domain'
 
 export function DeliveriesPage() {
-  const challans = useDb((db) => db.deliveryChallans)
+  const { data: challans = [], isLoading } = useChallans()
   const invoices = useDb((db) => db.invoices)
+  const deleteChallan = useDeleteChallan()
+  const setChallanStatus = useSetChallanStatus()
+  const reopenChallan = useReopenChallan()
   const companyName = useCompanyName()
   const toast = useToast()
   const confirm = useConfirm()
@@ -116,10 +128,10 @@ export function DeliveriesPage() {
     })
     if (!ok) return
     try {
-      dcRepo.remove(d.id)
+      await deleteChallan.mutateAsync(d.id)
       toast.success('Challan deleted')
     } catch (e) {
-      toast.error(e instanceof BusinessRuleError ? e.message : 'Delete failed')
+      toast.error(toUserMessage(e, 'Delete failed'))
     }
   }
 
@@ -131,8 +143,12 @@ export function DeliveriesPage() {
       confirmLabel: 'Cancel challan',
     })
     if (!ok) return
-    dcRepo.setStatus(d.id, 'Cancelled')
-    toast.success('Challan cancelled')
+    try {
+      await setChallanStatus.mutateAsync({ id: d.id, status: 'Cancelled' })
+      toast.success('Challan cancelled')
+    } catch (e) {
+      toast.error(toUserMessage(e, 'Cancel failed'))
+    }
   }
 
   async function onReopen(d: DeliveryChallan) {
@@ -143,10 +159,10 @@ export function DeliveriesPage() {
     })
     if (!ok) return
     try {
-      dcRepo.reopen(d.id)
+      await reopenChallan.mutateAsync(d.id)
       toast.success('Challan reopened')
     } catch (e) {
-      toast.error(e instanceof BusinessRuleError ? e.message : 'Reopen failed')
+      toast.error(toUserMessage(e, 'Reopen failed'))
     }
   }
 
@@ -175,7 +191,9 @@ export function DeliveriesPage() {
       </FilterBar>
 
       <Card>
-        {rows.length === 0 ? (
+        {isLoading ? (
+          <div className="p-8 text-center text-sm text-slate-500">Loading challans…</div>
+        ) : rows.length === 0 ? (
           <EmptyState
             icon={<Truck size={40} />}
             title="No delivery challans"
@@ -344,7 +362,9 @@ export function DeliveriesPage() {
             ),
           }}
           onCreated={(invoiceId) => {
-            invoiceFor.forEach((d) => dcRepo.setStatus(d.id, 'Invoiced', invoiceId))
+            invoiceFor.forEach((d) =>
+              setChallanStatus.mutate({ id: d.id, status: 'Invoiced', invoiceId }),
+            )
             toast.success(
               invoiceFor.length > 1
                 ? `Invoice raised against ${invoiceFor.length} challans`
@@ -361,6 +381,9 @@ export function DeliveriesPage() {
 
 function DcForm({ dc, onClose }: { dc: DeliveryChallan | null; onClose: () => void }) {
   const toast = useToast()
+  const createChallan = useCreateChallan()
+  const updateChallan = useUpdateChallan()
+  const saving = createChallan.isPending || updateChallan.isPending
   const companies = useDb((db) => db.companies.filter((c) => c.active || c.id === dc?.companyId))
   const jobs = useDb((db) => db.jobs)
   const products = useDb((db) => db.products.filter((p) => p.active))
@@ -398,7 +421,7 @@ function DcForm({ dc, onClose }: { dc: DeliveryChallan | null; onClose: () => vo
     ])
   }
 
-  function submit() {
+  async function submit() {
     try {
       const payload = {
         date,
@@ -413,15 +436,15 @@ function DcForm({ dc, onClose }: { dc: DeliveryChallan | null; onClose: () => vo
         status: dc?.status ?? ('Open' as const),
       }
       if (dc) {
-        dcRepo.update(dc.id, payload)
+        await updateChallan.mutateAsync({ id: dc.id, patch: payload })
         toast.success('Challan updated')
       } else {
-        dcRepo.create(payload)
+        await createChallan.mutateAsync(payload)
         toast.success('Challan created')
       }
       onClose()
     } catch (e) {
-      toast.error(e instanceof BusinessRuleError ? e.message : 'Save failed')
+      toast.error(toUserMessage(e, 'Save failed'))
     }
   }
 
@@ -436,8 +459,8 @@ function DcForm({ dc, onClose }: { dc: DeliveryChallan | null; onClose: () => vo
           <button className="btn-secondary" onClick={onClose}>
             Cancel
           </button>
-          <button className="btn-primary" onClick={submit}>
-            {dc ? 'Save changes' : 'Create challan'}
+          <button className="btn-primary" onClick={submit} disabled={saving}>
+            {saving ? 'Saving…' : dc ? 'Save changes' : 'Create challan'}
           </button>
         </>
       }

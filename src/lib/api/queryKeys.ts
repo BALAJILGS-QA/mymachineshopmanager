@@ -30,9 +30,13 @@ export const qk = {
     all: ['materials'] as const,
     detail: (id: string) => ['materials', id] as const,
   },
-  // Stock movements + derived balances (receipts/issues/adjustments).
+  // Stock movements + derived balances. Invalidating `all` (['stock']) is a
+  // prefix match that clears receipts/issues/adjustments together.
   stock: {
     all: ['stock'] as const,
+    receipts: ['stock', 'receipts'] as const,
+    issues: ['stock', 'issues'] as const,
+    adjustments: ['stock', 'adjustments'] as const,
   },
   deliveries: {
     all: ['deliveries'] as const,
@@ -40,5 +44,12 @@ export const qk = {
   },
   users: {
     all: ['users'] as const,
+  },
+  settings: {
+    all: ['settings'] as const,
+  },
+  products: {
+    all: ['products'] as const,
+    detail: (id: string) => ['products', id] as const,
   },
 } as const
