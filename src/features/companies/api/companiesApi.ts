@@ -5,6 +5,8 @@
 // audit, code generation).
 
 import { companyRepo } from '@/data/repo'
+import { supabase } from '@/data/supabase'
+import { nextCode } from '@/lib/api/numbering'
 import type { Company } from '@/types'
 
 export type CompanyCreateInput = Parameters<typeof companyRepo.create>[0]
@@ -15,7 +17,15 @@ export async function listCompanies(): Promise<Company[]> {
 }
 
 export async function createCompany(input: CompanyCreateInput): Promise<Company> {
-  return companyRepo.create(input)
+  const provided = input.code?.trim()
+  // Server-authoritative code when the user didn't supply one — race-safe across
+  // clients (replaces the old client-side app_state counter). The repo still
+  // enforces uniqueness and persists the row. Offline (no Supabase) falls back to
+  // the repo's local sequence so dev/demo still works.
+  if (!provided && supabase) {
+    return companyRepo.create({ ...input, code: await nextCode('companyCode', 'C') })
+  }
+  return companyRepo.create(provided ? { ...input, code: provided } : input)
 }
 
 export async function updateCompany(id: string, patch: CompanyUpdateInput): Promise<Company> {
