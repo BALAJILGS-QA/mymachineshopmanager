@@ -1,8 +1,10 @@
 import { useState } from 'react'
 import type { JobOrder, JobPriority, JobStatus, MaterialOwnerType } from '@/types'
-import { jobRepo, stockRepo, previewNextNo, BusinessRuleError } from '@/data/repo'
+import { stockRepo, previewNextNo } from '@/data/repo'
 import { SHOP_SCOPE } from '@/data/computations'
 import { useDb } from '@/data/store'
+import { useCreateJob, useUpdateJob } from './hooks/useJobs'
+import { toUserMessage } from '@/lib/api/errors'
 import { todayISO, qty } from '@/lib/format'
 import { Field, Input, Select, Textarea } from '@/components/ui/primitives'
 import { Modal } from '@/components/ui/Modal'
@@ -11,6 +13,9 @@ import { JOB_PRIORITIES as PRIORITIES, JOB_STATUSES as STATUSES } from '@/consta
 
 export function JobForm({ job, onClose }: { job: JobOrder | null; onClose: () => void }) {
   const toast = useToast()
+  const createJob = useCreateJob()
+  const updateJob = useUpdateJob()
+  const saving = createJob.isPending || updateJob.isPending
   const companies = useDb((db) => db.companies.filter((c) => c.active || c.id === job?.companyId))
   const materials = useDb((db) => db.materials.filter((m) => m.active))
   const settings = useDb((db) => db.settings)
@@ -37,7 +42,7 @@ export function JobForm({ job, onClose }: { job: JobOrder | null; onClose: () =>
     setForm((f) => ({ ...f, [k]: v }))
   }
 
-  function submit() {
+  async function submit() {
     try {
       const payload = {
         companyId: form.companyId,
@@ -55,18 +60,22 @@ export function JobForm({ job, onClose }: { job: JobOrder | null; onClose: () =>
         notes: form.notes || undefined,
       }
       if (job) {
-        jobRepo.update(job.id, payload)
+        await updateJob.mutateAsync({ id: job.id, patch: payload })
         toast.success('Job order updated')
       } else {
         const consume = form.materialQty === '' ? undefined : Number(form.materialQty)
-        jobRepo.create({ ...payload, materialQty: consume, materialOwner: form.materialOwner })
+        await createJob.mutateAsync({
+          ...payload,
+          materialQty: consume,
+          materialOwner: form.materialOwner,
+        })
         toast.success(
           consume ? 'Job order created — material issued from stock' : 'Job order created',
         )
       }
       onClose()
     } catch (e) {
-      toast.error(e instanceof BusinessRuleError ? e.message : 'Save failed')
+      toast.error(toUserMessage(e, 'Save failed'))
     }
   }
 
@@ -81,8 +90,8 @@ export function JobForm({ job, onClose }: { job: JobOrder | null; onClose: () =>
           <button className="btn-secondary" onClick={onClose}>
             Cancel
           </button>
-          <button className="btn-primary" onClick={submit}>
-            {job ? 'Save changes' : 'Create job order'}
+          <button className="btn-primary" onClick={submit} disabled={saving}>
+            {saving ? 'Saving…' : job ? 'Save changes' : 'Create job order'}
           </button>
         </>
       }

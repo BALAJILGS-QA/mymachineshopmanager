@@ -1,8 +1,9 @@
 import { useMemo, useState } from 'react'
 import { ClipboardList, Download, Pencil, Plus, Trash2 } from 'lucide-react'
-import type { JobOrder, JobStatus } from '@/types'
-import { jobRepo, BusinessRuleError } from '@/data/repo'
-import { useDb } from '@/data/store'
+import type { JobOrder } from '@/types'
+import { useJobs, useDeleteJob } from './hooks/useJobs'
+import { toUserMessage } from '@/lib/api/errors'
+import { JOB_STATUSES as STATUS_OPTIONS } from '@/constants/domain'
 import { jobPendingQty } from '@/data/computations'
 import { fmtDate, qty } from '@/lib/format'
 import { downloadCsv } from '@/lib/csv'
@@ -22,18 +23,9 @@ import { useConfirm } from '@/components/ui/ConfirmDialog'
 import { useCompanyName } from '@/features/shared/lookups'
 import { JobForm } from './JobForm'
 
-const STATUS_OPTIONS: JobStatus[] = [
-  'Draft',
-  'Pending',
-  'In Progress',
-  'On Hold',
-  'Completed',
-  'Delivered',
-  'Cancelled',
-]
-
 export function JobsPage() {
-  const jobs = useDb((db) => db.jobs)
+  const { data: jobs = [], isLoading } = useJobs()
+  const deleteJob = useDeleteJob()
   const companyName = useCompanyName()
   const toast = useToast()
   const confirm = useConfirm()
@@ -53,7 +45,8 @@ export function JobsPage() {
         if (status && j.status !== status) return false
         if (!inRange(j.orderDate, from, to)) return false
         if (s) {
-          const hay = `${j.jobNo} ${j.partName} ${j.partNumber ?? ''} ${j.customerPo ?? ''}`.toLowerCase()
+          const hay =
+            `${j.jobNo} ${j.partName} ${j.partNumber ?? ''} ${j.customerPo ?? ''}`.toLowerCase()
           if (!hay.includes(s)) return false
         }
         return true
@@ -73,10 +66,10 @@ export function JobsPage() {
     })
     if (!ok) return
     try {
-      jobRepo.remove(j.id)
+      await deleteJob.mutateAsync(j.id)
       toast.success('Job deleted')
     } catch (e) {
-      toast.error(e instanceof BusinessRuleError ? e.message : 'Delete failed')
+      toast.error(toUserMessage(e, 'Delete failed'))
     }
   }
 
@@ -118,7 +111,11 @@ export function JobsPage() {
         <CompanyFilter value={company} onChange={setCompany} />
         <div>
           <label className="label">Status</label>
-          <Select value={status} onChange={(e) => setStatus(e.target.value)} className="min-w-[8rem]">
+          <Select
+            value={status}
+            onChange={(e) => setStatus(e.target.value)}
+            className="min-w-[8rem]"
+          >
             <option value="">All statuses</option>
             {STATUS_OPTIONS.map((s) => (
               <option key={s}>{s}</option>
@@ -129,7 +126,9 @@ export function JobsPage() {
       </FilterBar>
 
       <Card>
-        {filtered.length === 0 ? (
+        {isLoading ? (
+          <div className="p-8 text-center text-sm text-slate-500">Loading job orders…</div>
+        ) : filtered.length === 0 ? (
           <EmptyState
             icon={<ClipboardList size={40} />}
             title="No job orders"
@@ -163,7 +162,9 @@ export function JobsPage() {
                     <td className="td">{companyName(j.companyId)}</td>
                     <td className="td">
                       <div className="font-medium text-slate-800">{j.partName}</div>
-                      {j.partNumber && <div className="text-2xs text-slate-500">{j.partNumber}</div>}
+                      {j.partNumber && (
+                        <div className="text-2xs text-slate-500">{j.partNumber}</div>
+                      )}
                     </td>
                     <td className="td text-right">{qty(j.orderedQty)}</td>
                     <td className="td text-right">{qty(j.completedQty)}</td>

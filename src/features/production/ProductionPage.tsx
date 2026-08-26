@@ -1,8 +1,8 @@
 import { useMemo, useState } from 'react'
 import { Factory, History, Pause, Play, CheckCircle2, Truck } from 'lucide-react'
 import type { JobOrder, JobStatus } from '@/types'
-import { jobRepo, BusinessRuleError } from '@/data/repo'
-import { useDb } from '@/data/store'
+import { useJobs, useTransitionJob, useJobEvents } from '@/features/jobs/hooks/useJobs'
+import { toUserMessage } from '@/lib/api/errors'
 import { jobPendingQty } from '@/data/computations'
 import { fmtDate, fmtDateTime, qty } from '@/lib/format'
 import { PageHeader } from '@/components/common/PageHeader'
@@ -16,7 +16,7 @@ import { useCompanyName } from '@/features/shared/lookups'
 const ACTIVE_STATUSES: JobStatus[] = ['Pending', 'In Progress', 'On Hold']
 
 export function ProductionPage() {
-  const jobs = useDb((db) => db.jobs)
+  const { data: jobs = [] } = useJobs()
   const companyName = useCompanyName()
   const [search, setSearch] = useState('')
   const [company, setCompany] = useState('')
@@ -75,7 +75,9 @@ export function ProductionPage() {
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
           {queue.map((job) => {
             const pending = jobPendingQty(job.orderedQty, job.completedQty)
-            const pct = job.orderedQty ? Math.min(100, (job.completedQty / job.orderedQty) * 100) : 0
+            const pct = job.orderedQty
+              ? Math.min(100, (job.completedQty / job.orderedQty) * 100)
+              : 0
             return (
               <Card key={job.id} className="flex flex-col p-4">
                 <div className="mb-2 flex items-start justify-between gap-2">
@@ -98,7 +100,10 @@ export function ProductionPage() {
                     <span>{qty(pending)} pending</span>
                   </div>
                   <div className="h-1.5 w-full overflow-hidden rounded-full bg-slate-100">
-                    <div className="h-full rounded-full bg-brand-500" style={{ width: `${pct}%` }} />
+                    <div
+                      className="h-full rounded-full bg-brand-500"
+                      style={{ width: `${pct}%` }}
+                    />
                   </div>
                 </div>
 
@@ -182,6 +187,7 @@ function TransitionModal({
   onClose: () => void
 }) {
   const toast = useToast()
+  const transitionJob = useTransitionJob()
   const [completedQty, setCompletedQty] = useState(String(job.completedQty))
   const [rejectedQty, setRejectedQty] = useState(String(job.rejectedQty ?? 0))
   const [operator, setOperator] = useState(job.operator ?? '')
@@ -196,23 +202,27 @@ function TransitionModal({
         ? 'Update progress'
         : 'Start job'
       : to === 'On Hold'
-      ? 'Put job on hold'
-      : to === 'Completed'
-      ? 'Complete job'
-      : 'Mark delivered'
+        ? 'Put job on hold'
+        : to === 'Completed'
+          ? 'Complete job'
+          : 'Mark delivered'
 
-  function submit() {
+  async function submit() {
     try {
-      jobRepo.transition(job.id, to, {
-        completedQty: wantsQty ? Number(completedQty) : undefined,
-        rejectedQty: isComplete ? Number(rejectedQty || 0) : undefined,
-        operator: operator || undefined,
-        note: note || undefined,
+      await transitionJob.mutateAsync({
+        id: job.id,
+        to,
+        opts: {
+          completedQty: wantsQty ? Number(completedQty) : undefined,
+          rejectedQty: isComplete ? Number(rejectedQty || 0) : undefined,
+          operator: operator || undefined,
+          note: note || undefined,
+        },
       })
       toast.success(`${job.jobNo}: ${to}`)
       onClose()
     } catch (e) {
-      toast.error(e instanceof BusinessRuleError ? e.message : 'Update failed')
+      toast.error(toUserMessage(e, 'Update failed'))
     }
   }
 
@@ -227,8 +237,8 @@ function TransitionModal({
           <button className="btn-secondary" onClick={onClose}>
             Cancel
           </button>
-          <button className="btn-primary" onClick={submit}>
-            Confirm
+          <button className="btn-primary" onClick={submit} disabled={transitionJob.isPending}>
+            {transitionJob.isPending ? 'Saving…' : 'Confirm'}
           </button>
         </>
       }
@@ -238,9 +248,10 @@ function TransitionModal({
           {job.partName} · ordered {qty(job.orderedQty)}
         </p>
         {wantsQty && (
-          <Field label="Completed quantity" hint={`Pending will be ${qty(
-            Math.max(0, job.orderedQty - Number(completedQty || 0)),
-          )}`}>
+          <Field
+            label="Completed quantity"
+            hint={`Pending will be ${qty(Math.max(0, job.orderedQty - Number(completedQty || 0)))}`}
+          >
             <Input
               type="number"
               step="0.001"
@@ -279,7 +290,7 @@ function TransitionModal({
 }
 
 function HistoryModal({ job, onClose }: { job: JobOrder; onClose: () => void }) {
-  const events = jobRepo.events(job.id)
+  const { data: events = [] } = useJobEvents(job.id)
   return (
     <Modal open onClose={onClose} title={`History — ${job.jobNo}`} size="md">
       {events.length === 0 ? (

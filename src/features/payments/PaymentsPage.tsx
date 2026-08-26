@@ -1,7 +1,8 @@
 import { useMemo, useState } from 'react'
 import { Download, Plus, Trash2, Wallet } from 'lucide-react'
-import { paymentRepo } from '@/data/repo'
 import { useDb } from '@/data/store'
+import { usePayments, useDeletePayment } from './hooks/usePayments'
+import { toUserMessage } from '@/lib/api/errors'
 import { currency, fmtDate } from '@/lib/format'
 import { downloadCsv } from '@/lib/csv'
 import { PageHeader, ResponsiveTable } from '@/components/common/PageHeader'
@@ -20,8 +21,9 @@ import { useCompanyName } from '@/features/shared/lookups'
 import { PaymentForm } from './PaymentForm'
 
 export function PaymentsPage() {
-  const payments = useDb((db) => db.payments)
+  const { data: payments = [], isLoading } = usePayments()
   const invoices = useDb((db) => db.invoices)
+  const deletePayment = useDeletePayment()
   const companyName = useCompanyName()
   const toast = useToast()
   const confirm = useConfirm()
@@ -40,7 +42,10 @@ export function PaymentsPage() {
       .filter((p) => {
         if (company && p.companyId !== company) return false
         if (!inRange(p.date, from, to)) return false
-        if (s && !`${p.paymentNo} ${p.reference ?? ''} ${invoiceNo(p.invoiceId)}`.toLowerCase().includes(s))
+        if (
+          s &&
+          !`${p.paymentNo} ${p.reference ?? ''} ${invoiceNo(p.invoiceId)}`.toLowerCase().includes(s)
+        )
           return false
         return true
       })
@@ -57,8 +62,12 @@ export function PaymentsPage() {
       danger: true,
     })
     if (!ok) return
-    paymentRepo.remove(id)
-    toast.success('Payment deleted')
+    try {
+      await deletePayment.mutateAsync(id)
+      toast.success('Payment deleted')
+    } catch (e) {
+      toast.error(toUserMessage(e, 'Delete failed'))
+    }
   }
 
   function exportCsv() {
@@ -92,13 +101,19 @@ export function PaymentsPage() {
       />
 
       <FilterBar>
-        <SearchBox value={search} onChange={setSearch} placeholder="Search payment, invoice, ref…" />
+        <SearchBox
+          value={search}
+          onChange={setSearch}
+          placeholder="Search payment, invoice, ref…"
+        />
         <CompanyFilter value={company} onChange={setCompany} />
         <DateRangeFilter from={from} to={to} onFrom={setFrom} onTo={setTo} />
       </FilterBar>
 
       <Card>
-        {rows.length === 0 ? (
+        {isLoading ? (
+          <div className="p-8 text-center text-sm text-slate-500">Loading payments…</div>
+        ) : rows.length === 0 ? (
           <EmptyState icon={<Wallet size={40} />} title="No payments recorded" />
         ) : (
           <ResponsiveTable>

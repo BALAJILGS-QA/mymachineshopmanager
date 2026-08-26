@@ -1,8 +1,15 @@
 import { useMemo, useState } from 'react'
 import { Download, Pencil, Plus, Receipt, Trash2 } from 'lucide-react'
 import type { Expense, PaymentMethod } from '@/types'
-import { expenseRepo, previewNextNo, BusinessRuleError } from '@/data/repo'
+import { previewNextNo } from '@/data/repo'
 import { useDb } from '@/data/store'
+import {
+  useExpenses,
+  useCreateExpense,
+  useUpdateExpense,
+  useDeleteExpense,
+} from './hooks/useExpenses'
+import { toUserMessage } from '@/lib/api/errors'
 import { currency, fmtDate, todayISO } from '@/lib/format'
 import { downloadCsv } from '@/lib/csv'
 import { PageHeader, ResponsiveTable } from '@/components/common/PageHeader'
@@ -22,8 +29,9 @@ import { useCompanyName, useJobNo } from '@/features/shared/lookups'
 import { PAYMENT_METHODS as METHODS } from '@/constants/domain'
 
 export function ExpensesPage() {
-  const expenses = useDb((db) => db.expenses)
+  const { data: expenses = [], isLoading } = useExpenses()
   const categories = useDb((db) => db.settings.expenseCategories)
+  const deleteExpense = useDeleteExpense()
   const companyName = useCompanyName()
   const jobNo = useJobNo()
   const toast = useToast()
@@ -56,8 +64,12 @@ export function ExpensesPage() {
   async function del(e: Expense) {
     const ok = await confirm({ message: `Delete expense ${e.expenseNo}?`, danger: true })
     if (!ok) return
-    expenseRepo.remove(e.id)
-    toast.success('Expense deleted')
+    try {
+      await deleteExpense.mutateAsync(e.id)
+      toast.success('Expense deleted')
+    } catch (err) {
+      toast.error(toUserMessage(err, 'Delete failed'))
+    }
   }
 
   function exportCsv() {
@@ -110,7 +122,9 @@ export function ExpensesPage() {
       </FilterBar>
 
       <Card>
-        {rows.length === 0 ? (
+        {isLoading ? (
+          <div className="p-8 text-center text-sm text-slate-500">Loading expenses…</div>
+        ) : rows.length === 0 ? (
           <EmptyState icon={<Receipt size={40} />} title="No expenses recorded" />
         ) : (
           <ResponsiveTable>
@@ -171,6 +185,9 @@ function ExpenseForm({ expense, onClose }: { expense: Expense | null; onClose: (
   const companies = useDb((db) => db.companies)
   const jobs = useDb((db) => db.jobs)
   const settings = useDb((db) => db.settings)
+  const createExpense = useCreateExpense()
+  const updateExpense = useUpdateExpense()
+  const saving = createExpense.isPending || updateExpense.isPending
 
   const [form, setForm] = useState({
     date: expense?.date ?? todayISO(),
@@ -188,7 +205,7 @@ function ExpenseForm({ expense, onClose }: { expense: Expense | null; onClose: (
     setForm((f) => ({ ...f, [k]: v }))
   }
 
-  function submit() {
+  async function submit() {
     try {
       const payload = {
         date: form.date,
@@ -202,15 +219,15 @@ function ExpenseForm({ expense, onClose }: { expense: Expense | null; onClose: (
         notes: form.notes || undefined,
       }
       if (expense) {
-        expenseRepo.update(expense.id, payload)
+        await updateExpense.mutateAsync({ id: expense.id, patch: payload })
         toast.success('Expense updated')
       } else {
-        expenseRepo.create(payload)
+        await createExpense.mutateAsync(payload)
         toast.success('Expense recorded')
       }
       onClose()
     } catch (e) {
-      toast.error(e instanceof BusinessRuleError ? e.message : 'Save failed')
+      toast.error(toUserMessage(e, 'Save failed'))
     }
   }
 
@@ -224,8 +241,8 @@ function ExpenseForm({ expense, onClose }: { expense: Expense | null; onClose: (
           <button className="btn-secondary" onClick={onClose}>
             Cancel
           </button>
-          <button className="btn-primary" onClick={submit}>
-            {expense ? 'Save changes' : 'Record expense'}
+          <button className="btn-primary" onClick={submit} disabled={saving}>
+            {saving ? 'Saving…' : expense ? 'Save changes' : 'Record expense'}
           </button>
         </>
       }

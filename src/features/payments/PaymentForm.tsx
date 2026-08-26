@@ -1,7 +1,9 @@
 import { useMemo, useState } from 'react'
 import type { Invoice, PaymentMethod } from '@/types'
-import { paymentRepo, previewNextNo, BusinessRuleError } from '@/data/repo'
+import { previewNextNo } from '@/data/repo'
 import { useDb } from '@/data/store'
+import { useCreatePayment } from './hooks/usePayments'
+import { toUserMessage } from '@/lib/api/errors'
 import { computeInvoice } from '@/data/computations'
 import { currency, todayISO } from '@/lib/format'
 import { Field, Input, Select, Textarea } from '@/components/ui/primitives'
@@ -17,6 +19,7 @@ export function PaymentForm({
   onClose: () => void
 }) {
   const toast = useToast()
+  const createPayment = useCreatePayment()
   const companies = useDb((db) => db.companies.filter((c) => c.active))
   const invoices = useDb((db) => db.invoices)
   const payments = useDb((db) => db.payments)
@@ -42,9 +45,9 @@ export function PaymentForm({
   const selectedInvoice = invoices.find((i) => i.id === invoiceId)
   const outstanding = selectedInvoice ? computeInvoice(selectedInvoice, payments).outstanding : 0
 
-  function submit() {
+  async function submit() {
     try {
-      paymentRepo.create({
+      await createPayment.mutateAsync({
         date,
         companyId,
         invoiceId: isAdvance || !invoiceId ? undefined : invoiceId,
@@ -57,7 +60,7 @@ export function PaymentForm({
       toast.success('Payment recorded')
       onClose()
     } catch (e) {
-      toast.error(e instanceof BusinessRuleError ? e.message : 'Save failed')
+      toast.error(toUserMessage(e, 'Save failed'))
     }
   }
 
@@ -71,8 +74,8 @@ export function PaymentForm({
           <button className="btn-secondary" onClick={onClose}>
             Cancel
           </button>
-          <button className="btn-primary" onClick={submit}>
-            Record payment
+          <button className="btn-primary" onClick={submit} disabled={createPayment.isPending}>
+            {createPayment.isPending ? 'Saving…' : 'Record payment'}
           </button>
         </>
       }
