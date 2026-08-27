@@ -1,15 +1,16 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { clsx } from 'clsx'
-import { Plus, Trash2 } from 'lucide-react'
-import type { Invoice, InvoiceLine } from '@/types'
+import { ChevronDown, Plus, Trash2 } from 'lucide-react'
+import type { DeliveryChallan, Invoice, InvoiceLine } from '@/types'
 import { useCreateInvoice, useUpdateInvoice } from './hooks/useInvoices'
+import { useChallans, useSetChallanStatus } from '@/features/deliveries/hooks/useDeliveries'
 import { useCompanies } from '@/features/companies/hooks/useCompanies'
 import { useJobs } from '@/features/jobs/hooks/useJobs'
 import { useProducts, useSettings } from '@/features/settings/hooks/useSettings'
 import { usePreviewNo } from '@/features/shared/usePreviewNo'
 import { toUserMessage } from '@/lib/api/errors'
 import { invoiceSubtotal, roundMoney } from '@/data/computations'
-import { currency, fmtDateTime, todayISO } from '@/lib/format'
+import { currency, fmtDate, fmtDateTime, todayISO } from '@/lib/format'
 import { DEFAULT_SETTINGS } from '@/data/seed'
 import { uid } from '@/lib/id'
 import { Field, Input, Select, Textarea } from '@/components/ui/primitives'
@@ -64,6 +65,88 @@ export function InvoiceForm({
   const [lines, setLines] = useState<InvoiceLine[]>(
     invoice?.lines ?? prefill?.lines ?? [{ id: uid('l_'), description: '', quantity: 1, rate: 0 }],
   )
+
+  // --- Delivery-challan picker (new invoices only) ---
+  const setChallanStatus = useSetChallanStatus()
+  const { data: allChallans = [] } = useChallans()
+  const [selectedDcIds, setSelectedDcIds] = useState<Set<string>>(new Set())
+  const [dcMatFilter, setDcMatFilter] = useState('')
+  // Tracks which invoice lines came from which challan, so deselecting removes them.
+  const dcLineMap = useRef<Map<string, string[]>>(new Map())
+  const companyChanged = useRef(false)
+  // Only offer the picker for brand-new invoices not already prefilled from a DC.
+  const showDcPicker = !invoice && !prefill?.dcReference
+
+  // Un-invoiced (Open) challans for the selected company.
+  const openDcs = useMemo(
+    () => allChallans.filter((d) => d.companyId === companyId && d.status === 'Open'),
+    [allChallans, companyId],
+  )
+  // Distinct materials across those challans — used to narrow the picker.
+  const dcMaterials = useMemo(() => {
+    const seen = new Map<string, string>()
+    for (const d of openDcs)
+      for (const l of d.lines)
+        if (l.materialId && !seen.has(l.materialId))
+          seen.set(l.materialId, l.description || l.materialId)
+    return [...seen.entries()].map(([id, name]) => ({ id, name }))
+  }, [openDcs])
+  const filteredDcs = useMemo(
+    () =>
+      dcMatFilter
+        ? openDcs.filter((d) => d.lines.some((l) => l.materialId === dcMatFilter))
+        : openDcs,
+    [openDcs, dcMatFilter],
+  )
+
+  function toggleDc(dc: DeliveryChallan) {
+    const next = new Set(selectedDcIds)
+    if (next.has(dc.id)) {
+      next.delete(dc.id)
+      const ids = dcLineMap.current.get(dc.id) ?? []
+      dcLineMap.current.delete(dc.id)
+      setLines((ls) => ls.filter((l) => !ids.includes(l.id)))
+    } else {
+      next.add(dc.id)
+      const added: InvoiceLine[] = dc.lines.map((l) => ({
+        id: uid('l_'),
+        jobId: l.jobId,
+        description: l.description,
+        quantity: l.quantity,
+        rate: 0,
+      }))
+      dcLineMap.current.set(
+        dc.id,
+        added.map((l) => l.id),
+      )
+      setLines((ls) => [...ls.filter((l) => l.description.trim() || l.rate), ...added])
+    }
+    setSelectedDcIds(next)
+    setDcReference(
+      allChallans
+        .filter((c) => next.has(c.id))
+        .map((c) => c.dcNo)
+        .join(', '),
+    )
+  }
+
+  // If the user switches company, drop any challan-derived lines (they belong to
+  // the previous company). Skips the initial mount so prefill survives.
+  useEffect(() => {
+    if (!companyChanged.current) {
+      companyChanged.current = true
+      return
+    }
+    setDcMatFilter('')
+    if (selectedDcIds.size) {
+      const ids = [...dcLineMap.current.values()].flat()
+      dcLineMap.current.clear()
+      setLines((ls) => ls.filter((l) => !ids.includes(l.id)))
+      setSelectedDcIds(new Set())
+      setDcReference('')
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [companyId])
 
   // Eligible jobs: completed/delivered for the selected company, not fully invoiced.
   const eligibleJobs = useMemo(
@@ -143,6 +226,14 @@ export function InvoiceForm({
         toast.success('Invoice updated')
       } else {
         const created = await createInvoice.mutateAsync(payload)
+        // Mark any challans picked inside this form as Invoiced against it.
+        if (selectedDcIds.size) {
+          await Promise.all(
+            [...selectedDcIds].map((id) =>
+              setChallanStatus.mutateAsync({ id, status: 'Invoiced', invoiceId: created.id }),
+            ),
+          )
+        }
         toast.success('Invoice created')
         onCreated?.(created.id)
       }
@@ -215,6 +306,83 @@ export function InvoiceForm({
           />
         </Field>
       </div>
+
+      {/* Pick un-invoiced delivery challans for the selected company (+ optional
+          material filter) — their items are imported and the DCs marked Invoiced. */}
+      {showDcPicker && (
+        <div className="mt-3 rounded-lg border border-brand-200 bg-brand-50/40 p-3">
+          <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+            <label className="label mb-0">Add from delivery challans</label>
+            {dcMaterials.length > 0 && (
+              <select
+                className="input h-8 w-auto py-1 text-xs"
+                value={dcMatFilter}
+                onChange={(e) => setDcMatFilter(e.target.value)}
+                aria-label="Filter challans by material"
+              >
+                <option value="">All materials</option>
+                {dcMaterials.map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {m.name}
+                  </option>
+                ))}
+              </select>
+            )}
+          </div>
+          {!companyId ? (
+            <p className="text-2xs text-slate-500">
+              Select a company above to list its un-invoiced challans.
+            </p>
+          ) : (
+            <details className="group">
+              <summary className="input flex cursor-pointer list-none items-center justify-between [&::-webkit-details-marker]:hidden">
+                <span className={selectedDcIds.size ? 'text-slate-800' : 'text-slate-500'}>
+                  {selectedDcIds.size
+                    ? `${selectedDcIds.size} challan(s) selected`
+                    : 'Select un-invoiced challans…'}
+                </span>
+                <ChevronDown
+                  size={16}
+                  className="text-slate-500 transition group-open:rotate-180"
+                />
+              </summary>
+              <div className="mt-1 max-h-56 overflow-auto rounded-lg border border-slate-200 bg-white p-1">
+                {filteredDcs.length === 0 ? (
+                  <div className="px-2 py-2 text-xs text-slate-500">
+                    No un-invoiced challans{dcMatFilter ? ' for this material' : ''}.
+                  </div>
+                ) : (
+                  filteredDcs.map((d) => (
+                    <label
+                      key={d.id}
+                      className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-sm hover:bg-slate-50"
+                    >
+                      <input
+                        type="checkbox"
+                        className="h-4 w-4 accent-brand-600"
+                        checked={selectedDcIds.has(d.id)}
+                        onChange={() => toggleDc(d)}
+                      />
+                      <span className="font-mono text-xs font-semibold text-slate-700">
+                        {d.dcNo}
+                      </span>
+                      <span className="text-2xs text-slate-500">
+                        {fmtDate(d.date)} · {d.lines.length} item(s)
+                      </span>
+                    </label>
+                  ))
+                )}
+              </div>
+            </details>
+          )}
+          {selectedDcIds.size > 0 && (
+            <p className="mt-2 text-2xs text-slate-500">
+              Their items are added to the invoice below — fill in the rates. These challans will be
+              marked <b>Invoiced</b> when you save.
+            </p>
+          )}
+        </div>
+      )}
 
       {/* Shipping address — same as billing by default. */}
       <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 p-3">

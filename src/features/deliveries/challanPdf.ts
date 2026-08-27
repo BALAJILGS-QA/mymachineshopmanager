@@ -1,5 +1,6 @@
 import { jsPDF } from 'jspdf'
 import { fmtDate, qty } from '@/lib/format'
+import { imageToPng } from '@/lib/image'
 import { listChallans } from './api/deliveriesApi'
 import { listCompanies } from '@/features/companies/api/companiesApi'
 import { getSettings } from '@/features/settings/api/settingsApi'
@@ -15,6 +16,7 @@ export async function downloadChallanPdf(challanId: string): Promise<void> {
   if (!dc) return
   const company = companies.find((c) => c.id === dc.companyId)
   const shop = settings.company
+  const logo = await imageToPng(shop.logoUrl || '/sbi-logo.svg', 128)
 
   const doc = new jsPDF({ unit: 'pt', format: 'a4' })
   const W = doc.internal.pageSize.getWidth()
@@ -27,9 +29,16 @@ export async function downloadChallanPdf(challanId: string): Promise<void> {
     opts?: { align?: 'left' | 'right' | 'center' },
   ) => doc.text(s, x, yy, opts)
 
-  // ---- Shop header
+  // ---- Shop header (logo left, name + contact beside it)
+  let LX = M
+  if (logo) {
+    const box = 46
+    const scale = Math.min(box / logo.width, box / logo.height)
+    doc.addImage(logo.dataUrl, 'PNG', M, 30, logo.width * scale, logo.height * scale)
+    LX = M + box + 8
+  }
   doc.setFont('helvetica', 'bold').setFontSize(16).setTextColor(20)
-  text(shop.name || 'Machine Shop', M, y)
+  text(shop.name || 'Machine Shop', LX, y)
   doc.setFont('helvetica', 'bold').setFontSize(18).setTextColor(150)
   text('DELIVERY CHALLAN', W - M, y, { align: 'right' })
 
@@ -41,7 +50,7 @@ export async function downloadChallanPdf(challanId: string): Promise<void> {
     shop.gstin ? `GSTIN: ${shop.gstin}` : '',
   ].filter(Boolean)
   shopLines.forEach((l) => {
-    text(l as string, M, y)
+    text(l as string, LX, y)
     y += 12
   })
 

@@ -11,6 +11,6 @@
     <path d="M14 20a20 20 0 0 1 36 0" stroke-opacity="0.18" stroke-width="1.4"/>
     <path d="M18 18a15 15 0 0 1 28 0" stroke-opacity="0.12" stroke-width="1.4"/>
   </g>
-  <text x="32" y="40" text-anchor="middle" font-family="Inter, system-ui, Segoe UI, sans-serif" font-weight="800" font-size="20.5" letter-spacing="-0.6" fill="#ffffff">MSM</text>
-  <rect x="21" y="46.5" width="22" height="3" rx="1.5" fill="#f4b400"/>
+  <text x="32" y="40.5" text-anchor="middle" font-family="Inter, system-ui, Segoe UI, sans-serif" font-weight="800" font-size="21" letter-spacing="-0.5" fill="#ffffff">SBI</text>
+  <rect x="20" y="47" width="24" height="3" rx="1.5" fill="#f4b400"/>
 </svg>

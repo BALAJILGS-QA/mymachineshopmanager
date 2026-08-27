@@ -7,7 +7,13 @@ import { jobPendingQty } from '@/data/computations'
 import { fmtDate, fmtDateTime, qty } from '@/lib/format'
 import { PageHeader } from '@/components/common/PageHeader'
 import { Card, EmptyState, Field, Input, Textarea } from '@/components/ui/primitives'
-import { CompanyFilter, FilterBar, SearchBox } from '@/components/common/Filters'
+import {
+  CompanyFilter,
+  DateRangeFilter,
+  FilterBar,
+  SearchBox,
+  inRange,
+} from '@/components/common/Filters'
 import { JobStatusBadge, PriorityBadge } from '@/components/common/status'
 import { Modal } from '@/components/ui/Modal'
 import { useToast } from '@/components/ui/Toast'
@@ -20,6 +26,8 @@ export function ProductionPage() {
   const companyName = useCompanyName()
   const [search, setSearch] = useState('')
   const [company, setCompany] = useState('')
+  const [from, setFrom] = useState('')
+  const [to, setTo] = useState('')
   const [showClosed, setShowClosed] = useState(false)
   const [transition, setTransition] = useState<{ job: JobOrder; to: JobStatus } | null>(null)
   const [historyJob, setHistoryJob] = useState<JobOrder | null>(null)
@@ -30,6 +38,7 @@ export function ProductionPage() {
     return jobs
       .filter((j) => {
         if (company && j.companyId !== company) return false
+        if (!inRange(j.orderDate, from, to)) return false
         if (!showClosed && !ACTIVE_STATUSES.includes(j.status)) return false
         if (showClosed && j.status === 'Draft') return false
         if (s) {
@@ -43,7 +52,7 @@ export function ProductionPage() {
         if (pr !== 0) return pr
         return (a.dueDate ?? '9999') < (b.dueDate ?? '9999') ? -1 : 1
       })
-  }, [jobs, company, search, showClosed])
+  }, [jobs, company, from, to, search, showClosed])
 
   return (
     <div>
@@ -52,6 +61,7 @@ export function ProductionPage() {
       <FilterBar>
         <SearchBox value={search} onChange={setSearch} placeholder="Search job or part…" />
         <CompanyFilter value={company} onChange={setCompany} />
+        <DateRangeFilter from={from} to={to} onFrom={setFrom} onTo={setTo} />
         <label className="flex items-center gap-2 pb-2 text-sm text-slate-600">
           <input
             type="checkbox"

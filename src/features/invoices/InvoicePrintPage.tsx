@@ -51,15 +51,24 @@ export function InvoicePrintPage() {
 
       <div className="mx-auto max-w-3xl rounded-xl border border-slate-200 bg-white p-8 shadow-sm print:border-0 print:shadow-none">
         <div className="flex items-start justify-between border-b border-slate-200 pb-5">
-          <div>
-            <h1 className="text-xl font-bold text-slate-900">{shop.name || 'CNC Machine Shop'}</h1>
-            {shop.address && (
-              <p className="mt-1 whitespace-pre-line text-xs text-slate-500">{shop.address}</p>
-            )}
-            <p className="mt-1 text-xs text-slate-500">
-              {[shop.phone, shop.email].filter(Boolean).join(' · ')}
-            </p>
-            {shop.gstin && <p className="text-xs text-slate-500">GSTIN: {shop.gstin}</p>}
+          <div className="flex items-start gap-3">
+            <img
+              src={shop.logoUrl || '/sbi-logo.svg'}
+              alt=""
+              className="h-14 w-14 shrink-0 rounded-lg object-contain"
+            />
+            <div>
+              <h1 className="text-xl font-bold text-slate-900">
+                {shop.name || 'CNC Machine Shop'}
+              </h1>
+              {shop.address && (
+                <p className="mt-1 whitespace-pre-line text-xs text-slate-500">{shop.address}</p>
+              )}
+              <p className="mt-1 text-xs text-slate-500">
+                {[shop.phone, shop.email].filter(Boolean).join(' · ')}
+              </p>
+              {shop.gstin && <p className="text-xs text-slate-500">GSTIN: {shop.gstin}</p>}
+            </div>
           </div>
           <div className="text-right">
             <p className="text-lg font-bold uppercase tracking-wide text-slate-500">Invoice</p>
@@ -155,23 +164,12 @@ export function InvoicePrintPage() {
           </div>
         </div>
 
-        {/* Delivery Challan + Ship To — shown at the bottom, after the total. */}
-        <div className="mt-6 grid grid-cols-2 gap-4 border-t border-slate-200 pt-4">
-          <div>
-            <p className="text-2xs font-semibold uppercase tracking-wide text-slate-500">
-              Delivery Challan
-            </p>
-            <p className="mt-1 text-sm font-medium text-slate-800">{invoice.dcReference || '—'}</p>
-          </div>
-          <div>
-            <p className="text-2xs font-semibold uppercase tracking-wide text-slate-500">
-              Shipped To
-            </p>
-            <p className="mt-1 text-sm font-semibold text-slate-800">{company?.name}</p>
-            <p className="whitespace-pre-line text-xs text-slate-500">
-              {invoice.shippingAddress || invoice.billingAddress || company?.billingAddress || '—'}
-            </p>
-          </div>
+        {/* Note — the delivery challan number(s) this invoice covers, highlighted. */}
+        <div className="mt-6 rounded-lg border border-brand-200 bg-brand-50 px-4 py-3">
+          <p className="text-2xs font-semibold uppercase tracking-wide text-brand-700">Note</p>
+          <p className="mt-1 font-mono text-sm font-semibold text-brand-700">
+            {invoice.dcReference || '—'}
+          </p>
         </div>
 
         {invoice.notes && (
@@ -180,6 +178,15 @@ export function InvoicePrintPage() {
             <p className="mt-1 whitespace-pre-line text-xs text-slate-500">{invoice.notes}</p>
           </div>
         )}
+
+        <div className="mt-12 flex justify-end">
+          <div className="text-right">
+            <p className="text-sm font-semibold text-slate-800">For {shop.name}</p>
+            <p className="mt-10 text-xs font-medium text-slate-600">
+              {shop.isProprietor ? 'Proprietor' : 'Partner / Authorised Signatory'}
+            </p>
+          </div>
+        </div>
 
         <p className="mt-8 text-center text-2xs text-slate-500">
           This is a computer-generated invoice.

@@ -18,7 +18,7 @@ import {
   useAdjustments,
 } from '@/features/materials/hooks/useMaterials'
 import { currency, fmtDate, qty } from '@/lib/format'
-import { downloadCsv, type CsvColumn } from '@/lib/csv'
+import { downloadXlsx, type XlsxColumn } from '@/lib/xlsx'
 import { PageHeader, ResponsiveTable } from '@/components/common/PageHeader'
 import { Card, Select } from '@/components/ui/primitives'
 import { CompanyFilter, DateRangeFilter, FilterBar, inRange } from '@/components/common/Filters'
@@ -70,7 +70,7 @@ export function ReportsPage() {
         const rows = db.jobs.filter(
           (j) => matchCompany(j.companyId) && inRange(j.orderDate, from, to),
         )
-        const cols: CsvColumn<(typeof rows)[number]>[] = [
+        const cols: XlsxColumn<(typeof rows)[number]>[] = [
           { header: 'Job No', value: (j) => j.jobNo },
           { header: 'Company', value: (j) => companyName(j.companyId) },
           { header: 'Part', value: (j) => j.partName },
@@ -87,7 +87,7 @@ export function ReportsPage() {
           const s = materialStock(store, m.id, company || undefined)
           return { m, s, value: materialStockValue(store, m.id) }
         })
-        const cols: CsvColumn<(typeof rows)[number]>[] = [
+        const cols: XlsxColumn<(typeof rows)[number]>[] = [
           { header: 'Material', value: (r) => r.m.name },
           { header: 'Owner', value: () => (company ? companyName(company) : 'All') },
           { header: 'Received', value: (r) => r.s.received },
@@ -141,7 +141,7 @@ export function ReportsPage() {
         const rows = moves
           .filter((m) => inRange(m.date, from, to))
           .sort((a, b) => (a.date < b.date ? 1 : -1))
-        const cols: CsvColumn<Move>[] = [
+        const cols: XlsxColumn<Move>[] = [
           { header: 'Date', value: (m) => m.date },
           { header: 'Type', value: (m) => m.type },
           { header: 'Ref', value: (m) => m.ref },
@@ -155,7 +155,7 @@ export function ReportsPage() {
         const rows = db.invoices
           .filter((i) => matchCompany(i.companyId) && inRange(i.date, from, to))
           .map((i) => ({ i, c: computeInvoice(i, db.payments) }))
-        const cols: CsvColumn<(typeof rows)[number]>[] = [
+        const cols: XlsxColumn<(typeof rows)[number]>[] = [
           { header: 'Invoice', value: (r) => r.i.invoiceNo },
           { header: 'Date', value: (r) => r.i.date },
           { header: 'Company', value: (r) => companyName(r.i.companyId) },
@@ -171,7 +171,7 @@ export function ReportsPage() {
         const rows = db.payments.filter(
           (p) => matchCompany(p.companyId) && inRange(p.date, from, to),
         )
-        const cols: CsvColumn<(typeof rows)[number]>[] = [
+        const cols: XlsxColumn<(typeof rows)[number]>[] = [
           { header: 'Payment', value: (p) => p.paymentNo },
           { header: 'Date', value: (p) => p.date },
           { header: 'Company', value: (p) => companyName(p.companyId) },
@@ -186,7 +186,7 @@ export function ReportsPage() {
         const rows = db.expenses.filter(
           (e) => matchCompany(e.companyId) && inRange(e.date, from, to),
         )
-        const cols: CsvColumn<(typeof rows)[number]>[] = [
+        const cols: XlsxColumn<(typeof rows)[number]>[] = [
           { header: 'Expense', value: (e) => e.expenseNo },
           { header: 'Date', value: (e) => e.date },
           { header: 'Category', value: (e) => e.category },
@@ -203,7 +203,7 @@ export function ReportsPage() {
           )
           .map((i) => ({ i, c: computeInvoice(i, db.payments) }))
           .filter((r) => r.c.outstanding > 0)
-        const cols: CsvColumn<(typeof rows)[number]>[] = [
+        const cols: XlsxColumn<(typeof rows)[number]>[] = [
           { header: 'Invoice', value: (r) => r.i.invoiceNo },
           { header: 'Company', value: (r) => companyName(r.i.companyId) },
           { header: 'Date', value: (r) => r.i.date },
@@ -237,16 +237,17 @@ export function ReportsPage() {
           <button
             className="btn-primary"
             onClick={() =>
-              downloadCsv(
+              downloadXlsx(
                 REPORTS.find((r) => r.key === report)!
                   .label.replace(/\s+/g, '-')
                   .toLowerCase(),
                 rows as never[],
-                columns as CsvColumn<never>[],
+                columns as XlsxColumn<never>[],
+                REPORTS.find((r) => r.key === report)!.label,
               )
             }
           >
-            <Download size={16} /> Export CSV
+            <Download size={16} /> Export Excel
           </button>
         }
       />

@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
-import type { Invoice, PaymentMethod } from '@/types'
-import { useCreatePayment, usePayments } from './hooks/usePayments'
+import type { Invoice, Payment, PaymentMethod } from '@/types'
+import { useCreatePayment, useUpdatePayment, usePayments } from './hooks/usePayments'
 import { useCompanies } from '@/features/companies/hooks/useCompanies'
 import { useInvoices } from '@/features/invoices/hooks/useInvoices'
 import { usePreviewNo } from '@/features/shared/usePreviewNo'
@@ -14,27 +14,34 @@ import { PAYMENT_METHODS as METHODS } from '@/constants/domain'
 
 export function PaymentForm({
   invoice,
+  payment,
   onClose,
 }: {
   invoice?: Invoice | null
+  payment?: Payment | null // present = edit (financial fields are locked)
   onClose: () => void
 }) {
   const toast = useToast()
   const createPayment = useCreatePayment()
+  const updatePayment = useUpdatePayment()
+  const isEdit = !!payment
+  const saving = createPayment.isPending || updatePayment.isPending
   const { data: allCompanies = [] } = useCompanies()
   const companies = allCompanies.filter((c) => c.active)
   const { data: invoices = [] } = useInvoices()
   const { data: payments = [] } = usePayments()
   const paymentNoPreview = usePreviewNo('payment')
 
-  const [companyId, setCompanyId] = useState(invoice?.companyId ?? companies[0]?.id ?? '')
-  const [invoiceId, setInvoiceId] = useState(invoice?.id ?? '')
-  const [date, setDate] = useState(todayISO())
-  const [amount, setAmount] = useState('')
-  const [method, setMethod] = useState<PaymentMethod>('Bank Transfer')
-  const [reference, setReference] = useState('')
-  const [notes, setNotes] = useState('')
-  const [isAdvance, setIsAdvance] = useState(false)
+  const [companyId, setCompanyId] = useState(
+    payment?.companyId ?? invoice?.companyId ?? companies[0]?.id ?? '',
+  )
+  const [invoiceId, setInvoiceId] = useState(payment?.invoiceId ?? invoice?.id ?? '')
+  const [date, setDate] = useState(payment?.date ?? todayISO())
+  const [amount, setAmount] = useState(payment ? String(payment.amount) : '')
+  const [method, setMethod] = useState<PaymentMethod>(payment?.method ?? 'Bank Transfer')
+  const [reference, setReference] = useState(payment?.reference ?? '')
+  const [notes, setNotes] = useState(payment?.notes ?? '')
+  const [isAdvance, setIsAdvance] = useState(payment?.isAdvance ?? false)
 
   const openInvoices = useMemo(
     () =>
@@ -49,17 +56,30 @@ export function PaymentForm({
 
   async function submit() {
     try {
-      await createPayment.mutateAsync({
-        date,
-        companyId,
-        invoiceId: isAdvance || !invoiceId ? undefined : invoiceId,
-        amount: Number(amount),
-        method,
-        reference: reference || undefined,
-        notes: notes || undefined,
-        isAdvance: isAdvance || !invoiceId,
-      })
-      toast.success('Payment recorded')
+      if (isEdit) {
+        await updatePayment.mutateAsync({
+          id: payment!.id,
+          patch: {
+            date,
+            method,
+            reference: reference || undefined,
+            notes: notes || undefined,
+          },
+        })
+        toast.success('Payment updated')
+      } else {
+        await createPayment.mutateAsync({
+          date,
+          companyId,
+          invoiceId: isAdvance || !invoiceId ? undefined : invoiceId,
+          amount: Number(amount),
+          method,
+          reference: reference || undefined,
+          notes: notes || undefined,
+          isAdvance: isAdvance || !invoiceId,
+        })
+        toast.success('Payment recorded')
+      }
       onClose()
     } catch (e) {
       toast.error(toUserMessage(e, 'Save failed'))
@@ -70,20 +90,29 @@ export function PaymentForm({
     <Modal
       open
       onClose={onClose}
-      title="Record Payment"
+      title={isEdit ? `Edit ${payment!.paymentNo}` : 'Record Payment'}
       footer={
         <>
           <button className="btn-secondary" onClick={onClose}>
             Cancel
           </button>
-          <button className="btn-primary" onClick={submit} disabled={createPayment.isPending}>
-            {createPayment.isPending ? 'Saving…' : 'Record payment'}
+          <button className="btn-primary" onClick={submit} disabled={saving}>
+            {saving ? 'Saving…' : isEdit ? 'Save changes' : 'Record payment'}
           </button>
         </>
       }
     >
       <p className="mb-3 rounded-lg bg-brand-50 px-3 py-2 text-xs text-brand-700">
-        Payment ID will be <b>{paymentNoPreview}</b>
+        {isEdit ? (
+          <>
+            Editing <b>{payment!.paymentNo}</b> — amount &amp; allocation are locked; delete &amp;
+            re-record to change them.
+          </>
+        ) : (
+          <>
+            Payment ID will be <b>{paymentNoPreview}</b>
+          </>
+        )}
       </p>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <Field label="Company" required>
@@ -93,7 +122,7 @@ export function PaymentForm({
               setCompanyId(e.target.value)
               setInvoiceId('')
             }}
-            disabled={!!invoice}
+            disabled={!!invoice || isEdit}
           >
             <option value="">Select…</option>
             {companies.map((c) => (
@@ -118,7 +147,7 @@ export function PaymentForm({
           <Select
             value={invoiceId}
             onChange={(e) => setInvoiceId(e.target.value)}
-            disabled={isAdvance || !!invoice}
+            disabled={isAdvance || !!invoice || isEdit}
           >
             <option value="">— advance / unallocated —</option>
             {openInvoices.map((inv) => (
@@ -135,7 +164,8 @@ export function PaymentForm({
             min={0}
             value={amount}
             onChange={(e) => setAmount(e.target.value)}
-            autoFocus
+            disabled={isEdit}
+            autoFocus={!isEdit}
           />
         </Field>
         <Field label="Method" required>
@@ -154,6 +184,7 @@ export function PaymentForm({
               type="checkbox"
               checked={isAdvance}
               onChange={(e) => setIsAdvance(e.target.checked)}
+              disabled={isEdit}
               className="h-4 w-4 rounded border-slate-300"
             />
             Treat as advance / unallocated

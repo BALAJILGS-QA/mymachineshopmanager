@@ -94,6 +94,15 @@ export function useCreateAdjustment() {
   })
 }
 
+export function useUpdateReceipt() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, patch }: { id: string; patch: api.ReceiptUpdateInput }) =>
+      api.updateReceipt(id, patch),
+    onSuccess: () => invalidateStock(qc),
+  })
+}
+
 export function useRemoveReceipt() {
   const qc = useQueryClient()
   return useMutation({

@@ -21,6 +21,15 @@ export function useCreatePayment() {
   })
 }
 
+export function useUpdatePayment() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, patch }: { id: string; patch: api.PaymentUpdateInput }) =>
+      api.updatePayment(id, patch),
+    onSuccess: () => invalidatePaymentsAndInvoices(qc),
+  })
+}
+
 export function useDeletePayment() {
   const qc = useQueryClient()
   return useMutation({

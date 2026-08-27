@@ -1,4 +1,4 @@
-import { format, parseISO, isValid } from 'date-fns'
+import { format, parseISO, isValid, startOfMonth, endOfMonth } from 'date-fns'
 
 let CURRENCY_SYMBOL = '₹'
 let CURRENCY_CODE = 'INR'
@@ -44,6 +44,24 @@ export function fmtDateTime(value?: string | null): string {
 
 export function todayISO(): string {
   return format(new Date(), 'yyyy-MM-dd')
+}
+
+// Current-month prefix ('yyyy-MM') for filtering ISO dates by this month.
+export function thisMonthPrefix(): string {
+  return format(new Date(), 'yyyy-MM')
+}
+
+// Human label for the current month, e.g. "August 2026".
+export function thisMonthLabel(): string {
+  return format(new Date(), 'MMMM yyyy')
+}
+
+// First / last day of the current month as ISO dates (for default date-range filters).
+export function monthStartISO(): string {
+  return format(startOfMonth(new Date()), 'yyyy-MM-dd')
+}
+export function monthEndISO(): string {
+  return format(endOfMonth(new Date()), 'yyyy-MM-dd')
 }
 
 export function nowISO(): string {

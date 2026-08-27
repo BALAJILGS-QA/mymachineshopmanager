@@ -3,11 +3,14 @@
 
 import { uid } from '@/lib/id'
 import { maps, fromRow, type Row } from '@/lib/api/rowMap'
-import { sb, selectAll } from '@/lib/api/supabaseCrud'
+import { sb, selectAll, updateRow } from '@/lib/api/supabaseCrud'
 import { nextNumberedDoc } from '@/lib/api/numbering'
 import type { Payment } from '@/types'
 
 export type PaymentCreateInput = Omit<Payment, 'id' | 'paymentNo' | 'createdAt' | 'updatedAt'>
+// Only non-financial fields are editable directly; amount / allocation changes
+// go through delete + re-record so the linked invoice balance stays correct.
+export type PaymentUpdateInput = Partial<Pick<Payment, 'date' | 'method' | 'reference' | 'notes'>>
 
 export async function listPayments(): Promise<Payment[]> {
   return selectAll<Payment>(maps.payments)
@@ -28,6 +31,10 @@ export async function createPayment(input: PaymentCreateInput): Promise<Payment>
   })
   if (error) throw error
   return fromRow<Payment>((data as Row[])[0], maps.payments)
+}
+
+export async function updatePayment(id: string, patch: PaymentUpdateInput): Promise<Payment> {
+  return updateRow<Payment>(maps.payments, id, patch)
 }
 
 export async function deletePayment(id: string): Promise<void> {

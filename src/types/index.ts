@@ -293,6 +293,10 @@ export interface Settings {
     // Signatory type — drives the "For <shop>" footer on printed documents.
     // true → "Proprietor"; false → "Partner / Authorised Signatory".
     isProprietor: boolean
+    // Uploaded branding (data URLs). logoUrl → sidebar/header mark; faviconUrl →
+    // browser tab icon. When empty, the app's default Sree Balaji mark is used.
+    logoUrl?: string
+    faviconUrl?: string
     // SEO — applied globally to the app's page title, description and keywords.
     seoDescription: string
     seoKeywords: string

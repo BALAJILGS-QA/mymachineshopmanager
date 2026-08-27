@@ -9,18 +9,19 @@ Built to the PRD v1.0 (`CNC_Machine_Shop_Management_PRD_v1.0`).
 
 ## Tech stack
 
-| Layer | Choice |
-|-------|--------|
-| Frontend | React 18 + TypeScript + Vite |
-| UI | Tailwind CSS, Lucide icons |
-| Data (server-state) | TanStack Query provider + reactive local store |
-| Forms/validation | React Hook Form pattern + Zod available |
-| Charts | Recharts |
-| Persistence | Supabase / PostgreSQL (active) with automatic local fallback |
-| Hosting | Netlify (static SPA, free tier) |
-| E2E tests | Playwright (desktop + mobile) |
+| Layer               | Choice                                                       |
+| ------------------- | ------------------------------------------------------------ |
+| Frontend            | React 18 + TypeScript + Vite                                 |
+| UI                  | Tailwind CSS, Lucide icons                                   |
+| Data (server-state) | TanStack Query provider + reactive local store               |
+| Forms/validation    | React Hook Form pattern + Zod available                      |
+| Charts              | Recharts                                                     |
+| Persistence         | Supabase / PostgreSQL (active) with automatic local fallback |
+| Hosting             | Netlify (static SPA, free tier)                              |
+| E2E tests           | Playwright (desktop + mobile)                                |
 
 ### Data architecture
+
 All data access goes through a repository abstraction (`src/data/repo.ts`) that
 owns every business rule (uniqueness, non-negative stock, outstanding
 calculation, audit logging). Two interchangeable backends sit behind it:
@@ -37,6 +38,7 @@ Because the repository is the only mutation path, no feature page knows which
 backend is active.
 
 **Supabase setup** (already applied to the production project):
+
 1. Run `docs/supabase-schema.sql` in the Supabase SQL Editor.
 2. Create an auth user (Authentication → Users) and disable "Confirm email".
 3. Set `VITE_SUPABASE_URL` + `VITE_SUPABASE_ANON_KEY` (Netlify env / local `.env`).
@@ -60,13 +62,13 @@ In **Settings → Data & Backup** you can **Load demo data** for a populated exa
 
 ## Scripts
 
-| Command | Description |
-|---------|-------------|
-| `npm run dev` | Start the dev server |
-| `npm run build` | Type-check + production build to `dist/` |
-| `npm run preview` | Preview the production build |
-| `npm run lint` | Type-check only |
-| `npm run test:e2e` | Run Playwright smoke tests |
+| Command            | Description                              |
+| ------------------ | ---------------------------------------- |
+| `npm run dev`      | Start the dev server                     |
+| `npm run build`    | Type-check + production build to `dist/` |
+| `npm run preview`  | Preview the production build             |
+| `npm run lint`     | Type-check only                          |
+| `npm run test:e2e` | Run Playwright smoke tests               |
 
 ## Features (MVP scope)
 
@@ -75,7 +77,7 @@ In **Settings → Data & Backup** you can **Load demo data** for a populated exa
 - **Companies** — customer master with codes, GSTIN, active/inactive.
 - **Job Orders** — create/edit, status, priority, due dates, quantities, overdue flag.
 - **Production** — job queue by priority, start/hold/complete/deliver with history.
-- **Materials & Stock** — material master, receipts, issues (with stock guard),
+- **Inventory** — material master, receipts, issues (with stock guard),
   adjustments, company-wise + overall balances, low/negative stock validation.
 - **Invoices** — build from completed jobs or manually, line items, discount/tax,
   status lifecycle, print-friendly view.

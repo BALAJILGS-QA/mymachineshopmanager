@@ -47,15 +47,22 @@ export function ChallanPrintPage() {
 
       <div className="mx-auto max-w-3xl rounded-xl border border-slate-200 bg-white p-8 shadow-sm print:border-0 print:shadow-none">
         <div className="flex items-start justify-between border-b border-slate-200 pb-5">
-          <div>
-            <h1 className="text-xl font-bold text-slate-900">{shop.name || 'Machine Shop'}</h1>
-            {shop.address && (
-              <p className="mt-1 whitespace-pre-line text-xs text-slate-500">{shop.address}</p>
-            )}
-            <p className="mt-1 text-xs text-slate-500">
-              {[shop.phone, shop.email].filter(Boolean).join(' · ')}
-            </p>
-            {shop.gstin && <p className="text-xs text-slate-500">GSTIN: {shop.gstin}</p>}
+          <div className="flex items-start gap-3">
+            <img
+              src={shop.logoUrl || '/sbi-logo.svg'}
+              alt=""
+              className="h-14 w-14 shrink-0 rounded-lg object-contain"
+            />
+            <div>
+              <h1 className="text-xl font-bold text-slate-900">{shop.name || 'Machine Shop'}</h1>
+              {shop.address && (
+                <p className="mt-1 whitespace-pre-line text-xs text-slate-500">{shop.address}</p>
+              )}
+              <p className="mt-1 text-xs text-slate-500">
+                {[shop.phone, shop.email].filter(Boolean).join(' · ')}
+              </p>
+              {shop.gstin && <p className="text-xs text-slate-500">GSTIN: {shop.gstin}</p>}
+            </div>
           </div>
           <div className="text-right">
             <p className="text-lg font-bold uppercase tracking-wide text-slate-500">

@@ -21,6 +21,7 @@ export type MaterialCreateInput = Omit<Material, 'id' | 'code' | 'createdAt' | '
 }
 export type MaterialUpdateInput = Partial<Material>
 export type ReceiptInput = Omit<MaterialReceipt, 'id' | 'receiptNo' | 'createdAt' | 'updatedAt'>
+export type ReceiptUpdateInput = Partial<ReceiptInput>
 export type IssueInput = Omit<MaterialIssue, 'id' | 'issueNo' | 'createdAt' | 'updatedAt'>
 export type AdjustmentInput = Omit<StockAdjustment, 'id' | 'adjNo' | 'createdAt' | 'updatedAt'>
 
@@ -95,6 +96,13 @@ export async function createAdjustment(input: AdjustmentInput): Promise<StockAdj
   })
   if (error) throw error
   return fromRow<StockAdjustment>((data as Row[])[0], maps.adjustments)
+}
+
+export async function updateReceipt(
+  id: string,
+  patch: ReceiptUpdateInput,
+): Promise<MaterialReceipt> {
+  return updateRow<MaterialReceipt>(maps.receipts, id, patch)
 }
 
 export async function removeReceipt(id: string): Promise<void> {

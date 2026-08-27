@@ -13,7 +13,7 @@ import { useSettings } from '@/features/settings/hooks/useSettings'
 import { usePreviewNo } from '@/features/shared/usePreviewNo'
 import { toUserMessage } from '@/lib/api/errors'
 import { currency, fmtDate, todayISO } from '@/lib/format'
-import { downloadCsv } from '@/lib/csv'
+import { downloadXlsx } from '@/lib/xlsx'
 import { PageHeader, ResponsiveTable } from '@/components/common/PageHeader'
 import { Card, EmptyState, Field, Input, Select, Textarea } from '@/components/ui/primitives'
 import {
@@ -60,7 +60,6 @@ export function ExpensesPage() {
       .sort((a, b) => (a.date < b.date ? 1 : -1))
   }, [expenses, company, category, from, to, search])
 
-  const total = rows.reduce((s, e) => s + e.amount, 0)
   const pg = usePagination(rows)
 
   async function del(e: Expense) {
@@ -74,28 +73,32 @@ export function ExpensesPage() {
     }
   }
 
-  function exportCsv() {
-    downloadCsv('expenses', rows, [
-      { header: 'Expense', value: (e) => e.expenseNo },
-      { header: 'Date', value: (e) => e.date },
-      { header: 'Category', value: (e) => e.category },
-      { header: 'Amount', value: (e) => e.amount },
-      { header: 'Method', value: (e) => e.method },
-      { header: 'Vendor', value: (e) => e.vendor ?? '' },
-      { header: 'Company', value: (e) => companyName(e.companyId) },
-      { header: 'Job', value: (e) => jobNo(e.jobId) },
-    ])
+  function exportExcel() {
+    downloadXlsx(
+      'expenses',
+      rows,
+      [
+        { header: 'Expense', value: (e) => e.expenseNo },
+        { header: 'Date', value: (e) => e.date },
+        { header: 'Category', value: (e) => e.category },
+        { header: 'Amount', value: (e) => e.amount },
+        { header: 'Method', value: (e) => e.method },
+        { header: 'Vendor', value: (e) => e.vendor ?? '' },
+        { header: 'Company', value: (e) => companyName(e.companyId) },
+        { header: 'Job', value: (e) => jobNo(e.jobId) },
+      ],
+      'Expenses',
+    )
   }
 
   return (
     <div>
       <PageHeader
         title="Shop-Floor Expenses"
-        subtitle={`${rows.length} shown · ${currency(total)}`}
         actions={
           <>
-            <button className="btn-secondary" onClick={exportCsv}>
-              <Download size={16} /> CSV
+            <button className="btn-secondary" onClick={exportExcel}>
+              <Download size={16} /> Excel
             </button>
             <button className="btn-primary" onClick={() => setEditing(null)}>
               <Plus size={16} /> Add Expense

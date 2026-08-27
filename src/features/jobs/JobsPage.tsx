@@ -6,7 +6,7 @@ import { toUserMessage } from '@/lib/api/errors'
 import { JOB_STATUSES as STATUS_OPTIONS } from '@/constants/domain'
 import { jobPendingQty } from '@/data/computations'
 import { fmtDate, qty } from '@/lib/format'
-import { downloadCsv } from '@/lib/csv'
+import { downloadXlsx } from '@/lib/xlsx'
 import { PageHeader, ResponsiveTable } from '@/components/common/PageHeader'
 import { Card, EmptyState, Select } from '@/components/ui/primitives'
 import {
@@ -73,31 +73,35 @@ export function JobsPage() {
     }
   }
 
-  function exportCsv() {
-    downloadCsv('job-orders', filtered, [
-      { header: 'Job No', value: (j) => j.jobNo },
-      { header: 'Company', value: (j) => companyName(j.companyId) },
-      { header: 'Part', value: (j) => j.partName },
-      { header: 'Part No', value: (j) => j.partNumber ?? '' },
-      { header: 'Ordered', value: (j) => j.orderedQty },
-      { header: 'Completed', value: (j) => j.completedQty },
-      { header: 'Pending', value: (j) => jobPendingQty(j.orderedQty, j.completedQty) },
-      { header: 'Priority', value: (j) => j.priority },
-      { header: 'Status', value: (j) => j.status },
-      { header: 'Order Date', value: (j) => j.orderDate },
-      { header: 'Due Date', value: (j) => j.dueDate ?? '' },
-    ])
+  function exportExcel() {
+    downloadXlsx(
+      'job-orders',
+      filtered,
+      [
+        { header: 'Job No', value: (j) => j.jobNo },
+        { header: 'Company', value: (j) => companyName(j.companyId) },
+        { header: 'Part', value: (j) => j.partName },
+        { header: 'Part No', value: (j) => j.partNumber ?? '' },
+        { header: 'Ordered', value: (j) => j.orderedQty },
+        { header: 'Completed', value: (j) => j.completedQty },
+        { header: 'Pending', value: (j) => jobPendingQty(j.orderedQty, j.completedQty) },
+        { header: 'Priority', value: (j) => j.priority },
+        { header: 'Status', value: (j) => j.status },
+        { header: 'Order Date', value: (j) => j.orderDate },
+        { header: 'Due Date', value: (j) => j.dueDate ?? '' },
+      ],
+      'Job Orders',
+    )
   }
 
   return (
     <div>
       <PageHeader
         title="Job Orders"
-        subtitle={`${jobs.length} total`}
         actions={
           <>
-            <button className="btn-secondary" onClick={exportCsv}>
-              <Download size={16} /> CSV
+            <button className="btn-secondary" onClick={exportExcel}>
+              <Download size={16} /> Excel
             </button>
             <button className="btn-primary" onClick={() => setEditing(null)}>
               <Plus size={16} /> Add Job

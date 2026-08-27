@@ -35,6 +35,23 @@ function upsertLink(rel: string, href: string) {
   el.setAttribute('href', href)
 }
 
+// Swap the browser-tab favicon at runtime (e.g. to a shop's uploaded icon).
+// Pass a data URL or a path; falls back to the bundled default when empty.
+export function applyFavicon(href: string) {
+  const url = href || '/favicon.svg'
+  let el = document.head.querySelector<HTMLLinkElement>('link[rel="icon"]')
+  if (!el) {
+    el = document.createElement('link')
+    el.setAttribute('rel', 'icon')
+    document.head.appendChild(el)
+  }
+  // Data URLs carry their own MIME; a bare .svg path needs the SVG type hint.
+  if (url.startsWith('data:')) el.removeAttribute('type')
+  else if (url.endsWith('.svg')) el.setAttribute('type', 'image/svg+xml')
+  else el.removeAttribute('type')
+  el.setAttribute('href', url)
+}
+
 // Sets title, description, canonical, Open Graph, Twitter card and JSON-LD for
 // the current route. Keeps a single managed JSON-LD block so SPA navigation
 // leaves clean, crawlable, per-page metadata (Lighthouse SEO 100).

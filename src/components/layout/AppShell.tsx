@@ -7,8 +7,7 @@ import { useAuth } from '@/features/auth/auth'
 import { useSettings } from '@/features/settings/hooks/useSettings'
 import { useUsers } from '@/features/approvals/hooks/useUsers'
 import { DEFAULT_SETTINGS } from '@/data/seed'
-import { Logo } from '@/components/ui/Logo'
-import { applyAppSeo } from '@/lib/seo'
+import { applyAppSeo, applyFavicon } from '@/lib/seo'
 import type { ReactNode } from 'react'
 
 function SidebarLinks({
@@ -55,9 +54,15 @@ function Brand() {
   // everywhere the shell renders (sidebar + mobile drawer).
   const { data: settings } = useSettings()
   const company = settings?.company ?? DEFAULT_SETTINGS.company
+  // Uploaded logo when set, otherwise the bundled Sree Balaji mark.
+  const logoSrc = company.logoUrl || '/sbi-logo.svg'
   return (
     <div className="flex items-center gap-2.5 px-4 py-4">
-      <Logo size={38} className="shrink-0 rounded-[28%] shadow-sm" />
+      <img
+        src={logoSrc}
+        alt={`${company.name} logo`}
+        className="h-[38px] w-[38px] shrink-0 rounded-[28%] object-contain shadow-sm"
+      />
       {/* Only the configured shop-profile name — no product tagline. */}
       <p className="text-sm font-bold leading-tight text-slate-900">{company.name}</p>
     </div>
@@ -92,6 +97,11 @@ export function AppShell({ children }: { children: ReactNode }) {
       keywords: company.seoKeywords,
     })
   }, [currentLabel, company.name, company.seoDescription, company.seoKeywords])
+
+  // Apply the shop's uploaded favicon (falls back to the bundled default).
+  useEffect(() => {
+    applyFavicon(company.faviconUrl || '')
+  }, [company.faviconUrl])
 
   return (
     <div className="min-h-screen">
@@ -139,7 +149,6 @@ export function AppShell({ children }: { children: ReactNode }) {
           >
             <Menu size={22} />
           </button>
-          <span className="text-sm font-semibold text-slate-900">{currentLabel}</span>
         </div>
         <div className="flex items-center gap-2.5">
           <div className="hidden text-right leading-tight sm:block">

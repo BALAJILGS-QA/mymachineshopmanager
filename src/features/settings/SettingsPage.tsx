@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, type ChangeEvent } from 'react'
 import {
   ArrowLeft,
   ChevronRight,
@@ -156,7 +156,7 @@ export function SettingsPage() {
             </button>
           }
         />
-        <div className="max-w-2xl">{renderSection()}</div>
+        <div className="mx-auto w-full max-w-3xl">{renderSection()}</div>
       </div>
     )
   }
@@ -299,6 +299,23 @@ function CompanyProfile() {
   const toast = useToast()
   const [form, setForm] = useState(company)
 
+  // Read an image file into a data URL stored on the profile (logo / favicon).
+  function onPickImage(
+    e: ChangeEvent<HTMLInputElement>,
+    key: 'logoUrl' | 'faviconUrl',
+    maxKb: number,
+  ) {
+    const file = e.target.files?.[0]
+    e.target.value = '' // allow re-selecting the same file later
+    if (!file) return
+    if (!file.type.startsWith('image/')) return toast.error('Please choose an image file')
+    if (file.size > maxKb * 1024) return toast.error(`Image must be under ${maxKb} KB`)
+    const reader = new FileReader()
+    reader.onload = () => setForm((f) => ({ ...f, [key]: reader.result as string }))
+    reader.onerror = () => toast.error('Could not read the file')
+    reader.readAsDataURL(file)
+  }
+
   return (
     <Card className="p-4">
       <SectionTitle
@@ -344,6 +361,70 @@ function CompanyProfile() {
             <option value="partner">Partnership / Other — "Partner / Authorised Signatory"</option>
           </Select>
         </Field>
+
+        <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+          <p className="mb-2 text-xs font-semibold text-slate-700">
+            Branding (logo + favicon apply across every page)
+          </p>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <Field label="Company Logo" hint="Sidebar & header mark — square PNG/SVG, max 300 KB">
+              <div className="flex items-center gap-3">
+                <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-slate-200 bg-white">
+                  <img
+                    src={form.logoUrl || '/sbi-logo.svg'}
+                    alt="logo preview"
+                    className="h-full w-full object-contain"
+                  />
+                </div>
+                <label className="btn-secondary btn-sm cursor-pointer">
+                  Upload
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={(e) => onPickImage(e, 'logoUrl', 300)}
+                  />
+                </label>
+                {form.logoUrl && (
+                  <button
+                    className="btn-ghost btn-sm text-red-500"
+                    onClick={() => setForm({ ...form, logoUrl: '' })}
+                  >
+                    Remove
+                  </button>
+                )}
+              </div>
+            </Field>
+            <Field label="Favicon" hint="Browser-tab icon — square PNG/SVG, max 100 KB">
+              <div className="flex items-center gap-3">
+                <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-slate-200 bg-white">
+                  <img
+                    src={form.faviconUrl || '/favicon.svg'}
+                    alt="favicon preview"
+                    className="h-8 w-8 object-contain"
+                  />
+                </div>
+                <label className="btn-secondary btn-sm cursor-pointer">
+                  Upload
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={(e) => onPickImage(e, 'faviconUrl', 100)}
+                  />
+                </label>
+                {form.faviconUrl && (
+                  <button
+                    className="btn-ghost btn-sm text-red-500"
+                    onClick={() => setForm({ ...form, faviconUrl: '' })}
+                  >
+                    Remove
+                  </button>
+                )}
+              </div>
+            </Field>
+          </div>
+        </div>
 
         <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
           <p className="mb-2 text-xs font-semibold text-slate-700">SEO (applied globally)</p>

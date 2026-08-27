@@ -3,6 +3,8 @@ import { clsx } from 'clsx'
 import {
   Boxes,
   Building2,
+  Download,
+  Eye,
   History,
   Pencil,
   Plus,
@@ -12,7 +14,7 @@ import {
   Trash2,
   Warehouse,
 } from 'lucide-react'
-import type { Material } from '@/types'
+import type { Material, MaterialReceipt } from '@/types'
 import {
   useMaterials,
   useReceipts,
@@ -21,27 +23,40 @@ import {
   useOwnPurchases,
   useLedger,
   useDeleteMaterial,
+  useRemoveReceipt,
 } from './hooks/useMaterials'
 import { useCompanies } from '@/features/companies/hooks/useCompanies'
 import { useCompanyName, useMaterialName } from '@/features/shared/lookups'
 import { materialStock, SHOP_SCOPE, type StockDb } from '@/data/computations'
 import { toUserMessage } from '@/lib/api/errors'
 import { currency, fmtDate, qty } from '@/lib/format'
+import { downloadXlsx } from '@/lib/xlsx'
 import { PageHeader, ResponsiveTable } from '@/components/common/PageHeader'
 import { Badge, Card, EmptyState } from '@/components/ui/primitives'
 import { Modal } from '@/components/ui/Modal'
 import { Pagination, usePagination } from '@/components/common/Pagination'
+import { DateRangeFilter, inRange } from '@/components/common/Filters'
 import { useToast } from '@/components/ui/Toast'
 import { useConfirm } from '@/components/ui/ConfirmDialog'
-import {
-  AddCustomerMaterialForm,
-  AddOwnMaterialForm,
-  AdjustmentForm,
-  MaterialForm,
-} from './MaterialForms'
+import { AddMaterialForm, AdjustmentForm, MaterialForm } from './MaterialForms'
 
 type View = 'customer' | 'own'
-type Dialog = 'customer' | 'own' | 'adjust' | 'materials' | null
+type Dialog = 'add' | 'adjust' | 'materials' | null
+
+// One customer-material intake (receipt) plus its material's overall stock.
+interface CustomerRow {
+  receiptId: string
+  receipt: MaterialReceipt
+  companyId: string
+  materialId: string
+  material: Material
+  from: string
+  challan: string
+  date: string
+  quantity: number
+  unit: string
+  s: ReturnType<typeof materialStock>
+}
 
 function stockStatus(balance: number, reorder?: number): { label: string; tone: string } {
   if (balance <= 0) return { label: 'Out of Stock', tone: 'red' }
@@ -63,44 +78,82 @@ export function MaterialsPage() {
   const [view, setView] = useState<View>('customer')
   const [dialog, setDialog] = useState<Dialog>(null)
   const [historyFor, setHistoryFor] = useState<{ materialId: string; scope?: string } | null>(null)
+  const [editReceipt, setEditReceipt] = useState<MaterialReceipt | null>(null)
   const [fCompany, setFCompany] = useState('')
   const [fMaterial, setFMaterial] = useState('')
   const [search, setSearch] = useState('')
+  const [from, setFrom] = useState('')
+  const [to, setTo] = useState('')
 
+  const toast = useToast()
+  const confirm = useConfirm()
+  const removeReceipt = useRemoveReceipt()
   const { materials, receipts, issues, adjustments, db } = useStockData()
   const { data: companies = [] } = useCompanies()
   const { data: ownPurchases = [] } = useOwnPurchases()
   const companyName = useCompanyName()
   const stamp = receipts.length + issues.length + adjustments.length
 
-  // Customer stock: one row per (company, material) that has any movement.
-  const customerRows = useMemo(() => {
+  // Aggregate stock per (company, material) — feeds the summary cards and the
+  // Received / Issued / Current position shown on each intake row.
+  const customerAgg = useMemo(() => {
     const keys = new Set<string>()
     for (const r of receipts) if (r.companyId) keys.add(`${r.companyId}|${r.materialId}`)
     for (const i of issues) if (i.companyId) keys.add(`${i.companyId}|${i.materialId}`)
     for (const a of adjustments) if (a.companyId) keys.add(`${a.companyId}|${a.materialId}`)
-    return [...keys]
-      .map((k) => {
-        const [companyId, materialId] = k.split('|')
-        const m = materials.find((x) => x.id === materialId)
-        const s = materialStock(db, materialId, companyId)
-        return { companyId, materialId, material: m, s }
-      })
-      .filter((r) => r.material)
-      .sort((a, b) => (a.material!.name < b.material!.name ? -1 : 1))
+    const map = new Map<string, { material: Material; s: ReturnType<typeof materialStock> }>()
+    for (const k of keys) {
+      const [companyId, materialId] = k.split('|')
+      const m = materials.find((x) => x.id === materialId)
+      if (!m) continue
+      map.set(k, { material: m, s: materialStock(db, materialId, companyId) })
+    }
+    return map
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [materials, stamp])
+
+  // Customer stock: one row per intake (receipt) — where from, challan, date and
+  // received quantity, alongside the material's overall stock position.
+  const customerRows = useMemo(() => {
+    const rows: CustomerRow[] = []
+    for (const r of receipts) {
+      if (!r.companyId) continue
+      const key = `${r.companyId}|${r.materialId}`
+      const agg = customerAgg.get(key)
+      const material = agg?.material ?? materials.find((x) => x.id === r.materialId)
+      if (!material) continue
+      rows.push({
+        receiptId: r.id,
+        receipt: r,
+        companyId: r.companyId,
+        materialId: r.materialId,
+        material,
+        from: r.supplier ?? '',
+        challan: r.reference ?? '',
+        date: r.date,
+        quantity: r.quantity,
+        unit: r.unit || material.unit,
+        s: agg?.s ?? materialStock(db, r.materialId, r.companyId),
+      })
+    }
+    return rows.sort((a, b) => (a.date < b.date ? 1 : -1))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [materials, stamp, customerAgg])
 
   const customerFiltered = useMemo(() => {
     const s = search.toLowerCase()
     return customerRows.filter((r) => {
       if (fCompany && r.companyId !== fCompany) return false
       if (fMaterial && r.materialId !== fMaterial) return false
-      if (s && !`${r.material!.name} ${companyName(r.companyId)}`.toLowerCase().includes(s))
-        return false
+      if (!inRange(r.date, from, to)) return false
+      if (s) {
+        const hay =
+          `${r.material.name} ${companyName(r.companyId)} ${r.from} ${r.challan}`.toLowerCase()
+        if (!hay.includes(s)) return false
+      }
       return true
     })
-  }, [customerRows, fCompany, fMaterial, search, companyName])
+  }, [customerRows, fCompany, fMaterial, from, to, search, companyName])
 
   // Own stock: one row per material (shop scope).
   const ownRows = useMemo(() => {
@@ -121,40 +174,115 @@ export function MaterialsPage() {
     const s = search.toLowerCase()
     return ownRows.filter((r) => {
       if (fMaterial && r.material.id !== fMaterial) return false
+      // Date range applies to the material's last purchase date, when set.
+      if ((from || to) && !(r.last && inRange(r.last.purchaseDate, from, to))) return false
       if (s && !r.material.name.toLowerCase().includes(s)) return false
       return true
     })
-  }, [ownRows, fMaterial, search])
+  }, [ownRows, fMaterial, from, to, search])
 
   const custPg = usePagination(customerFiltered)
   const ownPg = usePagination(ownFiltered)
 
-  // Summary metrics.
+  // Summary metrics. Low count is per (company, material) line, not per intake.
   const lowCount =
-    customerRows.filter((r) => stockStatus(r.s.balance, r.material!.reorderLevel).tone !== 'green')
-      .length +
+    [...customerAgg.values()].filter(
+      (r) => stockStatus(r.s.balance, r.material.reorderLevel).tone !== 'green',
+    ).length +
     ownRows.filter((r) => stockStatus(r.s.balance, r.material.reorderLevel).tone !== 'green').length
+
+  async function onDeleteReceipt(rc: MaterialReceipt) {
+    const ok = await confirm({
+      title: 'Delete intake',
+      message: `Delete receipt ${rc.receiptNo}? Stock balances will be recalculated.`,
+      danger: true,
+    })
+    if (!ok) return
+    try {
+      await removeReceipt.mutateAsync(rc.id)
+      toast.success('Intake deleted')
+    } catch (e) {
+      toast.error(toUserMessage(e, 'Delete failed'))
+    }
+  }
+
+  // Download the current view as an Excel (.xlsx) stock report.
+  function exportReport() {
+    if (view === 'customer') {
+      if (customerFiltered.length === 0) return toast.info('Nothing to export')
+      downloadXlsx(
+        'inventory-stock-report',
+        customerFiltered,
+        [
+          { header: 'Company', value: (r) => companyName(r.companyId), width: 24 },
+          { header: 'Material', value: (r) => r.material.name, width: 24 },
+          { header: 'Material From', value: (r) => r.from || '—', width: 20 },
+          { header: 'Challan / Invoice No', value: (r) => r.challan || '—', width: 20 },
+          { header: 'From Date', value: (r) => fmtDate(r.date), width: 14 },
+          { header: 'Quantity', value: (r) => r.quantity, width: 12 },
+          { header: 'Unit', value: (r) => r.unit, width: 10 },
+          { header: 'Received', value: (r) => r.s.received, width: 12 },
+          { header: 'Issued', value: (r) => r.s.issued, width: 12 },
+          { header: 'Current Stock', value: (r) => r.s.balance, width: 14 },
+          {
+            header: 'Status',
+            value: (r) => stockStatus(r.s.balance, r.material.reorderLevel).label,
+            width: 14,
+          },
+        ],
+        'Customer Stock',
+      )
+    } else {
+      if (ownFiltered.length === 0) return toast.info('Nothing to export')
+      downloadXlsx(
+        'inventory-own-stock-report',
+        ownFiltered,
+        [
+          { header: 'Material', value: (r) => r.material.name, width: 24 },
+          { header: 'Code', value: (r) => r.material.code, width: 14 },
+          { header: 'Unit', value: (r) => r.material.unit, width: 10 },
+          { header: 'Purchased', value: (r) => r.s.received, width: 12 },
+          { header: 'Used', value: (r) => r.s.issued, width: 12 },
+          { header: 'Current Stock', value: (r) => r.s.balance, width: 14 },
+          { header: 'Cost', value: (r) => r.cost, width: 14 },
+          { header: 'GST', value: (r) => r.gst, width: 14 },
+          {
+            header: 'Last Purchase',
+            value: (r) => (r.last ? fmtDate(r.last.purchaseDate) : '—'),
+            width: 16,
+          },
+          { header: 'Supplier', value: (r) => r.last?.supplier ?? '—', width: 20 },
+          {
+            header: 'Status',
+            value: (r) => stockStatus(r.s.balance, r.material.reorderLevel).label,
+            width: 14,
+          },
+        ],
+        'Own Stock',
+      )
+    }
+  }
 
   return (
     <div>
       <PageHeader
-        title="Materials & Stock"
+        title="Inventory"
         subtitle="Manage customer materials, own materials, stock movements and inventory history"
         actions={
-          <div className="flex flex-wrap items-center gap-2">
+          <>
+            <button className="btn-ghost btn-sm" onClick={exportReport}>
+              <Download size={15} /> Export Excel
+            </button>
             <button className="btn-ghost btn-sm" onClick={() => setDialog('materials')}>
               <Settings2 size={15} /> Materials
             </button>
             <button className="btn-ghost btn-sm" onClick={() => setDialog('adjust')}>
               <Sliders size={15} /> Adjust
             </button>
-            <button className="btn-secondary" onClick={() => setDialog('own')}>
-              <Plus size={16} /> Add Own Material
+            <button className="btn-primary" onClick={() => setDialog('add')}>
+              <Plus size={16} /> Add Material
             </button>
-            <button className="btn-primary" onClick={() => setDialog('customer')}>
-              <Plus size={16} /> Add Customer Material
-            </button>
-          </div>
+          </>
         }
       />
 
@@ -163,7 +291,7 @@ export function MaterialsPage() {
         <SummaryCard
           icon={<Building2 size={18} />}
           label="Customer stock lines"
-          value={customerRows.length}
+          value={customerAgg.size}
         />
         <SummaryCard
           icon={<Warehouse size={18} />}
@@ -183,31 +311,19 @@ export function MaterialsPage() {
         />
       </div>
 
-      {/* View toggle */}
-      <div className="mb-3 inline-flex rounded-lg bg-slate-200/60 p-1">
-        {(
-          [
-            { k: 'customer', label: 'Customer Stock' },
-            { k: 'own', label: 'Own Stock' },
-          ] as const
-        ).map((t) => (
-          <button
-            key={t.k}
-            onClick={() => setView(t.k)}
-            className={clsx(
-              'rounded-md px-4 py-1.5 text-sm font-medium transition',
-              view === t.k
-                ? 'bg-white text-slate-900 shadow-sm'
-                : 'text-slate-500 hover:text-slate-700',
-            )}
-          >
-            {t.label}
-          </button>
-        ))}
-      </div>
-
       {/* Filters */}
       <div className="mb-3 flex flex-wrap items-end gap-2 rounded-xl border border-slate-200 bg-white p-3">
+        <div>
+          <label className="label">Stock Type</label>
+          <select
+            className="input min-w-[11rem]"
+            value={view}
+            onChange={(e) => setView(e.target.value as View)}
+          >
+            <option value="customer">Customer Stock</option>
+            <option value="own">Own Stock</option>
+          </select>
+        </div>
         <div className="relative min-w-[12rem] flex-1">
           <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
           <input
@@ -249,13 +365,16 @@ export function MaterialsPage() {
             ))}
           </select>
         </div>
-        {(fCompany || fMaterial || search) && (
+        <DateRangeFilter from={from} to={to} onFrom={setFrom} onTo={setTo} />
+        {(fCompany || fMaterial || search || from || to) && (
           <button
             className="btn-ghost btn-sm mb-0.5"
             onClick={() => {
               setFCompany('')
               setFMaterial('')
               setSearch('')
+              setFrom('')
+              setTo('')
             }}
           >
             Clear
@@ -269,14 +388,18 @@ export function MaterialsPage() {
             <EmptyState
               icon={<Building2 size={40} />}
               title="No customer stock"
-              description="Use “Add Customer Material” to receive customer-supplied material into stock."
+              description="Use “Add Material” (Customer material) to receive customer-supplied material into stock."
             />
           ) : (
-            <ResponsiveTable>
+            <ResponsiveTable className="min-w-[72rem]">
               <thead>
                 <tr className="border-b border-slate-100">
                   <th className="th">Company</th>
                   <th className="th">Material</th>
+                  <th className="th">Material From</th>
+                  <th className="th">Challan / Invoice No</th>
+                  <th className="th">From Date</th>
+                  <th className="th text-right">Quantity</th>
                   <th className="th text-right">Received</th>
                   <th className="th text-right">Issued</th>
                   <th className="th text-right">Current</th>
@@ -286,13 +409,17 @@ export function MaterialsPage() {
               </thead>
               <tbody className="divide-y divide-slate-50">
                 {custPg.pageItems.map((r) => {
-                  const st = stockStatus(r.s.balance, r.material!.reorderLevel)
+                  const st = stockStatus(r.s.balance, r.material.reorderLevel)
                   return (
-                    <tr key={`${r.companyId}|${r.materialId}`} className="hover:bg-slate-50/60">
+                    <tr key={r.receiptId} className="hover:bg-slate-50/60">
                       <td className="td font-medium text-slate-800">{companyName(r.companyId)}</td>
-                      <td className="td">
-                        {r.material!.name}
-                        <span className="ml-1 text-2xs text-slate-500">{r.material!.unit}</span>
+                      <td className="td">{r.material.name}</td>
+                      <td className="td text-slate-600">{r.from || '—'}</td>
+                      <td className="td font-mono text-2xs text-slate-500">{r.challan || '—'}</td>
+                      <td className="td text-slate-600">{fmtDate(r.date)}</td>
+                      <td className="td text-right">
+                        {qty(r.quantity)}
+                        <span className="ml-1 text-2xs text-slate-500">{r.unit}</span>
                       </td>
                       <td className="td text-right">{qty(r.s.received)}</td>
                       <td className="td text-right">{qty(r.s.issued)}</td>
@@ -300,15 +427,32 @@ export function MaterialsPage() {
                       <td className="td">
                         <Badge tone={st.tone}>{st.label}</Badge>
                       </td>
-                      <td className="td text-right">
-                        <button
-                          className="btn-ghost btn-sm"
-                          onClick={() =>
-                            setHistoryFor({ materialId: r.materialId, scope: r.companyId })
-                          }
-                        >
-                          <History size={14} /> History
-                        </button>
+                      <td className="td">
+                        <div className="flex justify-end gap-1">
+                          <button
+                            className="btn-ghost btn-sm"
+                            title="View history"
+                            onClick={() =>
+                              setHistoryFor({ materialId: r.materialId, scope: r.companyId })
+                            }
+                          >
+                            <Eye size={15} />
+                          </button>
+                          <button
+                            className="btn-ghost btn-sm"
+                            title="Edit intake"
+                            onClick={() => setEditReceipt(r.receipt)}
+                          >
+                            <Pencil size={15} />
+                          </button>
+                          <button
+                            className="btn-ghost btn-sm text-red-500"
+                            title="Delete intake"
+                            onClick={() => onDeleteReceipt(r.receipt)}
+                          >
+                            <Trash2 size={15} />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   )
@@ -324,10 +468,10 @@ export function MaterialsPage() {
             <EmptyState
               icon={<Warehouse size={40} />}
               title="No own stock"
-              description="Use “Add Own Material” to record a purchase — it adds stock and an expense."
+              description="Use “Add Material” (Own material) to record a purchase — it adds stock and an expense."
             />
           ) : (
-            <ResponsiveTable>
+            <ResponsiveTable className="min-w-[60rem]">
               <thead>
                 <tr className="border-b border-slate-100">
                   <th className="th">Material</th>
@@ -385,8 +529,10 @@ export function MaterialsPage() {
         </Card>
       )}
 
-      {dialog === 'customer' && <AddCustomerMaterialForm onClose={() => setDialog(null)} />}
-      {dialog === 'own' && <AddOwnMaterialForm onClose={() => setDialog(null)} />}
+      {dialog === 'add' && <AddMaterialForm onClose={() => setDialog(null)} />}
+      {editReceipt && (
+        <AddMaterialForm receipt={editReceipt} onClose={() => setEditReceipt(null)} />
+      )}
       {dialog === 'adjust' && <AdjustmentForm onClose={() => setDialog(null)} />}
       {dialog === 'materials' && <MaterialsManager onClose={() => setDialog(null)} />}
       {historyFor && (

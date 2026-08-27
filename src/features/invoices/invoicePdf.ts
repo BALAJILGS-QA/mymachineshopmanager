@@ -1,5 +1,6 @@
 import { jsPDF } from 'jspdf'
 import { computeInvoice } from '@/data/computations'
+import { imageToPng } from '@/lib/image'
 import { fmtDate, qty } from '@/lib/format'
 import { listInvoices } from './api/invoicesApi'
 import { listCompanies } from '@/features/companies/api/companiesApi'
@@ -31,6 +32,7 @@ export async function downloadInvoicePdf(invoiceId: string): Promise<void> {
   const shop = settings.company
   const sym = settings.currencySymbol
   const c = computeInvoice(inv, payments)
+  const logo = await imageToPng(shop.logoUrl || '/sbi-logo.svg', 128)
 
   const doc = new jsPDF({ unit: 'pt', format: 'a4' })
   const W = doc.internal.pageSize.getWidth()
@@ -44,9 +46,16 @@ export async function downloadInvoicePdf(invoiceId: string): Promise<void> {
     opts?: { align?: 'left' | 'right' | 'center' },
   ) => doc.text(s, x, yy, opts)
 
-  // ---- Shop header
+  // ---- Shop header (logo left, name + contact beside it)
+  let LX = M
+  if (logo) {
+    const box = 46
+    const scale = Math.min(box / logo.width, box / logo.height)
+    doc.addImage(logo.dataUrl, 'PNG', M, 30, logo.width * scale, logo.height * scale)
+    LX = M + box + 8
+  }
   doc.setFont('helvetica', 'bold').setFontSize(16).setTextColor(20)
-  text(shop.name || 'CNC Machine Shop', M, y)
+  text(shop.name || 'CNC Machine Shop', LX, y)
   doc.setFont('helvetica', 'bold').setFontSize(20).setTextColor(150)
   text('INVOICE', W - M, y, { align: 'right' })
 
@@ -58,7 +67,7 @@ export async function downloadInvoicePdf(invoiceId: string): Promise<void> {
     shop.gstin ? `GSTIN: ${shop.gstin}` : '',
   ].filter(Boolean)
   shopLines.forEach((l) => {
-    text(l, M, y)
+    text(l, LX, y)
     y += 12
   })
 
@@ -162,27 +171,16 @@ export async function downloadInvoicePdf(invoiceId: string): Promise<void> {
     row('Outstanding', money(c.outstanding, sym), true)
   }
 
-  // ---- Delivery Challan + Ship To (bottom, after the total)
+  // ---- Note: delivery challan number(s) this invoice covers (highlighted)
   y += 20
   doc.setDrawColor(220).line(M, y, W - M, y)
   y += 16
-  const colR = W / 2 + 10
-  doc.setFont('helvetica', 'bold').setFontSize(8.5).setTextColor(120)
-  text('DELIVERY CHALLAN', M, y)
-  text('SHIPPED TO', colR, y)
+  doc.setFont('helvetica', 'bold').setFontSize(8.5).setTextColor(77, 124, 15)
+  text('NOTE', M, y)
   y += 13
-  doc.setFont('helvetica', 'normal').setFontSize(9.5).setTextColor(40)
+  doc.setFont('helvetica', 'bold').setFontSize(10).setTextColor(77, 124, 15)
   text(inv.dcReference || '-', M, y)
-  doc.setFont('helvetica', 'bold').setTextColor(30)
-  text(company?.name ?? '-', colR, y)
   y += 12
-  doc.setFont('helvetica', 'normal').setFontSize(9).setTextColor(90)
-  const shipTo = inv.shippingAddress || inv.billingAddress || company?.billingAddress || ''
-  if (shipTo) {
-    const shipLines = doc.splitTextToSize(shipTo, W - colR - M) as string[]
-    text(shipLines, colR, y)
-    y += shipLines.length * 12
-  }
 
   // ---- Notes + footer
   if (inv.notes) {
@@ -194,6 +192,14 @@ export async function downloadInvoicePdf(invoiceId: string): Promise<void> {
     const notes = doc.splitTextToSize(inv.notes, W - 2 * M) as string[]
     text(notes, M, y)
   }
+  // "For <shop>" signatory block (bottom-right); label depends on business type.
+  doc.setFont('helvetica', 'bold').setFontSize(10).setTextColor(30)
+  text(`For ${shop.name || 'CNC Machine Shop'}`, W - M, 770, { align: 'right' })
+  doc.setFont('helvetica', 'normal').setFontSize(9).setTextColor(90)
+  text(shop.isProprietor ? 'Proprietor' : 'Partner / Authorised Signatory', W - M, 800, {
+    align: 'right',
+  })
+
   doc.setFontSize(8).setTextColor(160)
   text('This is a computer-generated invoice.', W / 2, 812, { align: 'center' })
 

@@ -1,11 +1,13 @@
 import { useMemo, useState } from 'react'
-import { Download, Plus, Trash2, Wallet } from 'lucide-react'
+import { Building2, Coins, Download, IndianRupee, Pencil, Plus, Trash2, Wallet } from 'lucide-react'
+import type { Payment } from '@/types'
 import { usePayments, useDeletePayment } from './hooks/usePayments'
 import { useInvoices } from '@/features/invoices/hooks/useInvoices'
 import { toUserMessage } from '@/lib/api/errors'
-import { currency, fmtDate } from '@/lib/format'
-import { downloadCsv } from '@/lib/csv'
+import { currency, fmtDate, monthEndISO, monthStartISO } from '@/lib/format'
+import { downloadXlsx } from '@/lib/xlsx'
 import { PageHeader, ResponsiveTable } from '@/components/common/PageHeader'
+import { StatTile } from '@/components/common/StatTile'
 import { Badge, Card, EmptyState } from '@/components/ui/primitives'
 import {
   CompanyFilter,
@@ -29,10 +31,11 @@ export function PaymentsPage() {
   const confirm = useConfirm()
 
   const [show, setShow] = useState(false)
+  const [editing, setEditing] = useState<Payment | null>(null)
   const [search, setSearch] = useState('')
   const [company, setCompany] = useState('')
-  const [from, setFrom] = useState('')
-  const [to, setTo] = useState('')
+  const [from, setFrom] = useState(monthStartISO())
+  const [to, setTo] = useState(monthEndISO())
 
   const invoiceNo = (id?: string) => invoices.find((i) => i.id === id)?.invoiceNo ?? '—'
 
@@ -53,8 +56,20 @@ export function PaymentsPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [payments, company, from, to, search])
 
-  const total = rows.reduce((s, p) => s + p.amount, 0)
   const pg = usePagination(rows)
+
+  // Summary tiles over the filtered rows.
+  const stats = useMemo(() => {
+    let total = 0
+    let advance = 0
+    const companies = new Set<string>()
+    for (const p of rows) {
+      total += p.amount
+      if (p.isAdvance) advance += p.amount
+      companies.add(p.companyId)
+    }
+    return { count: rows.length, total, advance, companies: companies.size }
+  }, [rows])
 
   async function del(id: string) {
     const ok = await confirm({
@@ -70,28 +85,32 @@ export function PaymentsPage() {
     }
   }
 
-  function exportCsv() {
-    downloadCsv('payments', rows, [
-      { header: 'Payment', value: (p) => p.paymentNo },
-      { header: 'Date', value: (p) => p.date },
-      { header: 'Company', value: (p) => companyName(p.companyId) },
-      { header: 'Invoice', value: (p) => invoiceNo(p.invoiceId) },
-      { header: 'Amount', value: (p) => p.amount },
-      { header: 'Method', value: (p) => p.method },
-      { header: 'Reference', value: (p) => p.reference ?? '' },
-      { header: 'Advance', value: (p) => (p.isAdvance ? 'Yes' : 'No') },
-    ])
+  function exportExcel() {
+    downloadXlsx(
+      'payments',
+      rows,
+      [
+        { header: 'Payment', value: (p) => p.paymentNo },
+        { header: 'Date', value: (p) => p.date },
+        { header: 'Company', value: (p) => companyName(p.companyId) },
+        { header: 'Invoice', value: (p) => invoiceNo(p.invoiceId) },
+        { header: 'Amount', value: (p) => p.amount },
+        { header: 'Method', value: (p) => p.method },
+        { header: 'Reference', value: (p) => p.reference ?? '' },
+        { header: 'Advance', value: (p) => (p.isAdvance ? 'Yes' : 'No') },
+      ],
+      'Payments',
+    )
   }
 
   return (
     <div>
       <PageHeader
         title="Payments"
-        subtitle={`${rows.length} shown · ${currency(total)}`}
         actions={
           <>
-            <button className="btn-secondary" onClick={exportCsv}>
-              <Download size={16} /> CSV
+            <button className="btn-secondary" onClick={exportExcel}>
+              <Download size={16} /> Excel
             </button>
             <button className="btn-primary" onClick={() => setShow(true)}>
               <Plus size={16} /> Record Payment
@@ -99,6 +118,28 @@ export function PaymentsPage() {
           </>
         }
       />
+
+      <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <StatTile icon={<Wallet size={18} />} label="Payments" value={stats.count} tone="brand" />
+        <StatTile
+          icon={<IndianRupee size={18} />}
+          label="Total received"
+          value={currency(stats.total)}
+          tone="green"
+        />
+        <StatTile
+          icon={<Building2 size={18} />}
+          label="Companies"
+          value={stats.companies}
+          tone="blue"
+        />
+        <StatTile
+          icon={<Coins size={18} />}
+          label="Advances"
+          value={currency(stats.advance)}
+          tone="violet"
+        />
+      </div>
 
       <FilterBar>
         <SearchBox
@@ -126,7 +167,7 @@ export function PaymentsPage() {
                 <th className="th text-right">Amount</th>
                 <th className="th">Method</th>
                 <th className="th">Reference</th>
-                <th className="th text-right"></th>
+                <th className="th text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-50">
@@ -143,10 +184,23 @@ export function PaymentsPage() {
                   </td>
                   <td className="td">{p.method}</td>
                   <td className="td">{p.reference || '—'}</td>
-                  <td className="td text-right">
-                    <button className="btn-ghost btn-sm text-red-500" onClick={() => del(p.id)}>
-                      <Trash2 size={15} />
-                    </button>
+                  <td className="td">
+                    <div className="flex justify-end gap-1">
+                      <button
+                        className="btn-ghost btn-sm"
+                        title="Edit"
+                        onClick={() => setEditing(p)}
+                      >
+                        <Pencil size={15} />
+                      </button>
+                      <button
+                        className="btn-ghost btn-sm text-red-500"
+                        title="Delete"
+                        onClick={() => del(p.id)}
+                      >
+                        <Trash2 size={15} />
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -157,6 +211,7 @@ export function PaymentsPage() {
       </Card>
 
       {show && <PaymentForm onClose={() => setShow(false)} />}
+      {editing && <PaymentForm payment={editing} onClose={() => setEditing(null)} />}
     </div>
   )
 }

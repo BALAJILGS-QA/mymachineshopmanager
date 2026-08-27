@@ -3,9 +3,10 @@ import { Link, useNavigate } from 'react-router-dom'
 import { clsx } from 'clsx'
 import {
   Ban,
+  FileCheck2,
+  FileClock,
   FileDown,
   FileText,
-  Layers,
   Pencil,
   Plus,
   Printer,
@@ -30,18 +31,32 @@ import { useJobs } from '@/features/jobs/hooks/useJobs'
 import { useMaterials } from '@/features/materials/hooks/useMaterials'
 import { usePreviewNo } from '@/features/shared/usePreviewNo'
 import { toUserMessage } from '@/lib/api/errors'
-import { fmtDate, todayISO } from '@/lib/format'
+import {
+  fmtDate,
+  monthEndISO,
+  monthStartISO,
+  qty,
+  thisMonthLabel,
+  thisMonthPrefix,
+  todayISO,
+} from '@/lib/format'
 import { uid } from '@/lib/id'
 import { PageHeader, ResponsiveTable } from '@/components/common/PageHeader'
+import { StatTile } from '@/components/common/StatTile'
 import { Badge, Card, EmptyState, Field, Input, Select, Textarea } from '@/components/ui/primitives'
 import { Modal } from '@/components/ui/Modal'
-import { CompanyFilter, FilterBar, SearchBox } from '@/components/common/Filters'
+import {
+  CompanyFilter,
+  DateRangeFilter,
+  FilterBar,
+  SearchBox,
+  inRange,
+} from '@/components/common/Filters'
 import { Pagination, usePagination } from '@/components/common/Pagination'
 import { useToast } from '@/components/ui/Toast'
 import { useConfirm } from '@/components/ui/ConfirmDialog'
 import { useCompanyName } from '@/features/shared/lookups'
 import { InvoiceForm } from '@/features/invoices/InvoiceForm'
-import { DC_STATUS_TONE as STATUS_TONE } from '@/constants/domain'
 
 export function DeliveriesPage() {
   const { data: challans = [], isLoading } = useChallans()
@@ -64,11 +79,12 @@ export function DeliveriesPage() {
   }
 
   const [editing, setEditing] = useState<DeliveryChallan | null | undefined>(undefined)
-  // Challans queued for invoicing — one row, or several combined into one invoice.
+  // Challan queued for invoicing — opens the invoice form prefilled from it.
   const [invoiceFor, setInvoiceFor] = useState<DeliveryChallan[] | null>(null)
-  const [selected, setSelected] = useState<Set<string>>(new Set())
   const [search, setSearch] = useState('')
   const [company, setCompany] = useState('')
+  const [from, setFrom] = useState(monthStartISO())
+  const [to, setTo] = useState(monthEndISO())
 
   // The live invoice a challan was billed on (undefined if none / cancelled).
   const linkedInvoice = (d: DeliveryChallan) =>
@@ -81,38 +97,50 @@ export function DeliveriesPage() {
     return challans
       .filter((d) => {
         if (company && d.companyId !== company) return false
+        if (!inRange(d.date, from, to)) return false
         if (s && !`${d.dcNo} ${d.reference ?? ''}`.toLowerCase().includes(s)) return false
         return true
       })
       .sort((a, b) => (a.date < b.date ? 1 : -1))
-  }, [challans, company, search])
+  }, [challans, company, from, to, search])
 
   const pg = usePagination(rows)
 
-  // Multi-select: only Open challans can be batched onto one invoice.
-  const selectedDcs = useMemo(
-    () => challans.filter((d) => selected.has(d.id) && d.status === 'Open'),
-    [challans, selected],
-  )
-  const openOnPage = pg.pageItems.filter((d) => d.status === 'Open')
-  const allOpenSelected = openOnPage.length > 0 && openOnPage.every((d) => selected.has(d.id))
+  // Current-month summary tiles.
+  const monthPrefix = thisMonthPrefix()
+  const monthStats = useMemo(() => {
+    const inMonth = challans.filter((d) => d.date.slice(0, 7) === monthPrefix)
+    let invoiced = 0
+    let notInvoiced = 0
+    let cancelled = 0
+    for (const d of inMonth) {
+      if (d.status === 'Cancelled') cancelled++
+      else if (
+        d.status === 'Invoiced' &&
+        d.invoiceId &&
+        invoices.some((i) => i.id === d.invoiceId && i.status !== 'Cancelled')
+      )
+        invoiced++
+      else notInvoiced++
+    }
+    return { total: inMonth.length, invoiced, notInvoiced, cancelled }
+  }, [challans, invoices, monthPrefix])
 
-  function toggle(id: string) {
-    setSelected((prev) => {
-      const next = new Set(prev)
-      if (next.has(id)) next.delete(id)
-      else next.add(id)
-      return next
-    })
-  }
-  function toggleAllOnPage() {
-    setSelected((prev) => {
-      const next = new Set(prev)
-      if (allOpenSelected) openOnPage.forEach((d) => next.delete(d.id))
-      else openOnPage.forEach((d) => next.add(d.id))
-      return next
-    })
-  }
+  // Total quantity dispatched per material across the filtered challans (company
+  // + date range), excluding cancelled ones (their stock was restored).
+  const dispatched = useMemo(() => {
+    const map = new Map<string, { name: string; unit: string; qty: number }>()
+    for (const d of rows) {
+      if (d.status === 'Cancelled') continue
+      for (const l of d.lines) {
+        const key = `${l.materialId ?? l.description}|${l.unit}`
+        const cur = map.get(key) ?? { name: l.description || '—', unit: l.unit, qty: 0 }
+        cur.qty += l.quantity
+        map.set(key, cur)
+      }
+    }
+    return [...map.values()].sort((a, b) => b.qty - a.qty)
+  }, [rows])
 
   // A single invoice is per-company, so refuse a batch that mixes companies.
   function startInvoice(dcs: DeliveryChallan[]) {
@@ -175,25 +203,71 @@ export function DeliveriesPage() {
     <div>
       <PageHeader
         title="Delivery Challans"
-        subtitle={`${challans.length} total`}
         actions={
-          <div className="flex items-center gap-2">
-            {selectedDcs.length > 0 && (
-              <button className="btn-secondary" onClick={() => startInvoice(selectedDcs)}>
-                <Layers size={16} /> Invoice {selectedDcs.length} selected
-              </button>
-            )}
-            <button className="btn-primary" onClick={() => setEditing(null)}>
-              <Plus size={16} /> New Challan
-            </button>
-          </div>
+          <button className="btn-primary" onClick={() => setEditing(null)}>
+            <Plus size={16} /> New Challan
+          </button>
         }
       />
+
+      <div className="mb-2 text-2xs font-semibold uppercase tracking-wide text-slate-500">
+        This month — {thisMonthLabel()}
+      </div>
+      <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <StatTile
+          icon={<Truck size={18} />}
+          label="Challans"
+          value={monthStats.total}
+          tone="brand"
+        />
+        <StatTile
+          icon={<FileCheck2 size={18} />}
+          label="Invoiced"
+          value={monthStats.invoiced}
+          tone="green"
+        />
+        <StatTile
+          icon={<FileClock size={18} />}
+          label="Not invoiced"
+          value={monthStats.notInvoiced}
+          tone="amber"
+        />
+        <StatTile
+          icon={<Ban size={18} />}
+          label="Cancelled"
+          value={monthStats.cancelled}
+          tone="red"
+        />
+      </div>
 
       <FilterBar>
         <SearchBox value={search} onChange={setSearch} placeholder="Search challan or ref…" />
         <CompanyFilter value={company} onChange={setCompany} />
+        <DateRangeFilter from={from} to={to} onFrom={setFrom} onTo={setTo} />
       </FilterBar>
+
+      {/* Total quantity dispatched per material for the current filters. */}
+      <div className="mb-4 rounded-xl border border-slate-200 bg-white p-3">
+        <p className="mb-2 text-2xs font-semibold uppercase tracking-wide text-slate-500">
+          Products dispatched{company ? ` — ${companyName(company)}` : ''}
+        </p>
+        {dispatched.length === 0 ? (
+          <p className="text-sm text-slate-500">Nothing dispatched for the current filters.</p>
+        ) : (
+          <div className="flex flex-wrap gap-2">
+            {dispatched.map((m) => (
+              <span
+                key={`${m.name}|${m.unit}`}
+                className="inline-flex items-baseline gap-1.5 rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-sm"
+              >
+                <span className="font-medium text-slate-800">{m.name}</span>
+                <span className="font-semibold text-brand-700">{qty(m.qty)}</span>
+                <span className="text-2xs text-slate-500">{m.unit}</span>
+              </span>
+            ))}
+          </div>
+        )}
+      </div>
 
       <Card>
         {isLoading ? (
@@ -205,24 +279,13 @@ export function DeliveriesPage() {
             description="Create a challan for dispatched goods, then raise an invoice against it."
           />
         ) : (
-          <ResponsiveTable>
+          <ResponsiveTable className="min-w-[48rem]">
             <thead>
               <tr className="border-b border-slate-100">
-                <th className="th w-8">
-                  <input
-                    type="checkbox"
-                    className="h-4 w-4 accent-brand-600"
-                    checked={allOpenSelected}
-                    onChange={toggleAllOnPage}
-                    disabled={openOnPage.length === 0}
-                    aria-label="Select all open challans on this page"
-                  />
-                </th>
                 <th className="th">DC No</th>
                 <th className="th">Date</th>
                 <th className="th">Company</th>
-                <th className="th">Reference</th>
-                <th className="th text-right">Items</th>
+                <th className="th">Items &amp; Qty</th>
                 <th className="th">Status</th>
                 <th className="th text-right">Actions</th>
               </tr>
@@ -238,29 +301,27 @@ export function DeliveriesPage() {
                       'hover:bg-slate-50/60',
                       // Billed challans are locked: greyed out with the invoice shown.
                       billed && 'bg-slate-50 [&>td]:text-slate-400',
-                      selected.has(d.id) && 'bg-brand-50/60',
                     )}
                   >
-                    <td className="td w-8">
-                      {d.status === 'Open' && (
-                        <input
-                          type="checkbox"
-                          className="h-4 w-4 accent-brand-600"
-                          checked={selected.has(d.id)}
-                          onChange={() => toggle(d.id)}
-                          aria-label={`Select ${d.dcNo}`}
-                        />
-                      )}
-                    </td>
                     <td className="td font-mono text-xs font-semibold text-slate-700">{d.dcNo}</td>
                     <td className="td">{fmtDate(d.date)}</td>
                     <td className="td">{companyName(d.companyId)}</td>
-                    <td className="td">{d.reference || '—'}</td>
-                    <td className="td text-right">{d.lines.length}</td>
+                    <td className="td">
+                      <div className="flex flex-col gap-0.5">
+                        {d.lines.map((l) => (
+                          <span key={l.id} className="text-xs text-slate-700">
+                            {l.description || '—'}
+                            <span className="ml-1 text-2xs text-slate-500">
+                              · {qty(l.quantity)} {l.unit}
+                            </span>
+                          </span>
+                        ))}
+                      </div>
+                    </td>
                     <td className="td">
                       {billed ? (
                         <div className="flex flex-col gap-0.5">
-                          <Badge tone="gray">Invoiced</Badge>
+                          <Badge tone="green">Invoiced</Badge>
                           <Link
                             to={`/app/invoices/${inv!.id}/print`}
                             className="font-mono text-2xs font-semibold text-brand-700 hover:underline"
@@ -269,8 +330,10 @@ export function DeliveriesPage() {
                             {inv!.invoiceNo}
                           </Link>
                         </div>
+                      ) : d.status === 'Cancelled' ? (
+                        <Badge tone="red">Cancelled</Badge>
                       ) : (
-                        <Badge tone={STATUS_TONE[d.status]}>{d.status}</Badge>
+                        <Badge tone="amber">Not Invoiced</Badge>
                       )}
                     </td>
                     <td className="td">
@@ -375,7 +438,6 @@ export function DeliveriesPage() {
                 ? `Invoice raised against ${invoiceFor.length} challans`
                 : `Invoice raised against ${invoiceFor[0].dcNo}`,
             )
-            setSelected(new Set())
           }}
           onClose={() => setInvoiceFor(null)}
         />

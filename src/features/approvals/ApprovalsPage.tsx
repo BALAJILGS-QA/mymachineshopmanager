@@ -7,6 +7,7 @@ import { toUserMessage } from '@/lib/api/errors'
 import { useAuth } from '@/features/auth/auth'
 import { fmtDate } from '@/lib/format'
 import { PageHeader, ResponsiveTable } from '@/components/common/PageHeader'
+import { DateRangeFilter, FilterBar, inRange } from '@/components/common/Filters'
 import { Badge, Card, EmptyState } from '@/components/ui/primitives'
 import { useToast } from '@/components/ui/Toast'
 import { useConfirm } from '@/components/ui/ConfirmDialog'
@@ -27,13 +28,16 @@ export function ApprovalsPage() {
   const toast = useToast()
   const confirm = useConfirm()
   const [filter, setFilter] = useState<UserStatus | 'all'>('pending')
+  const [from, setFrom] = useState('')
+  const [to, setTo] = useState('')
 
   const rows = useMemo(
     () =>
       users
         .filter((u) => (filter === 'all' ? true : u.status === filter))
+        .filter((u) => inRange(u.createdAt.slice(0, 10), from, to))
         .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1)),
-    [users, filter],
+    [users, filter, from, to],
   )
   const pendingCount = users.filter((u) => u.status === 'pending').length
 
@@ -77,26 +81,32 @@ export function ApprovalsPage() {
         }
       />
 
-      <div className="mb-3 flex flex-wrap gap-1.5">
-        {FILTERS.map((f) => (
-          <button
-            key={f.key}
-            onClick={() => setFilter(f.key)}
-            className={
-              filter === f.key
-                ? 'rounded-lg bg-brand-600 px-3 py-1.5 text-sm font-semibold text-white'
-                : 'rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50'
-            }
-          >
-            {f.label}
-            {f.key === 'pending' && pendingCount > 0 && (
-              <span className="ml-1.5 rounded-full bg-amber-500 px-1.5 text-2xs font-bold text-white">
-                {pendingCount}
-              </span>
-            )}
-          </button>
-        ))}
-      </div>
+      <FilterBar>
+        <div>
+          <label className="label">Status</label>
+          <div className="flex flex-wrap items-center gap-1.5">
+            {FILTERS.map((f) => (
+              <button
+                key={f.key}
+                onClick={() => setFilter(f.key)}
+                className={
+                  filter === f.key
+                    ? 'rounded-lg bg-brand-600 px-3 py-1.5 text-sm font-semibold text-white'
+                    : 'rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50'
+                }
+              >
+                {f.label}
+                {f.key === 'pending' && pendingCount > 0 && (
+                  <span className="ml-1.5 rounded-full bg-amber-500 px-1.5 text-2xs font-bold text-white">
+                    {pendingCount}
+                  </span>
+                )}
+              </button>
+            ))}
+          </div>
+        </div>
+        <DateRangeFilter from={from} to={to} onFrom={setFrom} onTo={setTo} />
+      </FilterBar>
 
       <Card>
         {rows.length === 0 ? (
