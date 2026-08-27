@@ -30,9 +30,7 @@ export function Field({
     isValidElement(children) && !(children as ReactElement).props.id
       ? cloneElement(children as ReactElement, { id })
       : children
-  const htmlFor = isValidElement(children)
-    ? ((children as ReactElement).props.id ?? id)
-    : undefined
+  const htmlFor = isValidElement(children) ? ((children as ReactElement).props.id ?? id) : undefined
 
   return (
     <div className={className}>
@@ -49,29 +47,56 @@ export function Field({
   )
 }
 
+// Each control falls back to a generated id (used as id + name when none is
+// supplied) so standalone fields still satisfy the "form field needs an id or
+// name" check. Inside <Field> an explicit id is passed and takes precedence.
 export const Input = forwardRef<HTMLInputElement, InputHTMLAttributes<HTMLInputElement>>(
-  function Input({ className, ...props }, ref) {
-    return <input ref={ref} className={clsx('input', className)} {...props} />
+  function Input({ className, id, name, ...props }, ref) {
+    const autoId = useId()
+    return (
+      <input
+        ref={ref}
+        id={id ?? autoId}
+        name={name ?? id ?? autoId}
+        className={clsx('input', className)}
+        {...props}
+      />
+    )
   },
 )
 
 export const Textarea = forwardRef<
   HTMLTextAreaElement,
   TextareaHTMLAttributes<HTMLTextAreaElement>
->(function Textarea({ className, ...props }, ref) {
-  return <textarea ref={ref} className={clsx('input', className)} {...props} />
-})
-
-export const Select = forwardRef<
-  HTMLSelectElement,
-  SelectHTMLAttributes<HTMLSelectElement>
->(function Select({ className, children, ...props }, ref) {
+>(function Textarea({ className, id, name, ...props }, ref) {
+  const autoId = useId()
   return (
-    <select ref={ref} className={clsx('input pr-8', className)} {...props}>
-      {children}
-    </select>
+    <textarea
+      ref={ref}
+      id={id ?? autoId}
+      name={name ?? id ?? autoId}
+      className={clsx('input', className)}
+      {...props}
+    />
   )
 })
+
+export const Select = forwardRef<HTMLSelectElement, SelectHTMLAttributes<HTMLSelectElement>>(
+  function Select({ className, children, id, name, ...props }, ref) {
+    const autoId = useId()
+    return (
+      <select
+        ref={ref}
+        id={id ?? autoId}
+        name={name ?? id ?? autoId}
+        className={clsx('input pr-8', className)}
+        {...props}
+      >
+        {children}
+      </select>
+    )
+  },
+)
 
 // Each tone carries a ring so the pill keeps a defined edge against white
 // cards and coloured rows, and darker text (800) for readable contrast.
@@ -95,13 +120,7 @@ export function Badge({
   return <span className={clsx('chip', BADGE_TONES[tone] ?? BADGE_TONES.slate)}>{children}</span>
 }
 
-export function Card({
-  children,
-  className,
-}: {
-  children: ReactNode
-  className?: string
-}) {
+export function Card({ children, className }: { children: ReactNode; className?: string }) {
   return <div className={clsx('card', className)}>{children}</div>
 }
 

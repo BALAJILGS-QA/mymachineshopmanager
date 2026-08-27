@@ -29,13 +29,13 @@ import { useCompanies } from '@/features/companies/hooks/useCompanies'
 import { useCompanyName, useMaterialName } from '@/features/shared/lookups'
 import { materialStock, SHOP_SCOPE, type StockDb } from '@/data/computations'
 import { toUserMessage } from '@/lib/api/errors'
-import { currency, fmtDate, qty } from '@/lib/format'
+import { currency, fmtDate, inRange, qty } from '@/lib/format'
 import { downloadXlsx } from '@/lib/xlsx'
 import { PageHeader, ResponsiveTable } from '@/components/common/PageHeader'
 import { Badge, Card, EmptyState } from '@/components/ui/primitives'
 import { Modal } from '@/components/ui/Modal'
 import { Pagination, usePagination } from '@/components/common/Pagination'
-import { DateRangeFilter, inRange } from '@/components/common/Filters'
+import { DateRangeFilter } from '@/components/common/Filters'
 import { useToast } from '@/components/ui/Toast'
 import { useConfirm } from '@/components/ui/ConfirmDialog'
 import { AddMaterialForm, AdjustmentForm, MaterialForm } from './MaterialForms'
@@ -317,6 +317,8 @@ export function MaterialsPage() {
           <label className="label">Stock Type</label>
           <select
             className="input min-w-[11rem]"
+            aria-label="Stock type"
+            name="stockType"
             value={view}
             onChange={(e) => setView(e.target.value as View)}
           >
@@ -328,6 +330,8 @@ export function MaterialsPage() {
           <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
           <input
             className="input pl-9"
+            aria-label="Search material or company"
+            name="materialSearch"
             placeholder="Search material or company…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
@@ -338,6 +342,8 @@ export function MaterialsPage() {
             <label className="label">Company</label>
             <select
               className="input min-w-[11rem]"
+              aria-label="Company"
+              name="materialCompanyFilter"
               value={fCompany}
               onChange={(e) => setFCompany(e.target.value)}
             >
@@ -354,6 +360,8 @@ export function MaterialsPage() {
           <label className="label">Material</label>
           <select
             className="input min-w-[12rem]"
+            aria-label="Material"
+            name="materialFilter"
             value={fMaterial}
             onChange={(e) => setFMaterial(e.target.value)}
           >
@@ -704,6 +712,8 @@ function MaterialsManager({ onClose }: { onClose: () => void }) {
           <label className="label">Belongs to</label>
           <select
             className="input max-w-xs"
+            aria-label="Belongs to"
+            name="materialBelongsTo"
             value={fCompany}
             onChange={(e) => setFCompany(e.target.value)}
           >

@@ -1,5 +1,5 @@
 import { Search } from 'lucide-react'
-import type { ReactNode } from 'react'
+import { useId, type ReactNode } from 'react'
 import { Card, Select } from '@/components/ui/primitives'
 import { useCompanies } from '@/features/companies/hooks/useCompanies'
 
@@ -20,10 +20,14 @@ export function SearchBox({
   onChange: (v: string) => void
   placeholder?: string
 }) {
+  const id = useId()
   return (
     <div className="relative min-w-[10rem] flex-1">
       <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
       <input
+        id={id}
+        name={id}
+        aria-label={placeholder}
         className="input pl-9"
         placeholder={placeholder}
         value={value}
@@ -41,10 +45,19 @@ export function CompanyFilter({
   onChange: (v: string) => void
 }) {
   const { data: companies = [] } = useCompanies()
+  const id = useId()
   return (
     <div>
-      <label className="label">Company</label>
-      <Select value={value} onChange={(e) => onChange(e.target.value)} className="min-w-[9rem]">
+      <label className="label" htmlFor={id}>
+        Company
+      </label>
+      <Select
+        id={id}
+        name={id}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="min-w-[9rem]"
+      >
         <option value="">All companies</option>
         {companies.map((c) => (
           <option key={c.id} value={c.id}>
@@ -67,11 +80,17 @@ export function DateRangeFilter({
   onFrom: (v: string) => void
   onTo: (v: string) => void
 }) {
+  const fromId = useId()
+  const toId = useId()
   return (
     <>
       <div>
-        <label className="label">From</label>
+        <label className="label" htmlFor={fromId}>
+          From
+        </label>
         <input
+          id={fromId}
+          name={fromId}
           type="date"
           className="input"
           value={from}
@@ -79,15 +98,18 @@ export function DateRangeFilter({
         />
       </div>
       <div>
-        <label className="label">To</label>
-        <input type="date" className="input" value={to} onChange={(e) => onTo(e.target.value)} />
+        <label className="label" htmlFor={toId}>
+          To
+        </label>
+        <input
+          id={toId}
+          name={toId}
+          type="date"
+          className="input"
+          value={to}
+          onChange={(e) => onTo(e.target.value)}
+        />
       </div>
     </>
   )
-}
-
-export function inRange(date: string, from: string, to: string): boolean {
-  if (from && date < from) return false
-  if (to && date > to) return false
-  return true
 }

@@ -22,6 +22,7 @@ import { computeInvoice } from '@/data/computations'
 import {
   currency,
   fmtDate,
+  inRange,
   monthEndISO,
   monthStartISO,
   thisMonthLabel,
@@ -31,13 +32,7 @@ import { downloadXlsx } from '@/lib/xlsx'
 import { PageHeader, ResponsiveTable } from '@/components/common/PageHeader'
 import { StatTile } from '@/components/common/StatTile'
 import { Card, EmptyState, Select } from '@/components/ui/primitives'
-import {
-  CompanyFilter,
-  DateRangeFilter,
-  FilterBar,
-  SearchBox,
-  inRange,
-} from '@/components/common/Filters'
+import { CompanyFilter, DateRangeFilter, FilterBar, SearchBox } from '@/components/common/Filters'
 import { InvoiceStatusBadge } from '@/components/common/status'
 import { Pagination, usePagination } from '@/components/common/Pagination'
 import { useToast } from '@/components/ui/Toast'

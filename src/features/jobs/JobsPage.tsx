@@ -5,17 +5,11 @@ import { useJobs, useDeleteJob } from './hooks/useJobs'
 import { toUserMessage } from '@/lib/api/errors'
 import { JOB_STATUSES as STATUS_OPTIONS } from '@/constants/domain'
 import { jobPendingQty } from '@/data/computations'
-import { fmtDate, qty } from '@/lib/format'
+import { fmtDate, inRange, qty } from '@/lib/format'
 import { downloadXlsx } from '@/lib/xlsx'
 import { PageHeader, ResponsiveTable } from '@/components/common/PageHeader'
 import { Card, EmptyState, Select } from '@/components/ui/primitives'
-import {
-  CompanyFilter,
-  FilterBar,
-  SearchBox,
-  inRange,
-  DateRangeFilter,
-} from '@/components/common/Filters'
+import { CompanyFilter, FilterBar, SearchBox, DateRangeFilter } from '@/components/common/Filters'
 import { JobStatusBadge, PriorityBadge } from '@/components/common/status'
 import { Pagination, usePagination } from '@/components/common/Pagination'
 import { useToast } from '@/components/ui/Toast'

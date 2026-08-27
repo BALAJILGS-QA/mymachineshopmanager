@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react'
+import { cloneElement, isValidElement, useEffect, useId, useState } from 'react'
+import type { ReactElement } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   ArrowRight,
@@ -148,7 +149,9 @@ export function AuthForm() {
             onClick={() => switchMode(m)}
             className={clsx(
               'rounded-lg py-2 text-sm font-semibold transition',
-              mode === m ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700',
+              mode === m
+                ? 'bg-white text-slate-900 shadow-sm'
+                : 'text-slate-500 hover:text-slate-700',
             )}
           >
             {m === 'signin' ? 'Sign In' : 'Sign Up'}
@@ -167,26 +170,70 @@ export function AuthForm() {
           <>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <IconField icon={User} label="Full Name" required>
-                <input className="input pl-9" value={fullName} onChange={(e) => setFullName(e.target.value)} required aria-label="Full Name" />
+                <input
+                  className="input pl-9"
+                  value={fullName}
+                  onChange={(e) => setFullName(e.target.value)}
+                  required
+                  aria-label="Full Name"
+                />
               </IconField>
               <IconField icon={Building2} label="Company Name">
-                <input className="input pl-9" value={companyName} onChange={(e) => setCompanyName(e.target.value)} aria-label="Company Name" />
+                <input
+                  className="input pl-9"
+                  value={companyName}
+                  onChange={(e) => setCompanyName(e.target.value)}
+                  aria-label="Company Name"
+                />
               </IconField>
               <IconField icon={Phone} label="Phone">
-                <input className="input pl-9" value={phone} onChange={(e) => setPhone(e.target.value)} aria-label="Phone" />
+                <input
+                  className="input pl-9"
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value)}
+                  aria-label="Phone"
+                />
               </IconField>
               <IconField icon={Mail} label="Email" required>
-                <input className="input pl-9" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required autoComplete="email" placeholder="you@example.com" aria-label="Email" />
+                <input
+                  className="input pl-9"
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  required
+                  autoComplete="email"
+                  placeholder="you@example.com"
+                  aria-label="Email"
+                />
               </IconField>
             </div>
             <IconField icon={MapPin} label="Address">
-              <input className="input pl-9" value={address} onChange={(e) => setAddress(e.target.value)} aria-label="Address" />
+              <input
+                className="input pl-9"
+                value={address}
+                onChange={(e) => setAddress(e.target.value)}
+                aria-label="Address"
+              />
             </IconField>
             <IconField icon={ReceiptText} label="GSTIN / Tax ID">
-              <input className="input pl-9" value={gstin} onChange={(e) => setGstin(e.target.value)} aria-label="GSTIN" />
+              <input
+                className="input pl-9"
+                value={gstin}
+                onChange={(e) => setGstin(e.target.value)}
+                aria-label="GSTIN"
+              />
             </IconField>
             <IconField icon={Lock} label="Password" required>
-              <input className="input pl-9" type="password" value={password} onChange={(e) => setPassword(e.target.value)} required autoComplete="new-password" placeholder="••••••••" aria-label="Password" />
+              <input
+                className="input pl-9"
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+                autoComplete="new-password"
+                placeholder="••••••••"
+                aria-label="Password"
+              />
             </IconField>
             <p className="text-2xs text-slate-500">At least 6 characters.</p>
           </>
@@ -257,15 +304,25 @@ function IconField({
   required?: boolean
   children: React.ReactNode
 }) {
+  const id = useId()
+  // Associate the label with the input and give it a stable id/name so the
+  // field passes accessibility + form checks (no "unlabelled form field" issues).
+  const control =
+    isValidElement(children) && !(children as ReactElement).props.id
+      ? cloneElement(children as ReactElement, { id, name: id })
+      : children
   return (
     <div>
-      <label className="label">
+      <label className="label" htmlFor={id}>
         {label}
         {required && <span className="text-red-500"> *</span>}
       </label>
       <div className="relative">
-        <Icon size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
-        {children}
+        <Icon
+          size={16}
+          className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-500"
+        />
+        {control}
       </div>
     </div>
   )

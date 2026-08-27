@@ -17,11 +17,11 @@ import {
   useIssues,
   useAdjustments,
 } from '@/features/materials/hooks/useMaterials'
-import { currency, fmtDate, qty } from '@/lib/format'
+import { currency, fmtDate, inRange, qty } from '@/lib/format'
 import { downloadXlsx, type XlsxColumn } from '@/lib/xlsx'
 import { PageHeader, ResponsiveTable } from '@/components/common/PageHeader'
 import { Card, Select } from '@/components/ui/primitives'
-import { CompanyFilter, DateRangeFilter, FilterBar, inRange } from '@/components/common/Filters'
+import { CompanyFilter, DateRangeFilter, FilterBar } from '@/components/common/Filters'
 import { Pagination, usePagination } from '@/components/common/Pagination'
 import { useCompanyName, useMaterialName } from '@/features/shared/lookups'
 

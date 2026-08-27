@@ -4,18 +4,12 @@ import type { Payment } from '@/types'
 import { usePayments, useDeletePayment } from './hooks/usePayments'
 import { useInvoices } from '@/features/invoices/hooks/useInvoices'
 import { toUserMessage } from '@/lib/api/errors'
-import { currency, fmtDate, monthEndISO, monthStartISO } from '@/lib/format'
+import { currency, fmtDate, inRange, monthEndISO, monthStartISO } from '@/lib/format'
 import { downloadXlsx } from '@/lib/xlsx'
 import { PageHeader, ResponsiveTable } from '@/components/common/PageHeader'
 import { StatTile } from '@/components/common/StatTile'
 import { Badge, Card, EmptyState } from '@/components/ui/primitives'
-import {
-  CompanyFilter,
-  DateRangeFilter,
-  FilterBar,
-  SearchBox,
-  inRange,
-} from '@/components/common/Filters'
+import { CompanyFilter, DateRangeFilter, FilterBar, SearchBox } from '@/components/common/Filters'
 import { Pagination, usePagination } from '@/components/common/Pagination'
 import { useToast } from '@/components/ui/Toast'
 import { useConfirm } from '@/components/ui/ConfirmDialog'

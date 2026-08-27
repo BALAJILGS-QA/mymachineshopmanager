@@ -64,6 +64,13 @@ export function monthEndISO(): string {
   return format(endOfMonth(new Date()), 'yyyy-MM-dd')
 }
 
+// Inclusive date-range test for ISO date strings ('' bounds mean unbounded).
+export function inRange(date: string, from: string, to: string): boolean {
+  if (from && date < from) return false
+  if (to && date > to) return false
+  return true
+}
+
 export function nowISO(): string {
   return new Date().toISOString()
 }
