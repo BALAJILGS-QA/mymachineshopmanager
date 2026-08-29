@@ -11,6 +11,8 @@ import { AppShell } from '@/components/layout/AppShell'
 export const Route = createFileRoute('/app')({
   ssr: false,
   component: AppLayout,
+  // Preserve the old behaviour: unknown /app/* paths redirect to the dashboard.
+  notFoundComponent: () => <Navigate to="/app" replace />,
 })
 
 function FullScreenLoader({ label }: { label: string }) {

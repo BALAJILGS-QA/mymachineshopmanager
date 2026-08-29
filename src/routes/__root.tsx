@@ -1,5 +1,11 @@
 import { useEffect, type ReactNode } from 'react'
-import { Outlet, HeadContent, Scripts, createRootRouteWithContext } from '@tanstack/react-router'
+import {
+  Outlet,
+  Navigate,
+  HeadContent,
+  Scripts,
+  createRootRouteWithContext,
+} from '@tanstack/react-router'
 import { QueryClientProvider, type QueryClient } from '@tanstack/react-query'
 import { AuthProvider } from '@/features/auth/auth'
 import { ToastProvider } from '@/components/ui/Toast'
@@ -53,6 +59,8 @@ export const Route = createRootRouteWithContext<RouterContext>()({
     ],
   }),
   component: RootComponent,
+  // Preserve the old catch-all: any unknown URL redirects to the landing page.
+  notFoundComponent: () => <Navigate to="/" replace />,
 })
 
 function RootComponent() {

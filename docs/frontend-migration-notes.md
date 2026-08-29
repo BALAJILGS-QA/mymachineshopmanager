@@ -100,9 +100,44 @@ Validation at this checkpoint — **all green**:
   `/login` → 307 `/`, `/app` serves client shell. Browser: landing + blog render
   identically, client nav works, `useSeo` title updates, **no hydration/console errors**.
 
-Remaining (Phase 6): Playwright e2e (update config for Start server), full feature
-parity walkthrough (authenticated portal), then confirm/remove `react-router-dom`
-and any now-dead legacy `data/*` modules; update netlify/hosting for SSR.
+## 2026-08-29 — Phase 6: Validation + cleanup
+
+Serving: the default Start build emits an SSR **handler** at `dist/server/server.js`
+(no standalone listener; the `target:'node-server'` plugin option was a no-op in
+1.168 and was reverted). `vite preview` serves the SSR build correctly (public pages
+server-rendered, `/app` client-only), so `start`/`preview` and the Playwright
+webServer all use `vite preview`. **Production host wiring (Netlify/Vercel/Node
+adapter) is the one remaining manual deployment step** — see architecture doc.
+
+E2E (Playwright, chromium, against the SSR preview build):
+
+- `site.spec` — **2/3 pass**: blog SSR list→post nav + `route-jsonld` ✓, robots/
+  sitemap ✓. The 1 failure is `toHaveTitle(/Sree Balaji Industries/)` — **pre-existing
+  and NOT a regression**: `BRAND.product` is `'Machine Shop Management'` on `main` too,
+  so the landing title was already "Machine Shop Management — …". Stale assertion from
+  before a brand rename; app behavior unchanged, so left as-is (fixing it would be a
+  non-migration content change).
+- `supabase.spec` — **PASS**: authenticated full round-trip — Supabase login → `ssr:false`
+  app gate → AppShell → Companies route → create (mutation→Supabase) → clear local
+  cache + reload → re-hydrate from cloud → delete. Validates the portal migration.
+- Not run (data-dependent / mode-mismatch, unrelated to migration): `dashboard.spec`
+  (needs the imported seed data that was wiped earlier), `smoke.spec` (local-mode suite;
+  this build is Supabase mode).
+
+Cleanup:
+
+- Removed `react-router-dom` (0 refs remain); typecheck/build stay green.
+- Kept `data/store`+`db`+`backend`+`seed` (local-mode `ensureDb` fallback via `__root`).
+  `data/demo.ts` was already dead pre-migration; left untouched (out of scope).
+
+Final gate — **all green**: `tsc` ✓ · `eslint` ✓ (0 errors) · `vitest` 17/17 ✓ ·
+`vite build` (SSR) ✓ · e2e migration-relevant ✓ · browser hydration clean.
+
+### Remaining manual step (deployment)
+
+Wire the production SSR host: add the TanStack Start Netlify (or Vercel/Node) adapter
+and update `netlify.toml` (drop the `/*→/index.html` SPA fallback; keep the security
+headers). Left un-guessed because the 1.168 preset API didn't match the docs on hand.
 
 ### Next
 
