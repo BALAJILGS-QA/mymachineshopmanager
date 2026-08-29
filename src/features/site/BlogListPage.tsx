@@ -1,4 +1,4 @@
-import { Link } from 'react-router-dom'
+import { Link } from '@tanstack/react-router'
 import { Cog } from 'lucide-react'
 import { SiteLayout } from './SiteLayout'
 import { useReveal } from './useReveal'
@@ -37,7 +37,9 @@ export function BlogListPage() {
         <div className="glow-amber pointer-events-none absolute inset-x-0 top-0 h-72" />
         <div className="mx-auto max-w-6xl px-5 py-16 md:py-20">
           <p className="kicker rise d1">Insights</p>
-          <h1 className="display rise d2 mt-3 text-4xl font-bold sm:text-5xl">The Workshop Journal</h1>
+          <h1 className="display rise d2 mt-3 text-4xl font-bold sm:text-5xl">
+            The Workshop Journal
+          </h1>
           <p className="rise d3 mt-4 max-w-2xl text-[var(--ink-dim)]">
             Field-tested guidance on precision machining — how to design, specify and order parts
             that fit the first time.
@@ -48,16 +50,26 @@ export function BlogListPage() {
       <div className="mx-auto max-w-6xl px-5 py-14">
         {/* Lead article */}
         <Link
-          to={`/blog/${lead.slug}`}
+          to="/blog/$slug"
+          params={{ slug: lead.slug }}
           className="reveal group grid overflow-hidden rounded-3xl border border-[var(--line)] bg-[var(--surface)] transition hover:border-[var(--amber)]/50 md:grid-cols-2"
         >
           <div
             className="relative min-h-52 overflow-hidden"
-            style={{ background: `linear-gradient(135deg, ${lead.accent}25, transparent 70%), #eef4f3` }}
+            style={{
+              background: `linear-gradient(135deg, ${lead.accent}25, transparent 70%), #eef4f3`,
+            }}
           >
             <div className="blueprint absolute inset-0 opacity-60" />
-            <Cog size={160} className="spin-slow absolute -right-10 -bottom-10 opacity-10" style={{ color: lead.accent }} />
-            <span className="mono absolute left-5 top-5 text-[11px] uppercase tracking-widest" style={{ color: lead.accent }}>
+            <Cog
+              size={160}
+              className="spin-slow absolute -right-10 -bottom-10 opacity-10"
+              style={{ color: lead.accent }}
+            />
+            <span
+              className="mono absolute left-5 top-5 text-[11px] uppercase tracking-widest"
+              style={{ color: lead.accent }}
+            >
               Featured · {lead.tags[0]}
             </span>
           </div>
@@ -77,16 +89,22 @@ export function BlogListPage() {
           {rest.map((p, i) => (
             <Link
               key={p.slug}
-              to={`/blog/${p.slug}`}
+              to="/blog/$slug"
+              params={{ slug: p.slug }}
               className="reveal group flex flex-col overflow-hidden rounded-2xl border border-[var(--line)] bg-[var(--surface)] transition hover:border-[var(--amber)]/50"
               style={{ transitionDelay: `${i * 40}ms` }}
             >
               <div
                 className="relative h-32 overflow-hidden"
-                style={{ background: `linear-gradient(135deg, ${p.accent}22, transparent 70%), #eef4f3` }}
+                style={{
+                  background: `linear-gradient(135deg, ${p.accent}22, transparent 70%), #eef4f3`,
+                }}
               >
                 <div className="blueprint absolute inset-0 opacity-60" />
-                <span className="mono absolute left-4 top-4 text-[10px] uppercase tracking-widest" style={{ color: p.accent }}>
+                <span
+                  className="mono absolute left-4 top-4 text-[10px] uppercase tracking-widest"
+                  style={{ color: p.accent }}
+                >
                   {p.tags[0]}
                 </span>
               </div>
@@ -94,7 +112,9 @@ export function BlogListPage() {
                 <h3 className="display text-base font-semibold leading-snug transition group-hover:text-[var(--amber-soft)]">
                   {p.title}
                 </h3>
-                <p className="mt-2 line-clamp-2 flex-1 text-sm text-[var(--ink-dim)]">{p.excerpt}</p>
+                <p className="mt-2 line-clamp-2 flex-1 text-sm text-[var(--ink-dim)]">
+                  {p.excerpt}
+                </p>
                 <p className="mono mt-4 text-[11px] text-[var(--ink-faint)]">
                   {fmtDate(p.date)} · {p.readMins} min read
                 </p>

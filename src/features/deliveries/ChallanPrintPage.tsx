@@ -1,4 +1,4 @@
-import { useParams, useNavigate } from 'react-router-dom'
+import { useParams, useNavigate } from '@tanstack/react-router'
 import { ArrowLeft, Download, Printer } from 'lucide-react'
 import { fmtDate, qty } from '@/lib/format'
 import { Badge } from '@/components/ui/primitives'
@@ -10,7 +10,7 @@ import { useSettings } from '@/features/settings/hooks/useSettings'
 import { DEFAULT_SETTINGS } from '@/data/seed'
 
 export function ChallanPrintPage() {
-  const { id } = useParams()
+  const { id } = useParams({ strict: false })
   const navigate = useNavigate()
   const { data: challans = [] } = useChallans()
   const dc = challans.find((d) => d.id === id)
@@ -22,7 +22,10 @@ export function ChallanPrintPage() {
     return (
       <div className="py-16 text-center text-slate-500">
         Delivery challan not found.{' '}
-        <button className="text-brand-600 underline" onClick={() => navigate('/app/deliveries')}>
+        <button
+          className="text-brand-600 underline"
+          onClick={() => navigate({ to: '/app/deliveries' })}
+        >
           Back to challans
         </button>
       </div>
@@ -32,7 +35,7 @@ export function ChallanPrintPage() {
   return (
     <div>
       <div className="no-print mb-4 flex items-center justify-between">
-        <button className="btn-secondary" onClick={() => navigate('/app/deliveries')}>
+        <button className="btn-secondary" onClick={() => navigate({ to: '/app/deliveries' })}>
           <ArrowLeft size={16} /> Back
         </button>
         <div className="flex gap-2">

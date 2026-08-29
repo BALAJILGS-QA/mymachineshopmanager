@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate } from '@tanstack/react-router'
 import {
   Ban,
   Clock,
@@ -369,7 +369,9 @@ export function InvoicesPage() {
                       <button
                         className="btn-ghost btn-sm"
                         title="Print"
-                        onClick={() => navigate(`/app/invoices/${inv.id}/print`)}
+                        onClick={() =>
+                          navigate({ to: '/app/invoices/$id/print', params: { id: inv.id } })
+                        }
                       >
                         <Printer size={15} />
                       </button>

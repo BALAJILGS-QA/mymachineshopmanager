@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, type LinkProps } from '@tanstack/react-router'
 import {
   AlertTriangle,
   ArrowRight,
@@ -512,7 +512,7 @@ function Kpi({
   label: string
   value: string
   tone: string
-  to: string
+  to: LinkProps['to']
 }) {
   return (
     <Link
@@ -559,7 +559,15 @@ function ChartCard({
   )
 }
 
-function ListHeader({ title, to, icon }: { title: string; to: string; icon?: React.ReactNode }) {
+function ListHeader({
+  title,
+  to,
+  icon,
+}: {
+  title: string
+  to: LinkProps['to']
+  icon?: React.ReactNode
+}) {
   return (
     <div className="flex items-center justify-between">
       <h3 className="flex items-center gap-1.5 text-sm font-semibold text-slate-800">

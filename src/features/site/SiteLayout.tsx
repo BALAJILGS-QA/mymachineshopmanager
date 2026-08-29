@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react'
-import { Link } from 'react-router-dom'
+import { Link } from '@tanstack/react-router'
 import { Menu, X, ArrowUpRight } from 'lucide-react'
 import { clsx } from 'clsx'
 import { Logo } from '@/components/ui/Logo'
@@ -48,7 +48,11 @@ export function SiteLayout({
           <Wordmark />
           <nav className="hidden items-center gap-7 md:flex">
             {NAV.map((n) => (
-              <Link key={n.to} to={n.to} className="text-sm font-medium text-[var(--ink-dim)] transition hover:text-[var(--ink)]">
+              <Link
+                key={n.to}
+                to={n.to}
+                className="text-sm font-medium text-[var(--ink-dim)] transition hover:text-[var(--ink)]"
+              >
                 {n.label}
               </Link>
             ))}
@@ -77,7 +81,11 @@ export function SiteLayout({
           <div className="absolute right-0 top-0 flex h-full w-72 flex-col gap-1 border-l border-[var(--line)] bg-white p-5 shadow-xl">
             <div className="mb-4 flex items-center justify-between">
               <Wordmark />
-              <button onClick={() => setOpen(false)} aria-label="Close" className="p-1 text-[var(--ink-dim)]">
+              <button
+                onClick={() => setOpen(false)}
+                aria-label="Close"
+                className="p-1 text-[var(--ink-dim)]"
+              >
                 <X size={22} />
               </button>
             </div>
@@ -92,10 +100,18 @@ export function SiteLayout({
               </Link>
             ))}
             <div className="mt-4 flex flex-col gap-2">
-              <a href="/#access" className="site-btn site-btn-ghost justify-center" onClick={() => setOpen(false)}>
+              <a
+                href="/#access"
+                className="site-btn site-btn-ghost justify-center"
+                onClick={() => setOpen(false)}
+              >
                 Sign In
               </a>
-              <a href="/#access" className="site-btn site-btn-primary justify-center" onClick={() => setOpen(false)}>
+              <a
+                href="/#access"
+                className="site-btn site-btn-primary justify-center"
+                onClick={() => setOpen(false)}
+              >
                 Sign Up
               </a>
             </div>
@@ -125,21 +141,39 @@ function Footer() {
         <div>
           <p className="kicker mb-3">Company</p>
           <ul className="space-y-2 text-sm text-[var(--ink-dim)]">
-            <li><Link to="/blog" className="hover:text-[var(--ink)]">Blog</Link></li>
-            <li><a href="/#access" className="hover:text-[var(--ink)]">Client Portal</a></li>
+            <li>
+              <Link to="/blog" className="hover:text-[var(--ink)]">
+                Blog
+              </Link>
+            </li>
+            <li>
+              <a href="/#access" className="hover:text-[var(--ink)]">
+                Client Portal
+              </a>
+            </li>
           </ul>
         </div>
         <div>
           <p className="kicker mb-3">Access</p>
           <ul className="space-y-2 text-sm text-[var(--ink-dim)]">
-            <li><a href="/#access" className="hover:text-[var(--ink)]">Sign In</a></li>
-            <li><a href="/#access" className="hover:text-[var(--ink)]">Sign Up</a></li>
+            <li>
+              <a href="/#access" className="hover:text-[var(--ink)]">
+                Sign In
+              </a>
+            </li>
+            <li>
+              <a href="/#access" className="hover:text-[var(--ink)]">
+                Sign Up
+              </a>
+            </li>
           </ul>
         </div>
       </div>
       <div className="border-t border-[var(--line)]">
         <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-2 px-5 py-5 text-xs text-[var(--ink-faint)] sm:flex-row">
-          <p>© {year} {BRAND.product}. All rights reserved.</p>
+          <p>
+            © {year} {BRAND.product}. All rights reserved.
+          </p>
           <p className="mono">PRECISION · REPEATABILITY · TRACEABILITY</p>
         </div>
       </div>

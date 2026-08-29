@@ -1,6 +1,11 @@
 node_modules
 dist
 dist-ssr
+# TanStack Start / Nitro build output
+.output
+.nitro
+.tanstack
+.tanstack-start
 *.local
 .env
 .env.*

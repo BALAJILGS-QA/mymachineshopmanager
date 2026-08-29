@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { Navigate } from 'react-router-dom'
+import { Navigate } from '@tanstack/react-router'
 import { Check, ShieldCheck, UserCheck, X } from 'lucide-react'
 import type { AppUser, UserStatus } from '@/types'
 import { useUsers, useApproveUser, useRejectUser } from './hooks/useUsers'

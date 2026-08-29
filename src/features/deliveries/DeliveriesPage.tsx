@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from '@tanstack/react-router'
 import { clsx } from 'clsx'
 import {
   Ban,
@@ -318,7 +318,8 @@ export function DeliveriesPage() {
                         <div className="flex flex-col gap-0.5">
                           <Badge tone="green">Invoiced</Badge>
                           <Link
-                            to={`/app/invoices/${inv!.id}/print`}
+                            to="/app/invoices/$id/print"
+                            params={{ id: inv!.id }}
                             className="font-mono text-2xs font-semibold text-brand-700 hover:underline"
                             title="View invoice for this challan"
                           >
@@ -336,7 +337,9 @@ export function DeliveriesPage() {
                         <button
                           className="btn-ghost btn-sm"
                           title="View / Print"
-                          onClick={() => navigate(`/app/deliveries/${d.id}/print`)}
+                          onClick={() =>
+                            navigate({ to: '/app/deliveries/$id/print', params: { id: d.id } })
+                          }
                         >
                           <Printer size={15} />
                         </button>

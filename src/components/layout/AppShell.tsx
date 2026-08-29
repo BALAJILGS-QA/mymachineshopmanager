@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react'
-import { NavLink, useLocation } from 'react-router-dom'
+import { Link, useLocation } from '@tanstack/react-router'
 import { LogOut, Menu, MoreHorizontal, X } from 'lucide-react'
-import { clsx } from 'clsx'
 import { NAV_ITEMS, MOBILE_PRIMARY, type NavItem } from './nav'
 import { useAuth } from '@/features/auth/auth'
 import { useSettings } from '@/features/settings/hooks/useSettings'
@@ -22,19 +21,16 @@ function SidebarLinks({
   return (
     <nav className="flex-1 space-y-0.5 overflow-y-auto px-2 py-3">
       {items.map((item) => (
-        <NavLink
+        <Link
           key={item.to}
           to={item.to}
-          end={item.to === '/app'}
+          activeOptions={{ exact: item.to === '/app' }}
           onClick={onNavigate}
-          className={({ isActive }) =>
-            clsx(
-              'flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition',
-              isActive
-                ? 'bg-brand-gradient text-white shadow-sm shadow-brand-700/30'
-                : 'text-slate-700 hover:bg-brand-50 hover:text-brand-800',
-            )
-          }
+          className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition"
+          activeProps={{
+            className: 'bg-brand-gradient text-white shadow-sm shadow-brand-700/30',
+          }}
+          inactiveProps={{ className: 'text-slate-700 hover:bg-brand-50 hover:text-brand-800' }}
         >
           <item.icon size={18} />
           <span className="flex-1">{item.label}</span>
@@ -43,7 +39,7 @@ function SidebarLinks({
               {pendingCount}
             </span>
           )}
-        </NavLink>
+        </Link>
       ))}
     </nav>
   )
@@ -84,7 +80,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   const currentLabel =
     navItems.find((n) =>
-      n.to === '/app' ? location.pathname === '/app' : location.pathname.startsWith(n.to),
+      n.to === '/app' ? location.pathname === '/app' : location.pathname.startsWith(n.to ?? ''),
     )?.label ?? 'Portal'
 
   // Apply the configured shop profile as global SEO/title on every route, so a
@@ -174,21 +170,18 @@ export function AppShell({ children }: { children: ReactNode }) {
 
       {/* Mobile bottom navigation */}
       <nav className="fixed inset-x-0 bottom-0 z-20 flex items-stretch border-t border-slate-300 bg-white lg:hidden">
-        {NAV_ITEMS.filter((n) => MOBILE_PRIMARY.includes(n.to)).map((item) => (
-          <NavLink
+        {NAV_ITEMS.filter((n) => MOBILE_PRIMARY.includes(n.to ?? '')).map((item) => (
+          <Link
             key={item.to}
             to={item.to}
-            end={item.to === '/app'}
-            className={({ isActive }) =>
-              clsx(
-                'flex flex-1 flex-col items-center gap-0.5 py-2 text-2xs font-medium',
-                isActive ? 'text-brand-700' : 'text-slate-600',
-              )
-            }
+            activeOptions={{ exact: item.to === '/app' }}
+            className="flex flex-1 flex-col items-center gap-0.5 py-2 text-2xs font-medium"
+            activeProps={{ className: 'text-brand-700' }}
+            inactiveProps={{ className: 'text-slate-600' }}
           >
             <item.icon size={20} />
             {item.short}
-          </NavLink>
+          </Link>
         ))}
         <button
           onClick={() => setMoreOpen(true)}
@@ -207,9 +200,9 @@ export function AppShell({ children }: { children: ReactNode }) {
             <div className="mx-auto mb-2 h-1 w-10 rounded-full bg-slate-200" />
             <div className="grid grid-cols-3 gap-2">
               {navItems
-                .filter((n) => !MOBILE_PRIMARY.includes(n.to))
+                .filter((n) => !MOBILE_PRIMARY.includes(n.to ?? ''))
                 .map((item) => (
-                  <NavLink
+                  <Link
                     key={item.to}
                     to={item.to}
                     onClick={() => setMoreOpen(false)}
@@ -217,7 +210,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                   >
                     <item.icon size={20} />
                     {item.short}
-                  </NavLink>
+                  </Link>
                 ))}
             </div>
           </div>

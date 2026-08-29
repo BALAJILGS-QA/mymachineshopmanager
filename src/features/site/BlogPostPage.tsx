@@ -1,4 +1,4 @@
-import { Link, useParams, Navigate } from 'react-router-dom'
+import { Link, useParams, Navigate } from '@tanstack/react-router'
 import { ArrowLeft, ArrowUpRight } from 'lucide-react'
 import { SiteLayout } from './SiteLayout'
 import { useReveal } from './useReveal'
@@ -44,7 +44,7 @@ function renderBlock(b: Block, i: number) {
 }
 
 export function BlogPostPage() {
-  const { slug } = useParams()
+  const { slug } = useParams({ strict: false })
   const post = slug ? getPost(slug) : undefined
   useReveal([slug])
 
@@ -52,7 +52,9 @@ export function BlogPostPage() {
     path: `/blog/${slug ?? ''}`,
     title: post?.title ?? 'Article',
     description: post?.excerpt ?? '',
-    keywords: post ? `${post.tags.join(', ')}, CNC, machine shop, Machine Shop Management` : undefined,
+    keywords: post
+      ? `${post.tags.join(', ')}, CNC, machine shop, Machine Shop Management`
+      : undefined,
     type: 'article',
     noindex: !post,
     jsonLd: post
@@ -78,19 +80,27 @@ export function BlogPostPage() {
   return (
     <SiteLayout>
       <article className="mx-auto max-w-3xl px-5 py-14 md:py-20">
-        <Link to="/blog" className="mono inline-flex items-center gap-1.5 text-sm text-[var(--ink-dim)] hover:text-[var(--amber-soft)]">
+        <Link
+          to="/blog"
+          className="mono inline-flex items-center gap-1.5 text-sm text-[var(--ink-dim)] hover:text-[var(--amber-soft)]"
+        >
           <ArrowLeft size={15} /> All articles
         </Link>
 
         <div className="mt-6 flex flex-wrap gap-2">
           {post.tags.map((t) => (
-            <span key={t} className="mono rounded-full border border-[var(--line)] px-3 py-1 text-[11px] uppercase tracking-wider text-[var(--ink-dim)]">
+            <span
+              key={t}
+              className="mono rounded-full border border-[var(--line)] px-3 py-1 text-[11px] uppercase tracking-wider text-[var(--ink-dim)]"
+            >
               {t}
             </span>
           ))}
         </div>
 
-        <h1 className="display rise d1 mt-4 text-3xl font-bold leading-tight sm:text-4xl">{post.title}</h1>
+        <h1 className="display rise d1 mt-4 text-3xl font-bold leading-tight sm:text-4xl">
+          {post.title}
+        </h1>
         <p className="mono mt-4 text-xs text-[var(--ink-faint)]">
           {post.author} · {fmtDate(post.date)} · {post.readMins} min read
         </p>
@@ -120,10 +130,14 @@ export function BlogPostPage() {
             {more.map((p) => (
               <Link
                 key={p.slug}
-                to={`/blog/${p.slug}`}
+                to="/blog/$slug"
+                params={{ slug: p.slug }}
                 className="group rounded-2xl border border-[var(--line)] bg-[var(--surface)] p-5 transition hover:border-[var(--amber)]/50"
               >
-                <span className="mono text-[10px] uppercase tracking-widest" style={{ color: p.accent }}>
+                <span
+                  className="mono text-[10px] uppercase tracking-widest"
+                  style={{ color: p.accent }}
+                >
                   {p.tags[0]}
                 </span>
                 <h3 className="display mt-2 font-semibold leading-snug transition group-hover:text-[var(--amber-soft)]">

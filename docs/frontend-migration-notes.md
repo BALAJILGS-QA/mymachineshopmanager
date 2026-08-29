@@ -33,9 +33,76 @@ Chronological record of decisions, commands, checkpoints, and issues. Newest at 
 
 ### Open questions / to verify
 
-- Exact TanStack Start + Router versions compatible with React 18.3 (verify via context7
-  before adding deps).
-- Netlify SSR target vs. keeping a static client build with Router in SPA mode.
+- ~~Exact TanStack Start + Router versions compatible with React 18.3~~ **RESOLVED
+  (2026-08-29):** `@tanstack/react-start@1.168.49` peers = **Vite `>=7`**, React
+  `>=18` (18.3.1 OK — no React upgrade), `@tanstack/react-router@1.170.32` React `>=18`.
+  **Implication:** adopting Start forces **Vite 5.4 → 7** and transitively **Vitest 2 → 3**
+  (Vite 7 peer). These are major-version build-tool upgrades beyond the literal
+  framework swap.
+- Hosting fork: TanStack Start default output is an **SSR/Nitro Node server**
+  (`.output/server/index.mjs`), not a static bundle → changes Netlify from static-SPA
+  to an SSR function/server deploy. Alternative: TanStack Start **SPA mode**
+  (`tanstackStart({ spa: { enabled: true } })`) or global `defaultSsr:false` keeps a
+  static client build (lower risk, but forgoes public-page SSR/SEO).
+- Selective SSR confirmed available: per-route `ssr:false` (client-only) for `/app/*`;
+  `ssr:true`/default for public pages. `createStart({ defaultSsr })` for global default.
+
+### CHECKPOINT — user decisions confirmed (2026-08-29)
+
+1. ✅ **Upgrade Vite 5→7 + Vitest 2→3** and use the latest TanStack Start.
+2. ✅ **Full SSR**: SSR public marketing/blog pages; `/app/*` portal client-only
+   (`ssr:false`). Deploy as SSR server; carry over Netlify security headers.
+3. ✅ **Proceed autonomously** through Phases 2–6, committing per module.
+
+## 2026-08-29 — Phases 2–5 complete (infra + routing + port)
+
+Dependencies (clean install; Vite 7 matrix): **vite 7.3.6, @tanstack/react-start
+1.168.49, @tanstack/react-router 1.170.32, vitest 3.2.7**, @vitest/coverage-v8 3.2.7,
+@vitejs/plugin-react 4.7.0 (supports Vite 7). `react-router-dom` still present until
+its removal is confirmed unused (see below). Devtools/router-plugin NOT added
+(route generation handled by the `tanstackStart()` vite plugin).
+
+Infrastructure:
+
+- `vite.config.ts` → `tanstackStart()` + `viteReact()`, `@`→`src` alias preserved.
+- `package.json` scripts → `dev: vite dev`, `build: vite build`, `start: node
+.output/server/index.mjs`, `preview`, `typecheck`.
+- `src/router.tsx` — `getRouter()` creates a per-request QueryClient in router context.
+- `src/routes/__root.tsx` — document (`HeadContent`/`Scripts`), SEO head ported from
+  the old `index.html`, providers (QueryClient→Auth→Toast→Confirm), client-only
+  `ensureDb()` for local-mode fallback.
+- Removed old entry points `index.html`, `src/main.tsx`, `src/App.tsx` (replaced;
+  recoverable via git on this branch).
+
+Routing (all URLs preserved): public `routes/index.tsx` (SSR), `blog/index.tsx`,
+`blog/$slug.tsx`, `login.tsx`+`signup.tsx` (307 → `/`); portal `app/route.tsx`
+(`ssr:false` gate + AppShell) with index + 12 child routes incl.
+`deliveries/$id.print.tsx`, `invoices/$id.print.tsx`.
+
+Ported 13 files off `react-router-dom` → `@tanstack/react-router`:
+
+- Link import swaps (SiteLayout, BlogList, DashboardPage, DeliveriesPage).
+- `NavLink` → `Link` + `activeProps`/`inactiveProps`/`activeOptions` (AppShell, ×3).
+- `useNavigate` → `navigate({ to, params })` (AuthForm, print pages, Invoices,
+  Deliveries). `useParams()` → `useParams({ strict:false })` (print pages, BlogPost).
+  `Navigate`/`useLocation` re-imported from TanStack. Dynamic links use
+  `to="/x/$id" params={{id}}`. `NavItem.to`/Kpi/ListHeader typed `LinkProps['to']`.
+
+Dropped the old `App.tsx` Portal store-hydration gate (`hydrateFromRemote` +
+`setSyncErrorHandler`): pages read Supabase via TanStack Query; the local store is
+unused for reads, so there is nothing to hydrate. This removed the biggest SSR risk.
+
+Validation at this checkpoint — **all green**:
+
+- `tsc --noEmit` ✓ · `eslint .` ✓ (0 errors, 8 pre-existing warnings) ·
+  `vitest run` 17/17 ✓ · `vite build` (SSR) ✓ (dist/client + dist/server).
+- Dev server (Vite 7) runs; SSR verified via curl (landing + blog server-rendered),
+  `/login` → 307 `/`, `/app` serves client shell. Browser: landing + blog render
+  identically, client nav works, `useSeo` title updates, **no hydration/console errors**.
+
+Remaining (Phase 6): Playwright e2e (update config for Start server), full feature
+parity walkthrough (authenticated portal), then confirm/remove `react-router-dom`
+and any now-dead legacy `data/*` modules; update netlify/hosting for SSR.
 
 ### Next
 

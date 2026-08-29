@@ -1,6 +1,6 @@
 import { cloneElement, isValidElement, useEffect, useId, useState } from 'react'
 import type { ReactElement } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate } from '@tanstack/react-router'
 import {
   ArrowRight,
   Building2,
@@ -48,7 +48,7 @@ export function AuthForm() {
   const idLabel = supabaseMode ? 'Email' : 'Username or Email'
 
   useEffect(() => {
-    if (session) navigate('/app')
+    if (session) navigate({ to: '/app' })
   }, [session, navigate])
 
   function switchMode(m: Mode) {
@@ -102,7 +102,7 @@ export function AuthForm() {
         <Logo size={48} className="mx-auto mb-3 rounded-[28%] shadow-sm" />
         <p className="text-sm text-slate-500">Signed in as</p>
         <p className="font-semibold text-slate-800">{session.username}</p>
-        <button className="btn-primary mt-4 w-full py-2.5" onClick={() => navigate('/app')}>
+        <button className="btn-primary mt-4 w-full py-2.5" onClick={() => navigate({ to: '/app' })}>
           Enter Portal <ArrowRight size={16} />
         </button>
       </div>
