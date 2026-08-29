@@ -8,7 +8,11 @@ import { sb, selectAll, updateRow, deleteRow } from '@/lib/api/supabaseCrud'
 import { nextNumberedDoc } from '@/lib/api/numbering'
 import type { DeliveryChallan, DcStatus } from '@/types'
 
-export type DcCreateInput = Omit<DeliveryChallan, 'id' | 'dcNo' | 'createdAt' | 'updatedAt'>
+// `dcNo` is optional: when a caller supplies one (manual entry) it is used as-is;
+// otherwise the next sequential number is minted from the server counter.
+export type DcCreateInput = Omit<DeliveryChallan, 'id' | 'dcNo' | 'createdAt' | 'updatedAt'> & {
+  dcNo?: string
+}
 export type DcUpdateInput = Partial<DeliveryChallan>
 
 export async function listChallans(): Promise<DeliveryChallan[]> {
@@ -19,9 +23,11 @@ export async function listChallans(): Promise<DeliveryChallan[]> {
 // server RPC. Each line must carry materialId + ownerType; the RPC validates
 // stock, locks per material, and rolls back everything on any shortfall.
 export async function createChallan(input: DcCreateInput): Promise<DeliveryChallan> {
+  // Manual number wins when provided; otherwise mint the next sequential one.
+  const dcNo = input.dcNo?.trim() || (await nextNumberedDoc('dc'))
   const { data, error } = await sb().rpc('create_challan_with_dispatch', {
     p_id: uid('dc_'),
-    p_dc_no: await nextNumberedDoc('dc'),
+    p_dc_no: dcNo,
     p_date: input.date,
     p_company_id: input.companyId,
     p_job_id: input.jobId ?? null,

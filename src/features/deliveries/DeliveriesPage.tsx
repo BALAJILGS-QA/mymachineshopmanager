@@ -454,6 +454,7 @@ function DcForm({ dc, onClose }: { dc: DeliveryChallan | null; onClose: () => vo
   const { data: jobs = [] } = useJobs()
   const { data: allMaterials = [] } = useMaterials()
   const materials = allMaterials.filter((m) => m.active)
+  const { data: existingChallans = [] } = useChallans()
   const dcNoPreview = usePreviewNo('dc')
   const isEdit = !!dc // existing challan already dispatched -> lines are locked
 
@@ -463,6 +464,10 @@ function DcForm({ dc, onClose }: { dc: DeliveryChallan | null; onClose: () => vo
   const [reference, setReference] = useState(dc?.reference ?? '')
   const [vehicleNo, setVehicleNo] = useState(dc?.vehicleNo ?? '')
   const [notes, setNotes] = useState(dc?.notes ?? '')
+  // Challan number: auto (server sequential counter) by default, or a manual
+  // override the user types in. Auto mode never consumes the counter early.
+  const [autoNumber, setAutoNumber] = useState(true)
+  const [manualDcNo, setManualDcNo] = useState('')
   const emptyLine = (): DcLine => ({
     id: uid('dl_'),
     materialId: '',
@@ -512,7 +517,23 @@ function DcForm({ dc, onClose }: { dc: DeliveryChallan | null; onClose: () => vo
         toast.error('Add at least one item with a material and quantity')
         return
       }
+      // Resolve the challan number: undefined => server mints the next sequential
+      // one; a trimmed manual value is validated for presence + uniqueness here
+      // (the DB unique constraint is the final guard).
+      let dcNo: string | undefined
+      if (!autoNumber) {
+        dcNo = manualDcNo.trim()
+        if (!dcNo) {
+          toast.error('Enter a challan number, or switch to Auto')
+          return
+        }
+        if (existingChallans.some((c) => c.dcNo.toLowerCase() === dcNo!.toLowerCase())) {
+          toast.error(`Challan number "${dcNo}" already exists`)
+          return
+        }
+      }
       await createChallan.mutateAsync({
+        dcNo,
         date,
         companyId,
         jobId: jobId || undefined,
@@ -556,8 +577,7 @@ function DcForm({ dc, onClose }: { dc: DeliveryChallan | null; onClose: () => vo
     >
       {!dc ? (
         <p className="mb-3 rounded-lg bg-brand-50 px-3 py-2 text-xs text-brand-700">
-          Challan number will be <b>{dcNoPreview}</b> — creating this challan dispatches the items
-          and reduces stock.
+          Creating this challan dispatches the items and reduces stock.
         </p>
       ) : (
         <p className="mb-3 rounded-lg bg-slate-100 px-3 py-2 text-xs text-slate-600">
@@ -566,6 +586,52 @@ function DcForm({ dc, onClose }: { dc: DeliveryChallan | null; onClose: () => vo
         </p>
       )}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        {isEdit ? (
+          <Field label="Challan No." required>
+            <Input value={dc.dcNo} disabled />
+          </Field>
+        ) : (
+          <div>
+            {/* Manual label (the composite input+toggle can't use <Field>'s
+                single-child label association). */}
+            <label className="label" htmlFor="dc-no-input">
+              Challan No.<span className="text-red-500"> *</span>
+            </label>
+            <div className="flex items-stretch gap-2">
+              <Input
+                id="dc-no-input"
+                value={autoNumber ? (dcNoPreview === '…' ? 'Auto…' : dcNoPreview) : manualDcNo}
+                onChange={(e) => setManualDcNo(e.target.value)}
+                disabled={autoNumber}
+                placeholder="Enter challan no."
+                title={
+                  autoNumber ? 'Next sequential number (auto)' : 'Type a custom challan number'
+                }
+              />
+              <button
+                type="button"
+                className="btn-secondary btn-sm whitespace-nowrap"
+                title={
+                  autoNumber ? 'Switch to manual entry' : 'Use the automatic sequential number'
+                }
+                onClick={() => {
+                  if (autoNumber) {
+                    // Going manual: prefill with the previewed next number as a start.
+                    setManualDcNo(dcNoPreview === '…' ? '' : dcNoPreview)
+                    setAutoNumber(false)
+                  } else {
+                    setAutoNumber(true)
+                  }
+                }}
+              >
+                {autoNumber ? 'Manual' : 'Auto'}
+              </button>
+            </div>
+            <p className="mt-1 text-2xs text-slate-500">
+              {autoNumber ? 'Automatic sequential number.' : 'Manual number.'}
+            </p>
+          </div>
+        )}
         <Field label="Company" required>
           <Select
             value={companyId}
