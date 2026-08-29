@@ -18,7 +18,10 @@ export default defineConfig({
     },
   },
   plugins: [
-    tanstackStart(),
+    // Default build is full SSR (public pages server-rendered) for a Node host.
+    // `SPA=1 npm run build` emits a static SPA shell (dist/client/_shell.html)
+    // for static hosts like Vercel where the SSR handler can't be served as-is.
+    tanstackStart(process.env.SPA ? { spa: { enabled: true } } : {}),
     // React's plugin must come AFTER Start's plugin.
     viteReact(),
   ],
