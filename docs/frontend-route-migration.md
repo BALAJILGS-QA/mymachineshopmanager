@@ -4,10 +4,10 @@ Old (`react-router-dom` in `src/App.tsx`) → New (TanStack Router file routes u
 `src/routes/`). **No route silently disappeared.** `Status` = code migrated (all ✅);
 `Tested` = verified in Phase 6.
 
-Legend: ✅ done · ⚠️ built+typechecked, direct click pending · — n/a
+Legend: ✅ done · — n/a
 
-Tested how: **e2e** = Playwright (`site.spec`/`supabase.spec`), **probe** = curl against
-the SSR preview build, **build** = compiled + typechecked + route-tree generated.
+Tested how: **e2e** = Playwright (`site.spec`/`supabase.spec`/`portal-nav.spec`),
+**probe** = curl against the SSR preview build.
 
 ## Public (SSR)
 
@@ -31,24 +31,26 @@ step was dropped — pages read Supabase via TanStack Query).
 | Old Route                   | New Route (file)                          | Status | Tested                 |
 | --------------------------- | ----------------------------------------- | ------ | ---------------------- |
 | `/app` (index)              | `routes/app/index.tsx` → DashboardPage    | ✅     | ✅ e2e (login→shell)   |
-| `/app/jobs`                 | `routes/app/jobs.tsx`                     | ✅     | ⚠️ build               |
-| `/app/production`           | `routes/app/production.tsx`               | ✅     | ⚠️ build               |
-| `/app/materials`            | `routes/app/materials.tsx`                | ✅     | ⚠️ build               |
-| `/app/deliveries`           | `routes/app/deliveries/index.tsx`         | ✅     | ⚠️ build               |
+| `/app/jobs`                 | `routes/app/jobs.tsx`                     | ✅     | ✅ e2e nav             |
+| `/app/production`           | `routes/app/production.tsx`               | ✅     | ✅ e2e nav             |
+| `/app/materials`            | `routes/app/materials.tsx`                | ✅     | ✅ e2e nav             |
+| `/app/deliveries`           | `routes/app/deliveries/index.tsx`         | ✅     | ✅ e2e nav             |
 | `/app/deliveries/:id/print` | `routes/app/deliveries/$id.print.tsx`     | ✅     | ✅ probe (200 shell)   |
-| `/app/invoices`             | `routes/app/invoices/index.tsx`           | ✅     | ⚠️ build               |
+| `/app/invoices`             | `routes/app/invoices/index.tsx`           | ✅     | ✅ e2e nav             |
 | `/app/invoices/:id/print`   | `routes/app/invoices/$id.print.tsx`       | ✅     | ✅ probe (200 shell)   |
-| `/app/payments`             | `routes/app/payments.tsx`                 | ✅     | ⚠️ build               |
-| `/app/expenses`             | `routes/app/expenses.tsx`                 | ✅     | ⚠️ build               |
-| `/app/reports`              | `routes/app/reports.tsx`                  | ✅     | ⚠️ build               |
+| `/app/payments`             | `routes/app/payments.tsx`                 | ✅     | ✅ e2e nav             |
+| `/app/expenses`             | `routes/app/expenses.tsx`                 | ✅     | ✅ e2e nav             |
+| `/app/reports`              | `routes/app/reports.tsx`                  | ✅     | ✅ e2e nav             |
 | `/app/companies`            | `routes/app/companies.tsx`                | ✅     | ✅ e2e (create/delete) |
-| `/app/approvals`            | `routes/app/approvals.tsx` (SuperAdmin)   | ✅     | ⚠️ build               |
-| `/app/settings`             | `routes/app/settings.tsx`                 | ✅     | ⚠️ build               |
+| `/app/approvals`            | `routes/app/approvals.tsx` (SuperAdmin)   | ✅     | ✅ e2e nav             |
+| `/app/settings`             | `routes/app/settings.tsx`                 | ✅     | ✅ e2e nav             |
 | `/app/*` (unknown)          | app `notFoundComponent` → `Navigate /app` | ✅     | ✅ probe               |
 
-⚠️ **build** rows compile, typecheck, and generate into the route tree, and are thin
-wrappers around unchanged feature pages behind the same (e2e-verified) auth gate — a
-manual click-through of each is the last recommended sign-off before production.
+All portal routes are exercised by `e2e/portal-nav.spec.ts` (super-admin login →
+navigate each sidebar route → assert `<h1>` + shell survive) plus a direct deep-link;
+Companies additionally does a full create/delete Supabase round-trip (`supabase.spec`).
+Deeper per-page CRUD/print/export click-throughs remain a nice-to-have but are not
+required for the migration (feature pages are byte-for-byte unchanged).
 
 ## Param-name mapping
 

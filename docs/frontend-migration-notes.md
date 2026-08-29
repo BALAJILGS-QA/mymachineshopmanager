@@ -139,8 +139,34 @@ Wire the production SSR host: add the TanStack Start Netlify (or Vercel/Node) ad
 and update `netlify.toml` (drop the `/*→/index.html` SPA fallback; keep the security
 headers). Left un-guessed because the 1.168 preset API didn't match the docs on hand.
 
-### Next
+## 2026-08-29 — Phase 6 (cont.): full e2e green
 
-- Phase 2: scaffold TanStack Start infra alongside the working Vite app (non-breaking),
-  then migrate root/providers (Phase 3), routes (Phase 4), port usages (Phase 5),
-  validate + cleanup (Phase 6).
+Added `e2e/portal-nav.spec.ts` (logs in as super admin, visits **all 12** `/app`
+routes via the sidebar asserting each renders an `<h1>` + the shell survives, plus a
+direct deep-link). Nav links are matched by `href` (labels can carry a badge, e.g. the
+Approvals item shows "User Approvals 1" when a registration is pending).
+
+**Debugging a false failure — stale preview server (important):** after several rebuilds,
+login e2e began failing — the form did a _native GET submit_ (creds landed in the URL)
+because the page never hydrated: every `/assets/*.js` chunk 404'd. Root cause: a
+**leftover `vite preview` process from an earlier build was still bound to :4173**, and
+git-bash `pkill` does not kill Windows `node.exe`, so Playwright's `reuseExistingServer`
+kept reusing the stale server whose HTML referenced asset hashes no longer on disk. Fix:
+kill by port via PowerShell (`Get-NetTCPConnection -LocalPort 4173 | Stop-Process`). Not
+a migration bug. **Lesson: on Windows, free the e2e port via PowerShell between manual
+preview runs**, or set `reuseExistingServer:false`.
+
+Fixed 3 **stale assertions** in the pre-existing `site.spec` landing test (it was fully
+RED on `main` — predates a site-copy + brand rename): title `Sree Balaji Industries`→
+`Machine Shop Management`, hero `tolerance`→`traceability`, desc `CNC`→`machine shop`,
+keywords `machining`→`CNC` — aligned to the actual (migration-unchanged) `BRAND.*` copy.
+
+**Final e2e (Playwright): ALL GREEN.**
+
+- chromium: `site.spec` 3/3, `supabase.spec` 1/1 (auth round-trip), `portal-nav.spec`
+  2/2 (all 12 routes + deep-link) = **6/6**.
+- mobile (Pixel 7): `site.spec` 3/3; portal/auth specs correctly skip (desktop-only).
+- `dashboard.spec`/`smoke.spec` still excluded (seed-data + local-mode; unrelated).
+
+Every portal route now has direct e2e evidence — the ⚠️ rows in route-migration /
+feature-parity are upgraded to ✅.

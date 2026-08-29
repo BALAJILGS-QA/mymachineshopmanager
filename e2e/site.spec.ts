@@ -4,16 +4,22 @@ import { test, expect } from '@playwright/test'
 
 test('landing page renders with merged auth and SEO metadata', async ({ page }) => {
   await page.goto('/')
-  await expect(page).toHaveTitle(/Sree Balaji Industries/)
-  await expect(page.getByRole('heading', { level: 1 })).toContainText(/tolerance/i)
+  // Landing title comes from BRAND.product (currently "Machine Shop Management").
+  // (Assertion updated from the stale "Sree Balaji Industries" brand name.)
+  await expect(page).toHaveTitle(/Machine Shop Management/)
+  await expect(page.getByRole('heading', { level: 1 })).toContainText(/traceability/i)
   // Login is merged into the landing: the auth card and toggle are present.
   await expect(page.getByRole('button', { name: 'Sign in', exact: true })).toBeVisible()
   await expect(page.getByRole('button', { name: 'Sign Up', exact: true })).toBeVisible()
 
   const desc = page.locator('meta[name="description"]')
-  await expect(desc).toHaveAttribute('content', /CNC/)
-  await expect(page.locator('meta[name="keywords"]')).toHaveAttribute('content', /machining/i)
-  await expect(page.locator('link[rel="canonical"]')).toHaveAttribute('href', /sreebalajiindustries/)
+  // Assertions aligned to current BRAND copy (was stale "CNC"/"machining").
+  await expect(desc).toHaveAttribute('content', /machine shop/i)
+  await expect(page.locator('meta[name="keywords"]')).toHaveAttribute('content', /CNC/i)
+  await expect(page.locator('link[rel="canonical"]')).toHaveAttribute(
+    'href',
+    /sreebalajiindustries/,
+  )
   await expect(page.locator('meta[property="og:title"]')).toHaveCount(1)
   await expect(page.locator('script#route-jsonld')).toHaveCount(1)
 })

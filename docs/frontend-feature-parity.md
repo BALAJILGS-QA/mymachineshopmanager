@@ -3,7 +3,13 @@
 Post-migration status. **Migrated** = code carried onto TanStack Start (all feature
 pages/forms/components are unchanged; only routing + shell moved). **Tested** in Phase 6.
 
-Legend: ✅ done · ⚠️ needs manual click-through (build+typecheck verified) · ❌ missing (zero)
+Legend: ✅ done · ⚠️ page **renders** under e2e (`portal-nav.spec`); deep CRUD/print/
+export click-through still recommended · ❌ missing (must be zero)
+
+> Update: every portal page now **renders** under Playwright e2e (`portal-nav.spec`
+> visits all 12 `/app` routes; `supabase.spec` does a full Companies create/delete
+> round-trip). ⚠️ below means only the deeper per-page CRUD/print/export flows are not
+> yet scripted — the page itself is confirmed rendering behind the migrated router+gate.
 
 > Result: **0 features removed.** Every feature page, form, table, dialog, PDF/CSV path,
 > and business-rule guard is byte-for-byte the same module as before — the migration
