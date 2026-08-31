@@ -464,6 +464,14 @@ function DcForm({ dc, onClose }: { dc: DeliveryChallan | null; onClose: () => vo
   const [reference, setReference] = useState(dc?.reference ?? '')
   const [vehicleNo, setVehicleNo] = useState(dc?.vehicleNo ?? '')
   const [notes, setNotes] = useState(dc?.notes ?? '')
+
+  // Filter jobs by selected company to prevent cross-customer job linkage
+  const companyJobs = useMemo(() => {
+    return jobs.filter(
+      (j) => (companyId ? j.companyId === companyId : true) || (isEdit && j.id === dc?.jobId),
+    )
+  }, [jobs, companyId, isEdit, dc?.jobId])
+
   // Challan number: auto (server sequential counter) by default, or a manual
   // override the user types in. Auto mode never consumes the counter early.
   const [autoNumber, setAutoNumber] = useState(true)
@@ -477,6 +485,16 @@ function DcForm({ dc, onClose }: { dc: DeliveryChallan | null; onClose: () => vo
     unit: 'Nos',
   })
   const [lines, setLines] = useState<DcLine[]>(dc?.lines ?? [emptyLine()])
+
+  function handleJobChange(newJobId: string) {
+    setJobId(newJobId)
+    if (!isEdit && newJobId && !reference) {
+      const selectedJob = jobs.find((j) => j.id === newJobId)
+      if (selectedJob?.customerPo) {
+        setReference(selectedJob.customerPo)
+      }
+    }
+  }
 
   function updateLine(id: string, patch: Partial<DcLine>) {
     setLines((ls) => ls.map((l) => (l.id === id ? { ...l, ...patch } : l)))
@@ -498,20 +516,33 @@ function DcForm({ dc, onClose }: { dc: DeliveryChallan | null; onClose: () => vo
 
   async function submit() {
     try {
+      if (!date) {
+        toast.error('Date is required')
+        return
+      }
+
       if (isEdit) {
-        // Lines are immutable after dispatch; only metadata is editable.
+        // Lines are immutable after dispatch; metadata is editable.
         await updateChallan.mutateAsync({
           id: dc.id,
           patch: {
-            reference: reference || undefined,
-            vehicleNo: vehicleNo || undefined,
-            notes: notes || undefined,
+            date,
+            jobId: jobId || undefined,
+            reference: reference.trim() || undefined,
+            vehicleNo: vehicleNo.trim() || undefined,
+            notes: notes.trim() || undefined,
           },
         })
         toast.success('Challan updated')
         onClose()
         return
       }
+
+      if (!companyId) {
+        toast.error('Please select a company')
+        return
+      }
+
       const cleaned = lines.filter((l) => l.materialId && Number(l.quantity) > 0)
       if (!cleaned.length) {
         toast.error('Add at least one item with a material and quantity')
@@ -537,9 +568,9 @@ function DcForm({ dc, onClose }: { dc: DeliveryChallan | null; onClose: () => vo
         date,
         companyId,
         jobId: jobId || undefined,
-        reference: reference || undefined,
-        vehicleNo: vehicleNo || undefined,
-        notes: notes || undefined,
+        reference: reference.trim() || undefined,
+        vehicleNo: vehicleNo.trim() || undefined,
+        notes: notes.trim() || undefined,
         status: 'Open',
         lines: cleaned.map((l) => ({
           id: l.id,
@@ -563,7 +594,7 @@ function DcForm({ dc, onClose }: { dc: DeliveryChallan | null; onClose: () => vo
       open
       onClose={onClose}
       size="lg"
-      title={dc ? `Edit ${dc.dcNo}` : 'New Delivery Challan'}
+      title={dc ? `Edit Delivery Challan (${dc.dcNo})` : 'New Delivery Challan'}
       footer={
         <>
           <button className="btn-secondary" onClick={onClose}>
@@ -581,8 +612,8 @@ function DcForm({ dc, onClose }: { dc: DeliveryChallan | null; onClose: () => vo
         </p>
       ) : (
         <p className="mb-3 rounded-lg bg-slate-100 px-3 py-2 text-xs text-slate-600">
-          Items are locked once dispatched. To change items, cancel this challan (which restores
-          stock) and create a new one.
+          Dispatched items and company are locked to preserve stock integrity. To modify items or
+          quantities, cancel this challan (which restores stock) and create a new one.
         </p>
       )}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
@@ -647,17 +678,12 @@ function DcForm({ dc, onClose }: { dc: DeliveryChallan | null; onClose: () => vo
           </Select>
         </Field>
         <Field label="Date" required>
-          <Input
-            type="date"
-            value={date}
-            onChange={(e) => setDate(e.target.value)}
-            disabled={isEdit}
-          />
+          <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
         </Field>
         <Field label="Job (optional)">
-          <Select value={jobId} onChange={(e) => setJobId(e.target.value)} disabled={isEdit}>
+          <Select value={jobId} onChange={(e) => handleJobChange(e.target.value)}>
             <option value="">—</option>
-            {jobs.map((j) => (
+            {companyJobs.map((j) => (
               <option key={j.id} value={j.id}>
                 {j.jobNo} — {j.partName}
               </option>
@@ -665,16 +691,26 @@ function DcForm({ dc, onClose }: { dc: DeliveryChallan | null; onClose: () => vo
           </Select>
         </Field>
         <Field label="Reference / PO">
-          <Input value={reference} onChange={(e) => setReference(e.target.value)} />
+          <Input
+            value={reference}
+            onChange={(e) => setReference(e.target.value)}
+            placeholder="e.g. PO-1234, Job card ref"
+          />
         </Field>
         <Field label="Vehicle No.">
-          <Input value={vehicleNo} onChange={(e) => setVehicleNo(e.target.value)} />
+          <Input
+            value={vehicleNo}
+            onChange={(e) => setVehicleNo(e.target.value)}
+            placeholder="e.g. MH 12 AB 1234"
+          />
         </Field>
       </div>
 
       <div className="mt-4">
         <div className="mb-1 flex items-center justify-between gap-2">
-          <label className="label mb-0">Items (dispatched from stock)</label>
+          <label className="label mb-0">
+            {isEdit ? 'Dispatched Items' : 'Items (dispatched from stock)'}
+          </label>
           {!isEdit && (
             <button className="btn-ghost btn-sm text-brand-600" onClick={addLine}>
               <Plus size={14} /> Add item
@@ -684,20 +720,22 @@ function DcForm({ dc, onClose }: { dc: DeliveryChallan | null; onClose: () => vo
         <div className="overflow-x-auto rounded-lg border border-slate-200">
           <table className="w-full min-w-[34rem]">
             <thead>
-              <tr className="bg-slate-50">
-                <th className="th">Material</th>
+              <tr className="bg-slate-50 border-b border-slate-200">
+                <th className="th">Material / Item</th>
                 <th className="th w-36">From stock</th>
                 <th className="th w-24 text-right">Qty</th>
                 <th className="th w-16">Unit</th>
-                <th className="th w-10"></th>
+                {!isEdit && <th className="th w-10"></th>}
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {lines.map((l) => (
-                <tr key={l.id}>
+                <tr key={l.id} className={isEdit ? 'bg-slate-50/40' : ''}>
                   <td className="px-2 py-1.5">
                     {isEdit ? (
-                      <span className="text-sm text-slate-700">{l.description || '—'}</span>
+                      <span className="text-sm font-medium text-slate-800">
+                        {l.description || '—'}
+                      </span>
                     ) : (
                       <select
                         className="input"
@@ -715,9 +753,9 @@ function DcForm({ dc, onClose }: { dc: DeliveryChallan | null; onClose: () => vo
                   </td>
                   <td className="px-2 py-1.5">
                     {isEdit ? (
-                      <span className="text-2xs text-slate-500">
+                      <Badge tone={l.ownerType === 'Shop' ? 'blue' : 'brand'}>
                         {l.ownerType === 'Shop' ? 'Own (shop)' : 'Customer'}
-                      </span>
+                      </Badge>
                     ) : (
                       <select
                         className="input"
@@ -732,36 +770,59 @@ function DcForm({ dc, onClose }: { dc: DeliveryChallan | null; onClose: () => vo
                     )}
                   </td>
                   <td className="px-2 py-1.5">
-                    <input
-                      type="number"
-                      step="0.001"
-                      min={0}
-                      className="input text-right"
-                      value={l.quantity}
-                      disabled={isEdit}
-                      onChange={(e) => updateLine(l.id, { quantity: Number(e.target.value) })}
-                    />
+                    {isEdit ? (
+                      <div className="text-right font-mono font-semibold text-sm text-slate-800">
+                        {qty(l.quantity)}
+                      </div>
+                    ) : (
+                      <input
+                        type="number"
+                        step="0.001"
+                        min={0}
+                        className="input text-right"
+                        value={l.quantity}
+                        onChange={(e) => updateLine(l.id, { quantity: Number(e.target.value) })}
+                      />
+                    )}
                   </td>
-                  <td className="px-2 py-1.5 text-slate-600">{l.unit}</td>
-                  <td className="px-2 py-1.5 text-right">
-                    {!isEdit && (
+                  <td className="px-2 py-1.5 text-xs text-slate-600">{l.unit}</td>
+                  {!isEdit && (
+                    <td className="px-2 py-1.5 text-right">
                       <button
                         className="btn-ghost btn-sm text-red-500"
                         onClick={() => removeLine(l.id)}
                       >
                         <Trash2 size={15} />
                       </button>
-                    )}
-                  </td>
+                    </td>
+                  )}
                 </tr>
               ))}
             </tbody>
+            {isEdit && lines.length > 0 && (
+              <tfoot>
+                <tr className="border-t border-slate-200 bg-slate-50 font-medium text-xs text-slate-700">
+                  <td colSpan={2} className="px-2 py-2 text-right font-semibold">
+                    Total Quantity:
+                  </td>
+                  <td className="px-2 py-2 text-right font-bold font-mono text-brand-700">
+                    {qty(lines.reduce((sum, l) => sum + (Number(l.quantity) || 0), 0))}
+                  </td>
+                  <td colSpan={1} className="px-2 py-2"></td>
+                </tr>
+              </tfoot>
+            )}
           </table>
         </div>
       </div>
 
       <Field label="Notes" className="mt-3">
-        <Textarea rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} />
+        <Textarea
+          rows={2}
+          value={notes}
+          onChange={(e) => setNotes(e.target.value)}
+          placeholder="Add any dispatch notes or remarks..."
+        />
       </Field>
     </Modal>
   )
