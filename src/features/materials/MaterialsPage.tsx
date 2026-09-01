@@ -184,6 +184,20 @@ export function MaterialsPage() {
   const custPg = usePagination(customerFiltered)
   const ownPg = usePagination(ownFiltered)
 
+  // Overall on-hand balance per material (own + all customers) — shown as a quick
+  // "Material name — Qty unit" summary. Materials with any activity are listed,
+  // narrowed by the material filter/search so it tracks the current view.
+  const stockSummary = useMemo(() => {
+    const s = search.toLowerCase()
+    return materials
+      .map((m) => ({ material: m, s: materialStock(db, m.id) }))
+      .filter((r) => r.s.received !== 0 || r.s.balance !== 0)
+      .filter((r) => (fMaterial ? r.material.id === fMaterial : true))
+      .filter((r) => (s ? r.material.name.toLowerCase().includes(s) : true))
+      .sort((a, b) => a.material.name.localeCompare(b.material.name))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [materials, stamp, fMaterial, search])
+
   // Summary metrics. Low count is per (company, material) line, not per intake.
   const lowCount =
     [...customerAgg.values()].filter(
@@ -211,7 +225,7 @@ export function MaterialsPage() {
     if (view === 'customer') {
       if (customerFiltered.length === 0) return toast.info('Nothing to export')
       downloadXlsx(
-        'inventory-stock-report',
+        'materials-stock-report',
         customerFiltered,
         [
           { header: 'Company', value: (r) => companyName(r.companyId), width: 24 },
@@ -235,7 +249,7 @@ export function MaterialsPage() {
     } else {
       if (ownFiltered.length === 0) return toast.info('Nothing to export')
       downloadXlsx(
-        'inventory-own-stock-report',
+        'materials-own-stock-report',
         ownFiltered,
         [
           { header: 'Material', value: (r) => r.material.name, width: 24 },
@@ -266,8 +280,8 @@ export function MaterialsPage() {
   return (
     <div>
       <PageHeader
-        title="Inventory"
-        subtitle="Manage customer materials, own materials, stock movements and inventory history"
+        title="Materials & Stock"
+        subtitle="Manage customer materials, own materials, stock movements and stock history"
         actions={
           <>
             <button className="btn-ghost btn-sm" onClick={exportReport}>
@@ -309,6 +323,41 @@ export function MaterialsPage() {
           value={lowCount}
           tone={lowCount > 0 ? 'amber' : undefined}
         />
+      </div>
+
+      {/* Material stock summary — current balance per material as "Name — Qty unit". */}
+      <div className="mb-4 rounded-xl border border-slate-200 bg-white p-3">
+        <p className="mb-2 text-2xs font-semibold uppercase tracking-wide text-slate-500">
+          Material stock summary
+        </p>
+        {stockSummary.length === 0 ? (
+          <p className="text-sm text-slate-500">No stock on hand for the current filters.</p>
+        ) : (
+          <div className="flex flex-wrap gap-2">
+            {stockSummary.map(({ material, s }) => {
+              const st = stockStatus(s.balance, material.reorderLevel)
+              return (
+                <span
+                  key={material.id}
+                  className={clsx(
+                    'inline-flex items-baseline gap-1.5 rounded-lg border px-3 py-1.5 text-sm',
+                    st.tone === 'red'
+                      ? 'border-red-200 bg-red-50'
+                      : st.tone === 'amber'
+                        ? 'border-amber-200 bg-amber-50'
+                        : 'border-slate-200 bg-slate-50',
+                  )}
+                  title={`${st.label} — received ${qty(s.received)}, issued ${qty(s.issued)}`}
+                >
+                  <span className="font-medium text-slate-800">{material.name}</span>
+                  <span className="text-slate-400">—</span>
+                  <span className="font-semibold text-brand-700">{qty(s.balance)}</span>
+                  <span className="text-2xs text-slate-500">{material.unit}</span>
+                </span>
+              )
+            })}
+          </div>
+        )}
       </div>
 
       {/* Filters */}
@@ -410,7 +459,7 @@ export function MaterialsPage() {
                   <th className="th text-right">Quantity</th>
                   <th className="th text-right">Received</th>
                   <th className="th text-right">Issued</th>
-                  <th className="th text-right">Current</th>
+                  <th className="th text-right">Current Stock</th>
                   <th className="th">Status</th>
                   <th className="th text-right">Actions</th>
                 </tr>
@@ -431,7 +480,21 @@ export function MaterialsPage() {
                       </td>
                       <td className="td text-right">{qty(r.s.received)}</td>
                       <td className="td text-right">{qty(r.s.issued)}</td>
-                      <td className="td text-right font-semibold">{qty(r.s.balance)}</td>
+                      <td className="td text-right">
+                        <span
+                          className={clsx(
+                            'font-semibold',
+                            st.tone === 'red'
+                              ? 'text-red-600'
+                              : st.tone === 'amber'
+                                ? 'text-amber-600'
+                                : 'text-slate-900',
+                          )}
+                        >
+                          {qty(r.s.balance)}
+                        </span>
+                        <span className="ml-1 text-2xs text-slate-500">{r.unit}</span>
+                      </td>
                       <td className="td">
                         <Badge tone={st.tone}>{st.label}</Badge>
                       </td>
@@ -485,7 +548,7 @@ export function MaterialsPage() {
                   <th className="th">Material</th>
                   <th className="th text-right">Purchased</th>
                   <th className="th text-right">Used</th>
-                  <th className="th text-right">Current</th>
+                  <th className="th text-right">Current Stock</th>
                   <th className="th text-right">Cost</th>
                   <th className="th text-right">GST</th>
                   <th className="th">Last Purchase</th>
@@ -506,7 +569,21 @@ export function MaterialsPage() {
                       </td>
                       <td className="td text-right">{qty(r.s.received)}</td>
                       <td className="td text-right">{qty(r.s.issued)}</td>
-                      <td className="td text-right font-semibold">{qty(r.s.balance)}</td>
+                      <td className="td text-right">
+                        <span
+                          className={clsx(
+                            'font-semibold',
+                            st.tone === 'red'
+                              ? 'text-red-600'
+                              : st.tone === 'amber'
+                                ? 'text-amber-600'
+                                : 'text-slate-900',
+                          )}
+                        >
+                          {qty(r.s.balance)}
+                        </span>
+                        <span className="ml-1 text-2xs text-slate-500">{r.material.unit}</span>
+                      </td>
                       <td className="td text-right">{currency(r.cost)}</td>
                       <td className="td text-right text-slate-500">{currency(r.gst)}</td>
                       <td className="td text-2xs text-slate-500">

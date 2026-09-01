@@ -51,6 +51,29 @@ export async function updateChallan(id: string, patch: DcUpdateInput): Promise<D
   return updateRow<DeliveryChallan>(maps.deliveryChallans, id, patch)
 }
 
+// Correct the dispatched quantities on an Open challan. The RPC re-syncs stock
+// (updates the linked material_issues) and rewrites the lines atomically. Only
+// quantities change here — materials are fixed (add/remove needs cancel+recreate).
+export async function updateChallanQuantities(
+  id: string,
+  patch: {
+    reference?: string
+    vehicleNo?: string
+    notes?: string
+    lines: DeliveryChallan['lines']
+  },
+): Promise<DeliveryChallan> {
+  const { data, error } = await sb().rpc('update_challan_quantities', {
+    p_id: id,
+    p_reference: patch.reference ?? null,
+    p_vehicle_no: patch.vehicleNo ?? null,
+    p_notes: patch.notes ?? null,
+    p_lines: patch.lines,
+  })
+  if (error) throw error
+  return fromRow<DeliveryChallan>((data as Row[])[0], maps.deliveryChallans)
+}
+
 export async function deleteChallan(id: string): Promise<void> {
   return deleteRow(maps.deliveryChallans, id)
 }

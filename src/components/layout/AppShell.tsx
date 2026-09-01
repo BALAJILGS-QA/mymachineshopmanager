@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link, useLocation } from '@tanstack/react-router'
 import { LogOut, Menu, MoreHorizontal, X } from 'lucide-react'
-import { NAV_ITEMS, MOBILE_PRIMARY, type NavItem } from './nav'
+import { NAV_ITEMS, NAV_GROUPS, MOBILE_PRIMARY, type NavGroup } from './nav'
 import { useAuth } from '@/features/auth/auth'
 import { useSettings } from '@/features/settings/hooks/useSettings'
 import { useUsers } from '@/features/approvals/hooks/useUsers'
@@ -10,36 +10,56 @@ import { applyAppSeo, applyFavicon } from '@/lib/seo'
 import type { ReactNode } from 'react'
 
 function SidebarLinks({
-  items,
+  groups,
   pendingCount,
   onNavigate,
 }: {
-  items: NavItem[]
+  groups: NavGroup[]
   pendingCount: number
   onNavigate?: () => void
 }) {
   return (
-    <nav className="flex-1 space-y-0.5 overflow-y-auto px-2 py-3">
-      {items.map((item) => (
-        <Link
-          key={item.to}
-          to={item.to}
-          activeOptions={{ exact: item.to === '/app' }}
-          onClick={onNavigate}
-          className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition"
-          activeProps={{
-            className: 'bg-brand-gradient text-white shadow-sm shadow-brand-700/30',
-          }}
-          inactiveProps={{ className: 'text-slate-700 hover:bg-brand-50 hover:text-brand-800' }}
-        >
-          <item.icon size={18} />
-          <span className="flex-1">{item.label}</span>
-          {item.to === '/app/approvals' && pendingCount > 0 && (
-            <span className="rounded-full bg-amber-500 px-1.5 py-0.5 text-2xs font-bold text-white">
-              {pendingCount}
-            </span>
-          )}
-        </Link>
+    <nav className="flex-1 space-y-3 overflow-y-auto px-2 py-3">
+      {groups.map((group, gi) => (
+        <div key={group.title ?? `group-${gi}`} className="space-y-0.5">
+          {group.title &&
+            (group.to ? (
+              // Clickable header → the group's hub page (buttons for each item).
+              <Link
+                to={group.to}
+                onClick={onNavigate}
+                className="flex items-center px-3 pb-0.5 pt-1 text-2xs font-semibold uppercase tracking-wider text-slate-400 transition hover:text-brand-600"
+                activeProps={{ className: 'text-brand-600' }}
+              >
+                {group.title}
+              </Link>
+            ) : (
+              <p className="px-3 pb-0.5 pt-1 text-2xs font-semibold uppercase tracking-wider text-slate-400">
+                {group.title}
+              </p>
+            ))}
+          {group.items.map((item) => (
+            <Link
+              key={item.to}
+              to={item.to}
+              activeOptions={{ exact: item.to === '/app' }}
+              onClick={onNavigate}
+              className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition"
+              activeProps={{
+                className: 'bg-brand-gradient text-white shadow-sm shadow-brand-700/30',
+              }}
+              inactiveProps={{ className: 'text-slate-700 hover:bg-brand-50 hover:text-brand-800' }}
+            >
+              <item.icon size={18} />
+              <span className="flex-1">{item.label}</span>
+              {item.to === '/app/approvals' && pendingCount > 0 && (
+                <span className="rounded-full bg-amber-500 px-1.5 py-0.5 text-2xs font-bold text-white">
+                  {pendingCount}
+                </span>
+              )}
+            </Link>
+          ))}
+        </div>
       ))}
     </nav>
   )
@@ -77,6 +97,11 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   // Super-admin-only items (e.g. User Approvals) are hidden for regular users.
   const navItems = NAV_ITEMS.filter((n) => !n.superAdmin || isSuperAdmin)
+  // Same filter applied per group, dropping any group left empty.
+  const navGroups = NAV_GROUPS.map((g) => ({
+    ...g,
+    items: g.items.filter((n) => !n.superAdmin || isSuperAdmin),
+  })).filter((g) => g.items.length > 0)
 
   const currentLabel =
     navItems.find((n) =>
@@ -104,7 +129,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       {/* Desktop sidebar */}
       <aside className="fixed inset-y-0 left-0 z-30 hidden w-60 flex-col border-r border-slate-200 bg-gradient-to-b from-white to-brand-50/50 lg:flex">
         <Brand />
-        <SidebarLinks items={navItems} pendingCount={pendingCount} />
+        <SidebarLinks groups={navGroups} pendingCount={pendingCount} />
       </aside>
 
       {/* Mobile drawer */}
@@ -122,7 +147,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               </button>
             </div>
             <SidebarLinks
-              items={navItems}
+              groups={navGroups}
               pendingCount={pendingCount}
               onNavigate={() => setDrawerOpen(false)}
             />

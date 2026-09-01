@@ -40,6 +40,24 @@ export function useUpdateChallan() {
   })
 }
 
+// Editing quantities re-syncs the dispatched stock, so refresh balances too.
+export function useUpdateChallanQuantities() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({
+      id,
+      patch,
+    }: {
+      id: string
+      patch: Parameters<typeof api.updateChallanQuantities>[1]
+    }) => api.updateChallanQuantities(id, patch),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: qk.deliveries.all })
+      qc.invalidateQueries({ queryKey: qk.stock.all })
+    },
+  })
+}
+
 export function useDeleteChallan() {
   const qc = useQueryClient()
   return useMutation({

@@ -10,6 +10,7 @@ import {
 import { useJobs } from '@/features/jobs/hooks/useJobs'
 import { useInvoices } from '@/features/invoices/hooks/useInvoices'
 import { toUserMessage } from '@/lib/api/errors'
+import { fmtDateTime } from '@/lib/format'
 import { PageHeader, ResponsiveTable } from '@/components/common/PageHeader'
 import { Badge, Card, EmptyState, Field, Input, Textarea } from '@/components/ui/primitives'
 import { Modal } from '@/components/ui/Modal'
@@ -205,6 +206,11 @@ function CompanyForm({ company, onClose }: { company: Company | null; onClose: (
         </>
       }
     >
+      {company && (
+        <p className="mb-3 text-right text-2xs text-slate-500">
+          Last updated {fmtDateTime(company.updatedAt)}
+        </p>
+      )}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <Field label="Company Name" required className="sm:col-span-2">
           <Input value={form.name} onChange={(e) => set('name', e.target.value)} autoFocus />

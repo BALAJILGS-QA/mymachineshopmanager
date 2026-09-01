@@ -20,6 +20,7 @@ import {
   useChallans,
   useCreateChallan,
   useUpdateChallan,
+  useUpdateChallanQuantities,
   useDeleteChallan,
   useSetChallanStatus,
   useReopenChallan,
@@ -33,6 +34,7 @@ import { usePreviewNo } from '@/features/shared/usePreviewNo'
 import { toUserMessage } from '@/lib/api/errors'
 import {
   fmtDate,
+  fmtDateTime,
   inRange,
   monthEndISO,
   monthStartISO,
@@ -448,7 +450,8 @@ function DcForm({ dc, onClose }: { dc: DeliveryChallan | null; onClose: () => vo
   const toast = useToast()
   const createChallan = useCreateChallan()
   const updateChallan = useUpdateChallan()
-  const saving = createChallan.isPending || updateChallan.isPending
+  const updateChallanQty = useUpdateChallanQuantities()
+  const saving = createChallan.isPending || updateChallan.isPending || updateChallanQty.isPending
   const { data: allCompanies = [] } = useCompanies()
   const companies = allCompanies.filter((c) => c.active || c.id === dc?.companyId)
   const { data: jobs = [] } = useJobs()
@@ -456,7 +459,10 @@ function DcForm({ dc, onClose }: { dc: DeliveryChallan | null; onClose: () => vo
   const materials = allMaterials.filter((m) => m.active)
   const { data: existingChallans = [] } = useChallans()
   const dcNoPreview = usePreviewNo('dc')
-  const isEdit = !!dc // existing challan already dispatched -> lines are locked
+  const isEdit = !!dc // existing challan already dispatched -> materials are locked
+  // Quantities can be corrected while the challan is still Open (un-invoiced);
+  // the stock deducted at dispatch is re-synced on save. Materials stay fixed.
+  const canEditQty = isEdit && dc.status === 'Open'
 
   const [companyId, setCompanyId] = useState(dc?.companyId ?? companies[0]?.id ?? '')
   const [date, setDate] = useState(dc?.date ?? todayISO())
@@ -499,7 +505,36 @@ function DcForm({ dc, onClose }: { dc: DeliveryChallan | null; onClose: () => vo
   async function submit() {
     try {
       if (isEdit) {
-        // Lines are immutable after dispatch; only metadata is editable.
+        if (canEditQty) {
+          // Open challan: quantities are editable and the dispatched stock is
+          // re-synced. Materials are unchanged (add/remove needs cancel+recreate).
+          const cleaned = lines.filter((l) => l.materialId && Number(l.quantity) > 0)
+          if (!cleaned.length) {
+            toast.error('Every item needs a quantity greater than zero')
+            return
+          }
+          await updateChallanQty.mutateAsync({
+            id: dc.id,
+            patch: {
+              reference: reference || undefined,
+              vehicleNo: vehicleNo || undefined,
+              notes: notes || undefined,
+              lines: cleaned.map((l) => ({
+                id: l.id,
+                materialId: l.materialId,
+                ownerType: l.ownerType,
+                description: l.description,
+                quantity: Number(l.quantity),
+                unit: l.unit,
+                jobId: l.jobId,
+              })),
+            },
+          })
+          toast.success('Challan updated — stock re-synced')
+          onClose()
+          return
+        }
+        // Cancelled/invoiced challan: only metadata is editable.
         await updateChallan.mutateAsync({
           id: dc.id,
           patch: {
@@ -579,10 +614,20 @@ function DcForm({ dc, onClose }: { dc: DeliveryChallan | null; onClose: () => vo
         <p className="mb-3 rounded-lg bg-brand-50 px-3 py-2 text-xs text-brand-700">
           Creating this challan dispatches the items and reduces stock.
         </p>
+      ) : canEditQty ? (
+        <p className="mb-3 rounded-lg bg-brand-50 px-3 py-2 text-xs text-brand-700">
+          You can adjust quantities — stock is re-synced on save. To add or remove a material,
+          cancel this challan (which restores stock) and create a new one.
+        </p>
       ) : (
         <p className="mb-3 rounded-lg bg-slate-100 px-3 py-2 text-xs text-slate-600">
-          Items are locked once dispatched. To change items, cancel this challan (which restores
-          stock) and create a new one.
+          This challan is {dc.status.toLowerCase()}, so its items are locked. Only reference,
+          vehicle and notes can be changed.
+        </p>
+      )}
+      {dc && (
+        <p className="mb-3 text-right text-2xs text-slate-500">
+          Last updated {fmtDateTime(dc.updatedAt)}
         </p>
       )}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
@@ -738,7 +783,7 @@ function DcForm({ dc, onClose }: { dc: DeliveryChallan | null; onClose: () => vo
                       min={0}
                       className="input text-right"
                       value={l.quantity}
-                      disabled={isEdit}
+                      disabled={isEdit && !canEditQty}
                       onChange={(e) => updateLine(l.id, { quantity: Number(e.target.value) })}
                     />
                   </td>

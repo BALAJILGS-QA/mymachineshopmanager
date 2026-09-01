@@ -17,7 +17,7 @@ import { useJobs } from '@/features/jobs/hooks/useJobs'
 import { useSettings } from '@/features/settings/hooks/useSettings'
 import { DEFAULT_SETTINGS } from '@/data/seed'
 import { toUserMessage } from '@/lib/api/errors'
-import { todayISO, qty, currency } from '@/lib/format'
+import { todayISO, qty, currency, fmtDateTime } from '@/lib/format'
 import { Field, Input, Select, Textarea } from '@/components/ui/primitives'
 import { Modal } from '@/components/ui/Modal'
 import { useToast } from '@/components/ui/Toast'
@@ -99,6 +99,11 @@ export function MaterialForm({
         </>
       }
     >
+      {material && (
+        <p className="mb-3 text-right text-2xs text-slate-500">
+          Last updated {fmtDateTime(material.updatedAt)}
+        </p>
+      )}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <Field label="Material Name" required className="sm:col-span-2">
           <Input value={form.name} onChange={(e) => set('name', e.target.value)} autoFocus />
@@ -649,6 +654,11 @@ export function AddMaterialForm({
         </>
       }
     >
+      {isEdit && receipt && (
+        <p className="mb-3 text-right text-2xs text-slate-500">
+          Last updated {fmtDateTime(receipt.updatedAt)}
+        </p>
+      )}
       {!isEdit && (
         <div className="mb-3">
           <label className="label">Stock Type</label>

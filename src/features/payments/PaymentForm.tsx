@@ -6,7 +6,7 @@ import { useInvoices } from '@/features/invoices/hooks/useInvoices'
 import { usePreviewNo } from '@/features/shared/usePreviewNo'
 import { toUserMessage } from '@/lib/api/errors'
 import { computeInvoice } from '@/data/computations'
-import { currency, todayISO } from '@/lib/format'
+import { currency, todayISO, fmtDateTime } from '@/lib/format'
 import { Field, Input, Select, Textarea } from '@/components/ui/primitives'
 import { Modal } from '@/components/ui/Modal'
 import { useToast } from '@/components/ui/Toast'
@@ -102,6 +102,11 @@ export function PaymentForm({
         </>
       }
     >
+      {isEdit && (
+        <p className="mb-3 text-right text-2xs text-slate-500">
+          Last updated {fmtDateTime(payment!.updatedAt)}
+        </p>
+      )}
       <p className="mb-3 rounded-lg bg-brand-50 px-3 py-2 text-xs text-brand-700">
         {isEdit ? (
           <>

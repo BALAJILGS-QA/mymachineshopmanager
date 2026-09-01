@@ -14,14 +14,18 @@ import { Route as AppRouteRouteImport } from './routes/app/route'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as SignupRouteImport } from './routes/signup'
 import { Route as AppIndexRouteImport } from './routes/app/index'
+import { Route as AppAccountsRouteImport } from './routes/app/accounts'
 import { Route as AppApprovalsRouteImport } from './routes/app/approvals'
 import { Route as AppCompaniesRouteImport } from './routes/app/companies'
+import { Route as AppConfigurationRouteImport } from './routes/app/configuration'
 import { Route as AppExpensesRouteImport } from './routes/app/expenses'
 import { Route as AppJobsRouteImport } from './routes/app/jobs'
 import { Route as AppMaterialsRouteImport } from './routes/app/materials'
 import { Route as AppPaymentsRouteImport } from './routes/app/payments'
 import { Route as AppProductionRouteImport } from './routes/app/production'
+import { Route as AppProductionPlanningRouteImport } from './routes/app/production-planning'
 import { Route as AppReportsRouteImport } from './routes/app/reports'
+import { Route as AppSalesRouteImport } from './routes/app/sales'
 import { Route as AppSettingsRouteImport } from './routes/app/settings'
 import { Route as BlogIndexRouteImport } from './routes/blog/index'
 import { Route as BlogSlugRouteImport } from './routes/blog/$slug'
@@ -55,6 +59,11 @@ const AppIndexRoute = AppIndexRouteImport.update({
   path: '/',
   getParentRoute: () => AppRouteRoute,
 } as any)
+const AppAccountsRoute = AppAccountsRouteImport.update({
+  id: '/accounts',
+  path: '/accounts',
+  getParentRoute: () => AppRouteRoute,
+} as any)
 const AppApprovalsRoute = AppApprovalsRouteImport.update({
   id: '/approvals',
   path: '/approvals',
@@ -63,6 +72,11 @@ const AppApprovalsRoute = AppApprovalsRouteImport.update({
 const AppCompaniesRoute = AppCompaniesRouteImport.update({
   id: '/companies',
   path: '/companies',
+  getParentRoute: () => AppRouteRoute,
+} as any)
+const AppConfigurationRoute = AppConfigurationRouteImport.update({
+  id: '/configuration',
+  path: '/configuration',
   getParentRoute: () => AppRouteRoute,
 } as any)
 const AppExpensesRoute = AppExpensesRouteImport.update({
@@ -90,9 +104,19 @@ const AppProductionRoute = AppProductionRouteImport.update({
   path: '/production',
   getParentRoute: () => AppRouteRoute,
 } as any)
+const AppProductionPlanningRoute = AppProductionPlanningRouteImport.update({
+  id: '/production-planning',
+  path: '/production-planning',
+  getParentRoute: () => AppRouteRoute,
+} as any)
 const AppReportsRoute = AppReportsRouteImport.update({
   id: '/reports',
   path: '/reports',
+  getParentRoute: () => AppRouteRoute,
+} as any)
+const AppSalesRoute = AppSalesRouteImport.update({
+  id: '/sales',
+  path: '/sales',
   getParentRoute: () => AppRouteRoute,
 } as any)
 const AppSettingsRoute = AppSettingsRouteImport.update({
@@ -136,14 +160,18 @@ export interface FileRoutesByFullPath {
   '/app': typeof AppRouteRouteWithChildren
   '/login': typeof LoginRoute
   '/signup': typeof SignupRoute
+  '/app/accounts': typeof AppAccountsRoute
   '/app/approvals': typeof AppApprovalsRoute
   '/app/companies': typeof AppCompaniesRoute
+  '/app/configuration': typeof AppConfigurationRoute
   '/app/expenses': typeof AppExpensesRoute
   '/app/jobs': typeof AppJobsRoute
   '/app/materials': typeof AppMaterialsRoute
   '/app/payments': typeof AppPaymentsRoute
   '/app/production': typeof AppProductionRoute
+  '/app/production-planning': typeof AppProductionPlanningRoute
   '/app/reports': typeof AppReportsRoute
+  '/app/sales': typeof AppSalesRoute
   '/app/settings': typeof AppSettingsRoute
   '/blog/$slug': typeof BlogSlugRoute
   '/app/': typeof AppIndexRoute
@@ -157,14 +185,18 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
   '/signup': typeof SignupRoute
+  '/app/accounts': typeof AppAccountsRoute
   '/app/approvals': typeof AppApprovalsRoute
   '/app/companies': typeof AppCompaniesRoute
+  '/app/configuration': typeof AppConfigurationRoute
   '/app/expenses': typeof AppExpensesRoute
   '/app/jobs': typeof AppJobsRoute
   '/app/materials': typeof AppMaterialsRoute
   '/app/payments': typeof AppPaymentsRoute
   '/app/production': typeof AppProductionRoute
+  '/app/production-planning': typeof AppProductionPlanningRoute
   '/app/reports': typeof AppReportsRoute
+  '/app/sales': typeof AppSalesRoute
   '/app/settings': typeof AppSettingsRoute
   '/blog/$slug': typeof BlogSlugRoute
   '/app': typeof AppIndexRoute
@@ -180,14 +212,18 @@ export interface FileRoutesById {
   '/app': typeof AppRouteRouteWithChildren
   '/login': typeof LoginRoute
   '/signup': typeof SignupRoute
+  '/app/accounts': typeof AppAccountsRoute
   '/app/approvals': typeof AppApprovalsRoute
   '/app/companies': typeof AppCompaniesRoute
+  '/app/configuration': typeof AppConfigurationRoute
   '/app/expenses': typeof AppExpensesRoute
   '/app/jobs': typeof AppJobsRoute
   '/app/materials': typeof AppMaterialsRoute
   '/app/payments': typeof AppPaymentsRoute
   '/app/production': typeof AppProductionRoute
+  '/app/production-planning': typeof AppProductionPlanningRoute
   '/app/reports': typeof AppReportsRoute
+  '/app/sales': typeof AppSalesRoute
   '/app/settings': typeof AppSettingsRoute
   '/blog/$slug': typeof BlogSlugRoute
   '/app/': typeof AppIndexRoute
@@ -204,14 +240,18 @@ export interface FileRouteTypes {
     | '/app'
     | '/login'
     | '/signup'
+    | '/app/accounts'
     | '/app/approvals'
     | '/app/companies'
+    | '/app/configuration'
     | '/app/expenses'
     | '/app/jobs'
     | '/app/materials'
     | '/app/payments'
     | '/app/production'
+    | '/app/production-planning'
     | '/app/reports'
+    | '/app/sales'
     | '/app/settings'
     | '/blog/$slug'
     | '/app/'
@@ -225,14 +265,18 @@ export interface FileRouteTypes {
     | '/'
     | '/login'
     | '/signup'
+    | '/app/accounts'
     | '/app/approvals'
     | '/app/companies'
+    | '/app/configuration'
     | '/app/expenses'
     | '/app/jobs'
     | '/app/materials'
     | '/app/payments'
     | '/app/production'
+    | '/app/production-planning'
     | '/app/reports'
+    | '/app/sales'
     | '/app/settings'
     | '/blog/$slug'
     | '/app'
@@ -247,14 +291,18 @@ export interface FileRouteTypes {
     | '/app'
     | '/login'
     | '/signup'
+    | '/app/accounts'
     | '/app/approvals'
     | '/app/companies'
+    | '/app/configuration'
     | '/app/expenses'
     | '/app/jobs'
     | '/app/materials'
     | '/app/payments'
     | '/app/production'
+    | '/app/production-planning'
     | '/app/reports'
+    | '/app/sales'
     | '/app/settings'
     | '/blog/$slug'
     | '/app/'
@@ -311,6 +359,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppIndexRouteImport
       parentRoute: typeof AppRouteRoute
     }
+    '/app/accounts': {
+      id: '/app/accounts'
+      path: '/accounts'
+      fullPath: '/app/accounts'
+      preLoaderRoute: typeof AppAccountsRouteImport
+      parentRoute: typeof AppRouteRoute
+    }
     '/app/approvals': {
       id: '/app/approvals'
       path: '/approvals'
@@ -323,6 +378,13 @@ declare module '@tanstack/react-router' {
       path: '/companies'
       fullPath: '/app/companies'
       preLoaderRoute: typeof AppCompaniesRouteImport
+      parentRoute: typeof AppRouteRoute
+    }
+    '/app/configuration': {
+      id: '/app/configuration'
+      path: '/configuration'
+      fullPath: '/app/configuration'
+      preLoaderRoute: typeof AppConfigurationRouteImport
       parentRoute: typeof AppRouteRoute
     }
     '/app/expenses': {
@@ -360,11 +422,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppProductionRouteImport
       parentRoute: typeof AppRouteRoute
     }
+    '/app/production-planning': {
+      id: '/app/production-planning'
+      path: '/production-planning'
+      fullPath: '/app/production-planning'
+      preLoaderRoute: typeof AppProductionPlanningRouteImport
+      parentRoute: typeof AppRouteRoute
+    }
     '/app/reports': {
       id: '/app/reports'
       path: '/reports'
       fullPath: '/app/reports'
       preLoaderRoute: typeof AppReportsRouteImport
+      parentRoute: typeof AppRouteRoute
+    }
+    '/app/sales': {
+      id: '/app/sales'
+      path: '/sales'
+      fullPath: '/app/sales'
+      preLoaderRoute: typeof AppSalesRouteImport
       parentRoute: typeof AppRouteRoute
     }
     '/app/settings': {
@@ -420,14 +496,18 @@ declare module '@tanstack/react-router' {
 }
 
 interface AppRouteRouteChildren {
+  AppAccountsRoute: typeof AppAccountsRoute
   AppApprovalsRoute: typeof AppApprovalsRoute
   AppCompaniesRoute: typeof AppCompaniesRoute
+  AppConfigurationRoute: typeof AppConfigurationRoute
   AppExpensesRoute: typeof AppExpensesRoute
   AppJobsRoute: typeof AppJobsRoute
   AppMaterialsRoute: typeof AppMaterialsRoute
   AppPaymentsRoute: typeof AppPaymentsRoute
   AppProductionRoute: typeof AppProductionRoute
+  AppProductionPlanningRoute: typeof AppProductionPlanningRoute
   AppReportsRoute: typeof AppReportsRoute
+  AppSalesRoute: typeof AppSalesRoute
   AppSettingsRoute: typeof AppSettingsRoute
   AppIndexRoute: typeof AppIndexRoute
   AppDeliveriesIndexRoute: typeof AppDeliveriesIndexRoute
@@ -437,14 +517,18 @@ interface AppRouteRouteChildren {
 }
 
 const AppRouteRouteChildren: AppRouteRouteChildren = {
+  AppAccountsRoute: AppAccountsRoute,
   AppApprovalsRoute: AppApprovalsRoute,
   AppCompaniesRoute: AppCompaniesRoute,
+  AppConfigurationRoute: AppConfigurationRoute,
   AppExpensesRoute: AppExpensesRoute,
   AppJobsRoute: AppJobsRoute,
   AppMaterialsRoute: AppMaterialsRoute,
   AppPaymentsRoute: AppPaymentsRoute,
   AppProductionRoute: AppProductionRoute,
+  AppProductionPlanningRoute: AppProductionPlanningRoute,
   AppReportsRoute: AppReportsRoute,
+  AppSalesRoute: AppSalesRoute,
   AppSettingsRoute: AppSettingsRoute,
   AppIndexRoute: AppIndexRoute,
   AppDeliveriesIndexRoute: AppDeliveriesIndexRoute,
@@ -453,9 +537,7 @@ const AppRouteRouteChildren: AppRouteRouteChildren = {
   AppInvoicesIdPrintRoute: AppInvoicesIdPrintRoute,
 }
 
-const AppRouteRouteWithChildren = AppRouteRoute._addFileChildren(
-  AppRouteRouteChildren,
-)
+const AppRouteRouteWithChildren = AppRouteRoute._addFileChildren(AppRouteRouteChildren)
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,

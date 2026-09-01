@@ -20,6 +20,8 @@ function lineFromRow(r: Row): InvoiceLine {
     description: r.description as string,
     quantity: Number(r.quantity),
     rate: Number(r.rate),
+    materialId: (r.material_id as string) ?? undefined,
+    ownerType: (r.owner_type as InvoiceLine['ownerType']) ?? undefined,
   }
 }
 
@@ -47,6 +49,10 @@ export async function createInvoice(input: InvoiceCreateInput): Promise<Invoice>
     description: l.description,
     quantity: l.quantity,
     rate: l.rate,
+    // A line with a materialId deducts stock server-side (create_invoice RPC).
+    materialId: l.materialId ?? '',
+    ownerType: l.ownerType ?? '',
+    unit: l.unit ?? '',
   }))
   const { data, error } = await sb().rpc('create_invoice', {
     p_id: uid('inv_'),
@@ -83,6 +89,12 @@ export async function updateInvoice(id: string, patch: InvoiceUpdateInput): Prom
         quantity: l.quantity,
         rate: l.rate,
         line_no: i,
+        // Preserve each line's stock link on edit. Stock-affecting fields
+        // (material + qty + owner) are locked in the form once an invoice exists,
+        // so the stored lines stay in sync with the material_issues posted at
+        // create time; editing only ever changes money (rate/description/tax).
+        material_id: l.materialId ?? null,
+        owner_type: l.ownerType ?? null,
       }))
       const { error } = await sb().from('invoice_lines').insert(rows)
       if (error) throw error
