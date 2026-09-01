@@ -11,5 +11,12 @@ export function JsonLd({ data }: { data: Record<string, unknown> | Record<string
     .replace(/</g, '\\u003c')
     .replace(/>/g, '\\u003e')
     .replace(/&/g, '\\u0026')
-  return <script type="application/ld+json">{safe}</script>
+  // id kept identical to the Vite app's useSeo() so SEO checks (and the e2e
+  // spec asserting script#route-jsonld) hold across both builds. Exactly one
+  // page (and thus one JsonLd) is mounted at a time.
+  return (
+    <script id="route-jsonld" type="application/ld+json">
+      {safe}
+    </script>
+  )
 }

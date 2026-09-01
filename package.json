@@ -21,6 +21,7 @@
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "test:e2e": "playwright test",
+    "test:e2e:next": "playwright test --config=playwright.next.config.ts",
     "test:e2e:prod": "playwright test --config=playwright.prod.config.ts",
     "deploy": "node scripts/deploy.mjs",
     "prepare": "husky"

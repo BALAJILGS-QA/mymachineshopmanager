@@ -162,6 +162,26 @@ Nav abstraction completed (no duplicated business pages):
 
 Verification (all green): Vite `tsc` ✓ · Vitest 26/26 ✓ · Vite SPA build ✓ · `next build` ✓ (26 routes) · lint 0 errors · **authenticated Playwright sweep on Next**: dashboard, jobs, materials, deliveries (15-row table, real data), challan print (full document via row click → param injection), reports, approvals (super-admin), settings — **0 console errors on every route** (prefetch 404s gone) · hub redirects + catch-alls verified · **Vite parity re-verified**: deliveries → print click-through works identically.
 
+## ✅ Phase 4 — E2E repoint + Vercel cutover config (COMPLETE)
+
+### 4a — E2E suite repointed to Next
+
+- `playwright.next.config.ts` + `npm run test:e2e:next` — runs the SAME 10 specs against `next build && next start` (port 3200). The original Vite harness (`npm run test:e2e`) is untouched until cleanup.
+- **Parity bug found & fixed:** site.spec asserts `script#route-jsonld`; the Next `JsonLd` component lacked the `id`. Added (identical to Vite's `useSeo`) — site.spec 3/3 ✓.
+- **Full-suite verdict: EXACT PARITY.** Next: 9 failed / 9 passed / 4 skipped — identical, spec-for-spec, to the Vite baseline (the 9 failures are the environmental auth-gated specs that fail the same way on the pre-migration base commit; they pass when login is driven manually).
+
+### 4b — Vercel cutover config (staged, safe)
+
+- `vercel.json` → `framework: "nextjs"`, `buildCommand: "npx next build"` (explicit because `npm run build` is still Vite until cleanup). Removed: SPA `outputDirectory`, the `/_shell.html` rewrite, and the Vite `/assets/` cache rule (Next handles `/_next/static` immutability itself).
+- Security headers moved to `next.config.mjs` `headers()` so they apply on ANY host (verified live on `next start`: X-Frame-Options DENY, nosniff, Referrer-Policy).
+- **Env bridge:** `next.config.mjs` `env` maps `VITE_SUPABASE_*` → `NEXT_PUBLIC_SUPABASE_*` at build time — Vercel's existing env vars work for the Next build with NO dashboard changes (CLI is logged out; nothing needed). Verified: Supabase URL inlined in the client bundle. Remove the bridge at cleanup once hosting env is renamed.
+
+### Cutover mechanics (IMPORTANT)
+
+- Pushing `dev` → Vercel builds a **preview** deployment with the Next config — production (`main`) still serves the old SPA build.
+- **Production flips to Next.js only when `dev` is merged to `main`** (config + code travel together — atomic cutover). Verify the preview URL first.
+- Netlify (`netlify.toml`) still builds the Vite SSR app — decide at cleanup whether to retire or repoint it.
+
 ### Next phases
 
 - **Phase 4 (per master plan): deployment cutover decision + E2E repoint** — point `playwright.config.ts` at the Next server, run the full suite, then flip Vercel to the Next build.
