@@ -10,6 +10,8 @@ import { QueryClientProvider, type QueryClient } from '@tanstack/react-query'
 import { AuthProvider } from '@/features/auth/auth'
 import { ToastProvider } from '@/components/ui/Toast'
 import { ConfirmProvider } from '@/components/ui/ConfirmDialog'
+import { AppLinkProvider } from '@/components/nav/app-link'
+import { TanStackAppLink } from '@/components/nav/tanstack-app-link'
 import { validateEnv } from '@/lib/env'
 import appCss from '@/index.css?url'
 
@@ -78,7 +80,9 @@ function RootComponent() {
         <AuthProvider>
           <ToastProvider>
             <ConfirmProvider>
-              <Outlet />
+              <AppLinkProvider value={TanStackAppLink}>
+                <Outlet />
+              </AppLinkProvider>
             </ConfirmProvider>
           </ToastProvider>
         </AuthProvider>

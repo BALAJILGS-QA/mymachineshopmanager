@@ -122,6 +122,26 @@ Verification: `next build` ✓; Supabase URL inlined in the **client** bundle (S
 
 **Known interim gap:** the Next landing's `onAuthenticated` pushes to `/app`, not yet migrated to Next → 404 on the Next app until increment 3.3. The **live Vite app is unaffected** and fully works.
 
-### Increment 3.3 — authenticated portal shell (`/app`) — NEXT
+### Increment 3.3 — authenticated portal shell + dashboard (DONE, login-render pending)
 
-Port `AppShell` + the `/app` client route guard so login completes end-to-end in Next, then migrate portal module routes + hub redirects — see `ROUTE_MIGRATION_MAP.md`.
+Stood up the `/app` portal in Next so the login→dashboard loop now completes end-to-end.
+
+| Route                    | Next file            | Notes                                                                                                                                                                          |
+| ------------------------ | -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `/app/*` (shell + guard) | `app/app/layout.tsx` | Client layout mirroring `src/routes/app/route.tsx` (`ssr:false`): `useAuth` guard → `router.replace('/')` when no session; wraps the ported `AppShell`; imports `@/index.css`. |
+| `/app` (dashboard)       | `app/app/page.tsx`   | Client page rendering the reused `DashboardPage` (recharts).                                                                                                                   |
+
+Key change — **navigation abstraction** (avoids duplicating shared pages):
+
+- `src/components/nav/app-link.tsx` — neutral `AppLink` + `AppLinkProvider` context (no router import).
+- `src/components/nav/tanstack-app-link.tsx` (Vite adapter) provided in `src/routes/__root.tsx`; `app/_shell/next-app-link.tsx` (next/link adapter) provided in `app/providers.tsx`.
+- `DashboardPage` now uses `<AppLink>` instead of TanStack `Link` (its only router coupling). `LinkProps['to']` → `string`. Works under both apps.
+- `AppShell` ported to `app/_shell/app-shell.tsx` — `next/link` + `usePathname()` with active states computed inline (`isLinkActive`); `nav.ts` reused (only a type-only TanStack import).
+
+Verification: `next build` ✓ (12 routes incl. `/app`); **Next `/app` guard verified in-browser (unauthenticated → redirect to `/`)**; Next landing post-login now targets a real Next `/app`. Vite app re-verified in-browser (landing renders — `__root` AppLinkProvider change safe). Vite `tsc` ✓, Vitest 26/26 ✓, lint 0 errors.
+
+**Pending visual check (not a blocker):** the authenticated shell + dashboard _render_ (both Vite dashboard after the AppLink change, and the Next portal) needs a login to see. I could not perform it — the session had expired and typing passwords via browser automation is disallowed by policy. Build + typecheck + guard are green and the components are faithful ports; recommend a quick manual login on `:5173` (Vite) and `:3000` (Next) to confirm the dashboard renders.
+
+### Increment 3.4 — remaining portal routes + hub redirects — NEXT
+
+Migrate the 16 remaining `/app/*` pages module-by-module (each uses TanStack `Link` → swap to `AppLink`/`next/link`; jsPDF print routes stay client) + the 4 hub redirects. See `ROUTE_MIGRATION_MAP.md`.

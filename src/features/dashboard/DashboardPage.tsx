@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { Link, type LinkProps } from '@tanstack/react-router'
+import { AppLink } from '@/components/nav/app-link'
 import {
   AlertTriangle,
   ArrowRight,
@@ -571,10 +571,10 @@ function Kpi({
   label: string
   value: string
   tone: string
-  to: LinkProps['to']
+  to: string
 }) {
   return (
-    <Link
+    <AppLink
       to={to}
       className="card flex items-center justify-between gap-3 p-4 transition-colors hover:border-slate-300 hover:bg-slate-50/60"
     >
@@ -589,7 +589,7 @@ function Kpi({
       >
         <Icon size={18} />
       </div>
-    </Link>
+    </AppLink>
   )
 }
 
@@ -622,27 +622,19 @@ function ChartCard({
   )
 }
 
-function ListHeader({
-  title,
-  to,
-  icon,
-}: {
-  title: string
-  to: LinkProps['to']
-  icon?: React.ReactNode
-}) {
+function ListHeader({ title, to, icon }: { title: string; to: string; icon?: React.ReactNode }) {
   return (
     <div className="flex items-center justify-between">
       <h3 className="flex items-center gap-1.5 text-sm font-semibold text-slate-800">
         {icon}
         {title}
       </h3>
-      <Link
+      <AppLink
         to={to}
         className="flex items-center gap-0.5 text-2xs font-medium text-brand-600 hover:underline"
       >
         View all <ArrowRight size={12} />
-      </Link>
+      </AppLink>
     </div>
   )
 }

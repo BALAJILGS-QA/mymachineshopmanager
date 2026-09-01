@@ -25,31 +25,31 @@ Legend — **Type:** SSR (public, server-rendered) · CSR (client-only, `/app` `
 
 ## Authenticated portal shell (client-only)
 
-| Existing route             | URL scope | Behaviour                                                   | Next.js target                                                                        | Type   | Auth      | Status  | Verified |
-| -------------------------- | --------- | ----------------------------------------------------------- | ------------------------------------------------------------------------------------- | ------ | --------- | ------- | -------- |
-| `src/routes/app/route.tsx` | `/app/*`  | `ssr:false`; `AppShell`; guard `!session→/`; unknown→`/app` | `app/app/layout.tsx` (`"use client"`, wraps `AppShell` + guard) + `app/app/not-found` | Layout | Protected | Pending | ☐        |
+| Existing route             | URL scope | Behaviour                                                   | Next.js target                                                                        | Type   | Auth      | Status       | Verified              |
+| -------------------------- | --------- | ----------------------------------------------------------- | ------------------------------------------------------------------------------------- | ------ | --------- | ------------ | --------------------- |
+| `src/routes/app/route.tsx` | `/app/*`  | `ssr:false`; `AppShell`; guard `!session→/`; unknown→`/app` | `app/app/layout.tsx` (`"use client"`, wraps `AppShell` + guard) + `app/app/not-found` | Layout | Protected | **Migrated** | ☑ P3 (guard verified) |
 
 ## Authenticated portal pages
 
-| Existing route                            | URL                         | Next.js target                                                | Type | Auth        | Status  | Verified |
-| ----------------------------------------- | --------------------------- | ------------------------------------------------------------- | ---- | ----------- | ------- | -------- |
-| `src/routes/app/index.tsx`                | `/app`                      | `app/app/page.tsx` (Dashboard, **recharts** → client)         | CSR  | Protected   | Pending | ☐        |
-| `src/routes/app/jobs.tsx`                 | `/app/jobs`                 | `app/app/jobs/page.tsx`                                       | CSR  | Protected   | Pending | ☐        |
-| `src/routes/app/production.tsx`           | `/app/production`           | `app/app/production/page.tsx`                                 | CSR  | Protected   | Pending | ☐        |
-| `src/routes/app/materials.tsx`            | `/app/materials`            | `app/app/materials/page.tsx`                                  | CSR  | Protected   | Pending | ☐        |
-| `src/routes/app/sales.tsx`                | `/app/sales`                | `app/app/sales/page.tsx`                                      | CSR  | Protected   | Pending | ☐        |
-| `src/routes/app/expenses.tsx`             | `/app/expenses`             | `app/app/expenses/page.tsx`                                   | CSR  | Protected   | Pending | ☐        |
-| `src/routes/app/deliveries/index.tsx`     | `/app/deliveries`           | `app/app/deliveries/page.tsx`                                 | CSR  | Protected   | Pending | ☐        |
-| `src/routes/app/deliveries/$id.print.tsx` | `/app/deliveries/:id/print` | `app/app/deliveries/[id]/print/page.tsx` (**jsPDF** → client) | CSR  | Protected   | Pending | ☐        |
-| `src/routes/app/invoices/index.tsx`       | `/app/invoices`             | `app/app/invoices/page.tsx`                                   | CSR  | Protected   | Pending | ☐        |
-| `src/routes/app/invoices/$id.print.tsx`   | `/app/invoices/:id/print`   | `app/app/invoices/[id]/print/page.tsx` (**jsPDF** → client)   | CSR  | Protected   | Pending | ☐        |
-| `src/routes/app/payments.tsx`             | `/app/payments`             | `app/app/payments/page.tsx`                                   | CSR  | Protected   | Pending | ☐        |
-| `src/routes/app/vendors.tsx`              | `/app/vendors`              | `app/app/vendors/page.tsx`                                    | CSR  | Protected   | Pending | ☐        |
-| `src/routes/app/subcontracting.tsx`       | `/app/subcontracting`       | `app/app/subcontracting/page.tsx`                             | CSR  | Protected   | Pending | ☐        |
-| `src/routes/app/companies.tsx`            | `/app/companies`            | `app/app/companies/page.tsx`                                  | CSR  | Protected   | Pending | ☐        |
-| `src/routes/app/approvals.tsx`            | `/app/approvals`            | `app/app/approvals/page.tsx` (super-admin only)               | CSR  | Super-admin | Pending | ☐        |
-| `src/routes/app/reports.tsx`              | `/app/reports`              | `app/app/reports/page.tsx` (charts + xlsx export → client)    | CSR  | Protected   | Pending | ☐        |
-| `src/routes/app/settings.tsx`             | `/app/settings`             | `app/app/settings/page.tsx`                                   | CSR  | Protected   | Pending | ☐        |
+| Existing route                            | URL                         | Next.js target                                                | Type | Auth        | Status       | Verified                                    |
+| ----------------------------------------- | --------------------------- | ------------------------------------------------------------- | ---- | ----------- | ------------ | ------------------------------------------- |
+| `src/routes/app/index.tsx`                | `/app`                      | `app/app/page.tsx` (Dashboard, **recharts** → client)         | CSR  | Protected   | **Migrated** | ◑ P3 (build✓, guard✓; login render pending) |
+| `src/routes/app/jobs.tsx`                 | `/app/jobs`                 | `app/app/jobs/page.tsx`                                       | CSR  | Protected   | Pending      | ☐                                           |
+| `src/routes/app/production.tsx`           | `/app/production`           | `app/app/production/page.tsx`                                 | CSR  | Protected   | Pending      | ☐                                           |
+| `src/routes/app/materials.tsx`            | `/app/materials`            | `app/app/materials/page.tsx`                                  | CSR  | Protected   | Pending      | ☐                                           |
+| `src/routes/app/sales.tsx`                | `/app/sales`                | `app/app/sales/page.tsx`                                      | CSR  | Protected   | Pending      | ☐                                           |
+| `src/routes/app/expenses.tsx`             | `/app/expenses`             | `app/app/expenses/page.tsx`                                   | CSR  | Protected   | Pending      | ☐                                           |
+| `src/routes/app/deliveries/index.tsx`     | `/app/deliveries`           | `app/app/deliveries/page.tsx`                                 | CSR  | Protected   | Pending      | ☐                                           |
+| `src/routes/app/deliveries/$id.print.tsx` | `/app/deliveries/:id/print` | `app/app/deliveries/[id]/print/page.tsx` (**jsPDF** → client) | CSR  | Protected   | Pending      | ☐                                           |
+| `src/routes/app/invoices/index.tsx`       | `/app/invoices`             | `app/app/invoices/page.tsx`                                   | CSR  | Protected   | Pending      | ☐                                           |
+| `src/routes/app/invoices/$id.print.tsx`   | `/app/invoices/:id/print`   | `app/app/invoices/[id]/print/page.tsx` (**jsPDF** → client)   | CSR  | Protected   | Pending      | ☐                                           |
+| `src/routes/app/payments.tsx`             | `/app/payments`             | `app/app/payments/page.tsx`                                   | CSR  | Protected   | Pending      | ☐                                           |
+| `src/routes/app/vendors.tsx`              | `/app/vendors`              | `app/app/vendors/page.tsx`                                    | CSR  | Protected   | Pending      | ☐                                           |
+| `src/routes/app/subcontracting.tsx`       | `/app/subcontracting`       | `app/app/subcontracting/page.tsx`                             | CSR  | Protected   | Pending      | ☐                                           |
+| `src/routes/app/companies.tsx`            | `/app/companies`            | `app/app/companies/page.tsx`                                  | CSR  | Protected   | Pending      | ☐                                           |
+| `src/routes/app/approvals.tsx`            | `/app/approvals`            | `app/app/approvals/page.tsx` (super-admin only)               | CSR  | Super-admin | Pending      | ☐                                           |
+| `src/routes/app/reports.tsx`              | `/app/reports`              | `app/app/reports/page.tsx` (charts + xlsx export → client)    | CSR  | Protected   | Pending      | ☐                                           |
+| `src/routes/app/settings.tsx`             | `/app/settings`             | `app/app/settings/page.tsx`                                   | CSR  | Protected   | Pending      | ☐                                           |
 
 ## Module-hub redirects (land on first tab — preserve exactly)
 

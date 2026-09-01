@@ -12,6 +12,8 @@ import { useState, type ReactNode } from 'react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { AuthProvider } from '@/features/auth/auth'
 import { ToastProvider } from '@/components/ui/Toast'
+import { AppLinkProvider } from '@/components/nav/app-link'
+import { NextAppLink } from './_shell/next-app-link'
 
 export function Providers({ children }: { children: ReactNode }) {
   // One QueryClient per browser session (created lazily in state so it is not
@@ -28,7 +30,9 @@ export function Providers({ children }: { children: ReactNode }) {
   return (
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
-        <ToastProvider>{children}</ToastProvider>
+        <ToastProvider>
+          <AppLinkProvider value={NextAppLink}>{children}</AppLinkProvider>
+        </ToastProvider>
       </AuthProvider>
     </QueryClientProvider>
   )
