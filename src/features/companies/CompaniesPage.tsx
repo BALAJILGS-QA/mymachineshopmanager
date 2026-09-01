@@ -1,4 +1,7 @@
 import { useMemo, useState } from 'react'
+import { useForm } from 'react-hook-form'
+import { zodResolver } from '@hookform/resolvers/zod'
+import { z } from 'zod'
 import { Building2, Pencil, Plus, Search, Trash2 } from 'lucide-react'
 import type { Company } from '@/types'
 import {
@@ -150,41 +153,61 @@ export function CompaniesPage() {
   )
 }
 
+// Company form on React Hook Form + Zod (zodResolver). The schema now enforces
+// a non-empty company name (closes the empty-name gap found during overlay
+// testing); all other rules match the previous behaviour (fields optional,
+// server/RPC rules still authoritative on save).
+const companySchema = z.object({
+  name: z.string().trim().min(1, 'Company name is required'),
+  code: z.string().trim().default(''),
+  contactPerson: z.string().trim().default(''),
+  phone: z.string().trim().default(''),
+  email: z.string().trim().default(''),
+  billingAddress: z.string().default(''),
+  gstin: z.string().trim().default(''),
+  notes: z.string().default(''),
+  active: z.boolean(),
+})
+type CompanyValues = z.infer<typeof companySchema>
+
 function CompanyForm({ company, onClose }: { company: Company | null; onClose: () => void }) {
   const toast = useToast()
   const createCompany = useCreateCompany()
   const updateCompany = useUpdateCompany()
-  const saving = createCompany.isPending || updateCompany.isPending
-  const [form, setForm] = useState({
-    name: company?.name ?? '',
-    code: company?.code ?? '',
-    contactPerson: company?.contactPerson ?? '',
-    phone: company?.phone ?? '',
-    email: company?.email ?? '',
-    billingAddress: company?.billingAddress ?? '',
-    gstin: company?.gstin ?? '',
-    notes: company?.notes ?? '',
-    active: company?.active ?? true,
+
+  const {
+    register,
+    handleSubmit,
+    formState: { errors, isSubmitting },
+  } = useForm<CompanyValues>({
+    resolver: zodResolver(companySchema),
+    defaultValues: {
+      name: company?.name ?? '',
+      code: company?.code ?? '',
+      contactPerson: company?.contactPerson ?? '',
+      phone: company?.phone ?? '',
+      email: company?.email ?? '',
+      billingAddress: company?.billingAddress ?? '',
+      gstin: company?.gstin ?? '',
+      notes: company?.notes ?? '',
+      active: company?.active ?? true,
+    },
   })
 
-  function set<K extends keyof typeof form>(k: K, v: (typeof form)[K]) {
-    setForm((f) => ({ ...f, [k]: v }))
-  }
-
-  async function submit() {
+  const submit = handleSubmit(async (values) => {
     try {
       if (company) {
-        await updateCompany.mutateAsync({ id: company.id, patch: form })
+        await updateCompany.mutateAsync({ id: company.id, patch: values })
         toast.success('Company updated')
       } else {
-        await createCompany.mutateAsync(form)
+        await createCompany.mutateAsync(values)
         toast.success('Company created')
       }
       onClose()
     } catch (e) {
       toast.error(toUserMessage(e, 'Save failed'))
     }
-  }
+  })
 
   return (
     <Modal
@@ -196,8 +219,8 @@ function CompanyForm({ company, onClose }: { company: Company | null; onClose: (
           <button className="btn-secondary" onClick={onClose}>
             Cancel
           </button>
-          <button className="btn-primary" onClick={submit} disabled={saving}>
-            {saving ? 'Saving…' : company ? 'Save changes' : 'Create company'}
+          <button className="btn-primary" onClick={submit} disabled={isSubmitting}>
+            {isSubmitting ? 'Saving…' : company ? 'Save changes' : 'Create company'}
           </button>
         </>
       }
@@ -208,47 +231,39 @@ function CompanyForm({ company, onClose }: { company: Company | null; onClose: (
         </p>
       )}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <Field label="Company Name" required className="sm:col-span-2">
-          <Input value={form.name} onChange={(e) => set('name', e.target.value)} autoFocus />
+        <Field label="Company Name" required error={errors.name?.message} className="sm:col-span-2">
+          <Input autoFocus {...register('name')} />
         </Field>
         <Field label="Customer Code" hint="Leave blank to auto-generate">
-          <Input value={form.code} onChange={(e) => set('code', e.target.value)} />
+          <Input {...register('code')} />
         </Field>
         <Field label="Contact Person">
-          <Input
-            value={form.contactPerson}
-            onChange={(e) => set('contactPerson', e.target.value)}
-          />
+          <Input {...register('contactPerson')} />
         </Field>
         <Field label="Phone">
-          <Input value={form.phone} onChange={(e) => set('phone', e.target.value)} />
+          <Input {...register('phone')} />
         </Field>
         <Field label="Email">
-          <Input value={form.email} onChange={(e) => set('email', e.target.value)} />
+          <Input {...register('email')} />
         </Field>
         <Field label="GST / Tax ID">
-          <Input value={form.gstin} onChange={(e) => set('gstin', e.target.value)} />
+          <Input {...register('gstin')} />
         </Field>
         <Field label="Status">
           <label className="flex items-center gap-2 py-2 text-sm text-slate-600">
             <input
               type="checkbox"
-              checked={form.active}
-              onChange={(e) => set('active', e.target.checked)}
               className="h-4 w-4 rounded border-slate-300"
+              {...register('active')}
             />
             Active
           </label>
         </Field>
         <Field label="Billing Address" className="sm:col-span-2">
-          <Textarea
-            rows={2}
-            value={form.billingAddress}
-            onChange={(e) => set('billingAddress', e.target.value)}
-          />
+          <Textarea rows={2} {...register('billingAddress')} />
         </Field>
         <Field label="Notes" className="sm:col-span-2">
-          <Textarea rows={2} value={form.notes} onChange={(e) => set('notes', e.target.value)} />
+          <Textarea rows={2} {...register('notes')} />
         </Field>
       </div>
     </Modal>

@@ -238,6 +238,27 @@ Note: an incidental empty-name company created during testing was deleted via th
 
 Verified: tsc ✓ · next build ✓ · Vite build ✓ · lint 0 errors · live parity check ✓.
 
+## 🚧 Phase 6 — React Hook Form + Zod (IN PROGRESS, pattern established)
+
+### Increment 6.1 — AuthForm + CompanyForm on RHF + zodResolver (DONE)
+
+- **AuthForm** split into `SignInForm`/`SignUpForm`, each `useForm` + `zodResolver`. Schemas encode the previous imperative rules exactly (password ≥ 6 with the same message; sign-up requires full name + email — email now properly format-validated). Errors render inline under fields; server-side failures still toast. Live-verified: sign-out → sign-in → dashboard, browser autofill flows through `register`.
+- **CompanyForm** on RHF + `companySchema` — **closes the empty-name gap found in 5.3**: live-verified that empty submit shows "Company name is required" inline, keeps the dialog open, creates no row.
+- The two previously-dead deps (`react-hook-form`, `@hookform/resolvers`) are now genuinely in use.
+
+### Remaining forms (progressive, per master plan §22 — "DO NOT migrate every form in one operation")
+
+| Form                                                        | Complexity  | Notes                                                                                                                    |
+| ----------------------------------------------------------- | ----------- | ------------------------------------------------------------------------------------------------------------------------ |
+| VendorsPage inline form                                     | Low         | Same pattern as CompanyForm.                                                                                             |
+| ExpensesPage inline form                                    | Low         | Same pattern.                                                                                                            |
+| MaterialForms                                               | Medium      | Multi-form file.                                                                                                         |
+| PaymentForm                                                 | Medium/High | Allocation math — port verbatim into RHF values.                                                                         |
+| JobForm                                                     | High        | Material balance interactions.                                                                                           |
+| InvoiceForm                                                 | Very high   | Line items (useFieldArray), tax/totals — MUST cross-check against computations.ts; do last, with dedicated verification. |
+| SettingsPage forms                                          | Medium      | Several sections.                                                                                                        |
+| DateInput → Popover+Calendar, MultiSelectDropdown → Command | High        | Swap alongside the form that uses them.                                                                                  |
+
 ### Remaining Phase 5 increments (per UI_MIGRATION_MAP.md)
 
 - (deferred from 5.3, High risk → forms phase) Popover+Calendar (DateInput), Command multi-select (MultiSelectDropdown).
