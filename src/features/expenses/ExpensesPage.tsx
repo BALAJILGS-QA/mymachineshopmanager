@@ -10,6 +10,7 @@ import {
 import { useCompanies } from '@/features/companies/hooks/useCompanies'
 import { useJobs } from '@/features/jobs/hooks/useJobs'
 import { useMaterials, useCreateOwnPurchase } from '@/features/materials/hooks/useMaterials'
+import { useVendors } from '@/features/vendors/hooks/useVendors'
 import { useSettings } from '@/features/settings/hooks/useSettings'
 import { usePreviewNo } from '@/features/shared/usePreviewNo'
 import { toUserMessage } from '@/lib/api/errors'
@@ -188,6 +189,8 @@ function ExpenseForm({ expense, onClose }: { expense: Expense | null; onClose: (
   const { data: allMaterials = [] } = useMaterials()
   // A purchase feeds OWN (shop) stock, so only own/shared materials qualify.
   const materials = allMaterials.filter((m) => m.active && !m.companyId)
+  const { data: allVendors = [] } = useVendors()
+  const vendors = allVendors.filter((v) => v.active)
   const expenseNoPreview = usePreviewNo('expense')
   const createExpense = useCreateExpense()
   const updateExpense = useUpdateExpense()
@@ -335,8 +338,22 @@ function ExpenseForm({ expense, onClose }: { expense: Expense | null; onClose: (
           <Field label="Purchase Date" required>
             <Input type="date" value={form.date} onChange={(e) => set('date', e.target.value)} />
           </Field>
-          <Field label="Supplier / Vendor">
-            <Input value={form.vendor} onChange={(e) => set('vendor', e.target.value)} />
+          <Field
+            label="Supplier / Vendor"
+            hint={vendors.length ? 'Pick from the vendor master' : ''}
+          >
+            {vendors.length ? (
+              <Select value={form.vendor} onChange={(e) => set('vendor', e.target.value)}>
+                <option value="">Select vendor…</option>
+                {vendors.map((v) => (
+                  <option key={v.id} value={v.name}>
+                    {v.name}
+                  </option>
+                ))}
+              </Select>
+            ) : (
+              <Input value={form.vendor} onChange={(e) => set('vendor', e.target.value)} />
+            )}
           </Field>
           <Field label="Material" required className="sm:col-span-2">
             <Select value={pur.materialId} onChange={(e) => setP('materialId', e.target.value)}>

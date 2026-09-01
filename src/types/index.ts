@@ -269,6 +269,65 @@ export interface AuditLog {
   actor?: string
 }
 
+// ---- Supply chain / subcontracting -----------------------------------------
+
+// A supplier / subcontractor. Also used as the supplier for own-material buys.
+export interface Vendor extends AuditFields {
+  id: ID
+  code: string
+  name: string
+  gstin?: string
+  phone?: string
+  email?: string
+  address?: string
+  active: boolean
+  notes?: string
+}
+
+export type SubcontractStatus = 'Open' | 'Sent' | 'Partially Received' | 'Received'
+
+// A quantity of a material (customer- or shop-owned) sent to a vendor for job
+// work. Quantities track the round trip; "at vendor" = sentQty - receivedQty -
+// rejectedQty (derived).
+export interface SubcontractOrder extends AuditFields {
+  id: ID
+  scNo: string
+  date: ISODate
+  vendorId: ID
+  materialId: ID
+  ownerType: MaterialOwnerType
+  companyId?: ID // when ownerType === 'Company'
+  jobId?: ID
+  process?: string
+  unit: string
+  sentQty: number
+  receivedQty: number
+  rejectedQty: number
+  status: SubcontractStatus
+  notes?: string
+}
+
+export type SubcontractDocDirection = 'OUT' | 'IN'
+export type SubcontractDocKind = 'DC' | 'INVOICE'
+
+// The paperwork for a subcontract: our outward delivery challan (OUT) and the
+// vendor's return challan / job-work invoice (IN).
+export interface SubcontractDoc extends AuditFields {
+  id: ID
+  docNo: string
+  scId: ID
+  direction: SubcontractDocDirection
+  docKind: SubcontractDocKind
+  vendorRef?: string
+  date: ISODate
+  quantity: number
+  rejected: number
+  unit: string
+  amount?: number // job-work charge on a vendor invoice
+  expenseId?: ID
+  notes?: string
+}
+
 export interface Settings {
   currency: string
   currencySymbol: string

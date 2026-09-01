@@ -54,4 +54,12 @@ export const qk = {
     all: ['products'] as const,
     detail: (id: string) => ['products', id] as const,
   },
+  vendors: {
+    all: ['vendors'] as const,
+    detail: (id: string) => ['vendors', id] as const,
+  },
+  subcontracts: {
+    all: ['subcontracts'] as const,
+    docs: (scId: string) => ['subcontracts', 'docs', scId] as const,
+  },
 } as const

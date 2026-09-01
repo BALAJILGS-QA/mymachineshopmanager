@@ -27,6 +27,9 @@ import { Route as AppProductionPlanningRouteImport } from './routes/app/producti
 import { Route as AppReportsRouteImport } from './routes/app/reports'
 import { Route as AppSalesRouteImport } from './routes/app/sales'
 import { Route as AppSettingsRouteImport } from './routes/app/settings'
+import { Route as AppSubcontractingRouteImport } from './routes/app/subcontracting'
+import { Route as AppSupplyChainRouteImport } from './routes/app/supply-chain'
+import { Route as AppVendorsRouteImport } from './routes/app/vendors'
 import { Route as BlogIndexRouteImport } from './routes/blog/index'
 import { Route as BlogSlugRouteImport } from './routes/blog/$slug'
 import { Route as AppDeliveriesIndexRouteImport } from './routes/app/deliveries/index'
@@ -124,6 +127,21 @@ const AppSettingsRoute = AppSettingsRouteImport.update({
   path: '/settings',
   getParentRoute: () => AppRouteRoute,
 } as any)
+const AppSubcontractingRoute = AppSubcontractingRouteImport.update({
+  id: '/subcontracting',
+  path: '/subcontracting',
+  getParentRoute: () => AppRouteRoute,
+} as any)
+const AppSupplyChainRoute = AppSupplyChainRouteImport.update({
+  id: '/supply-chain',
+  path: '/supply-chain',
+  getParentRoute: () => AppRouteRoute,
+} as any)
+const AppVendorsRoute = AppVendorsRouteImport.update({
+  id: '/vendors',
+  path: '/vendors',
+  getParentRoute: () => AppRouteRoute,
+} as any)
 const BlogIndexRoute = BlogIndexRouteImport.update({
   id: '/blog/',
   path: '/blog/',
@@ -173,6 +191,9 @@ export interface FileRoutesByFullPath {
   '/app/reports': typeof AppReportsRoute
   '/app/sales': typeof AppSalesRoute
   '/app/settings': typeof AppSettingsRoute
+  '/app/subcontracting': typeof AppSubcontractingRoute
+  '/app/supply-chain': typeof AppSupplyChainRoute
+  '/app/vendors': typeof AppVendorsRoute
   '/blog/$slug': typeof BlogSlugRoute
   '/app/': typeof AppIndexRoute
   '/blog/': typeof BlogIndexRoute
@@ -198,6 +219,9 @@ export interface FileRoutesByTo {
   '/app/reports': typeof AppReportsRoute
   '/app/sales': typeof AppSalesRoute
   '/app/settings': typeof AppSettingsRoute
+  '/app/subcontracting': typeof AppSubcontractingRoute
+  '/app/supply-chain': typeof AppSupplyChainRoute
+  '/app/vendors': typeof AppVendorsRoute
   '/blog/$slug': typeof BlogSlugRoute
   '/app': typeof AppIndexRoute
   '/blog': typeof BlogIndexRoute
@@ -225,6 +249,9 @@ export interface FileRoutesById {
   '/app/reports': typeof AppReportsRoute
   '/app/sales': typeof AppSalesRoute
   '/app/settings': typeof AppSettingsRoute
+  '/app/subcontracting': typeof AppSubcontractingRoute
+  '/app/supply-chain': typeof AppSupplyChainRoute
+  '/app/vendors': typeof AppVendorsRoute
   '/blog/$slug': typeof BlogSlugRoute
   '/app/': typeof AppIndexRoute
   '/blog/': typeof BlogIndexRoute
@@ -253,6 +280,9 @@ export interface FileRouteTypes {
     | '/app/reports'
     | '/app/sales'
     | '/app/settings'
+    | '/app/subcontracting'
+    | '/app/supply-chain'
+    | '/app/vendors'
     | '/blog/$slug'
     | '/app/'
     | '/blog/'
@@ -278,6 +308,9 @@ export interface FileRouteTypes {
     | '/app/reports'
     | '/app/sales'
     | '/app/settings'
+    | '/app/subcontracting'
+    | '/app/supply-chain'
+    | '/app/vendors'
     | '/blog/$slug'
     | '/app'
     | '/blog'
@@ -304,6 +337,9 @@ export interface FileRouteTypes {
     | '/app/reports'
     | '/app/sales'
     | '/app/settings'
+    | '/app/subcontracting'
+    | '/app/supply-chain'
+    | '/app/vendors'
     | '/blog/$slug'
     | '/app/'
     | '/blog/'
@@ -450,6 +486,27 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppSettingsRouteImport
       parentRoute: typeof AppRouteRoute
     }
+    '/app/subcontracting': {
+      id: '/app/subcontracting'
+      path: '/subcontracting'
+      fullPath: '/app/subcontracting'
+      preLoaderRoute: typeof AppSubcontractingRouteImport
+      parentRoute: typeof AppRouteRoute
+    }
+    '/app/supply-chain': {
+      id: '/app/supply-chain'
+      path: '/supply-chain'
+      fullPath: '/app/supply-chain'
+      preLoaderRoute: typeof AppSupplyChainRouteImport
+      parentRoute: typeof AppRouteRoute
+    }
+    '/app/vendors': {
+      id: '/app/vendors'
+      path: '/vendors'
+      fullPath: '/app/vendors'
+      preLoaderRoute: typeof AppVendorsRouteImport
+      parentRoute: typeof AppRouteRoute
+    }
     '/blog/': {
       id: '/blog/'
       path: '/blog'
@@ -509,6 +566,9 @@ interface AppRouteRouteChildren {
   AppReportsRoute: typeof AppReportsRoute
   AppSalesRoute: typeof AppSalesRoute
   AppSettingsRoute: typeof AppSettingsRoute
+  AppSubcontractingRoute: typeof AppSubcontractingRoute
+  AppSupplyChainRoute: typeof AppSupplyChainRoute
+  AppVendorsRoute: typeof AppVendorsRoute
   AppIndexRoute: typeof AppIndexRoute
   AppDeliveriesIndexRoute: typeof AppDeliveriesIndexRoute
   AppInvoicesIndexRoute: typeof AppInvoicesIndexRoute
@@ -530,6 +590,9 @@ const AppRouteRouteChildren: AppRouteRouteChildren = {
   AppReportsRoute: AppReportsRoute,
   AppSalesRoute: AppSalesRoute,
   AppSettingsRoute: AppSettingsRoute,
+  AppSubcontractingRoute: AppSubcontractingRoute,
+  AppSupplyChainRoute: AppSupplyChainRoute,
+  AppVendorsRoute: AppVendorsRoute,
   AppIndexRoute: AppIndexRoute,
   AppDeliveriesIndexRoute: AppDeliveriesIndexRoute,
   AppInvoicesIndexRoute: AppInvoicesIndexRoute,

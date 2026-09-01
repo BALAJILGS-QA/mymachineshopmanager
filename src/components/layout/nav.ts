@@ -8,6 +8,8 @@ import {
   Wallet,
   ShoppingCart,
   TrendingUp,
+  Handshake,
+  ArrowLeftRight,
   BarChart3,
   Building2,
   ShieldCheck,
@@ -58,6 +60,19 @@ export const NAV_GROUPS: NavGroup[] = [
       { to: '/app/deliveries', label: 'Delivery Challan', icon: Truck, short: 'Challan' },
       { to: '/app/invoices', label: 'Invoices', icon: FileText, short: 'Invoices' },
       { to: '/app/payments', label: 'Payments', icon: Wallet, short: 'Pay' },
+    ],
+  },
+  {
+    title: 'Supply Chain',
+    to: '/app/supply-chain',
+    items: [
+      { to: '/app/vendors', label: 'Vendors', icon: Handshake, short: 'Vendors' },
+      {
+        to: '/app/subcontracting',
+        label: 'Subcontracting',
+        icon: ArrowLeftRight,
+        short: 'Job Work',
+      },
     ],
   },
   {
