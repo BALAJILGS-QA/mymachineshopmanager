@@ -58,7 +58,14 @@ export default tseslint.config(
   // Node-side files (build scripts, e2e specs, config) — allow node globals and
   // console output.
   {
-    files: ['scripts/**/*.mjs', 'e2e/**/*.ts', 'vite.config.ts', 'vitest.config.ts'],
+    files: [
+      'scripts/**/*.mjs',
+      'e2e/**/*.ts',
+      'vite.config.ts',
+      'vitest.config.ts',
+      'next.config.mjs',
+      'playwright*.config.ts',
+    ],
     languageOptions: { globals: { ...globals.node } },
     rules: { 'no-console': 'off' },
   },

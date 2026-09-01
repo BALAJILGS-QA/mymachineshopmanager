@@ -1,28 +1,29 @@
-/* Marketing / auth site — light gradient theme. Scoped under .site so it never
+/* Marketing / auth site — light warm theme. Scoped under .site so it never
    touches the internal app's own styling. Blog & landing read these variables,
-   so re-theming happens centrally here. */
+   so re-theming happens centrally here. MSM rebrand: white + charcoal +
+   industrial orange. */
 
 .site {
-  --ink: #1c2610;
-  --ink-dim: #55603f;
-  --ink-faint: #97a37f;
-  --bg: #f4f9e9;
-  --bg-2: #ecf3da;
+  --ink: #1f2430;
+  --ink-dim: #57534e;
+  --ink-faint: #a8a29e;
+  --bg: #faf9f7;
+  --bg-2: #f5f4f1;
   --surface: #ffffff;
-  --line: #e0e9cc;
-  --amber: #5f7d00; /* apple-green accent, readable on light */
-  --amber-soft: #739400;
-  --steel: #4d7c0f;
-  --brand: #739400;
+  --line: #e7e5e4;
+  --amber: #c2410c; /* industrial orange accent, readable on light */
+  --amber-soft: #ea580c;
+  --steel: #9a3412;
+  --brand: #ea580c;
 
   color: var(--ink);
   font-family: 'IBM Plex Sans', system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
   background:
-    radial-gradient(52% 42% at 12% -4%, rgba(141, 182, 0, 0.20), transparent 60%),
-    radial-gradient(48% 40% at 104% 6%, rgba(115, 148, 0, 0.16), transparent 60%),
-    radial-gradient(60% 50% at 50% 108%, rgba(164, 209, 58, 0.14), transparent 60%),
-    linear-gradient(180deg, #f7fbec 0%, #eaf3d9 100%);
+    radial-gradient(52% 42% at 12% -4%, rgba(234, 88, 12, 0.14), transparent 60%),
+    radial-gradient(48% 40% at 104% 6%, rgba(194, 65, 12, 0.1), transparent 60%),
+    radial-gradient(60% 50% at 50% 108%, rgba(251, 146, 60, 0.1), transparent 60%),
+    linear-gradient(180deg, #fbfaf8 0%, #f3f1ee 100%);
   background-attachment: fixed;
 }
 
@@ -43,7 +44,7 @@
 
 /* Gradient text accent for key words */
 .site .grad {
-  background: linear-gradient(100deg, #587200, #8db600 50%, #a4d13a);
+  background: linear-gradient(100deg, #c2410c, #ea580c 50%, #fb923c);
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
@@ -52,12 +53,12 @@
 /* Faint precision grid on light */
 .blueprint {
   background-image:
-    linear-gradient(rgba(115, 148, 0, 0.07) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(115, 148, 0, 0.07) 1px, transparent 1px);
+    linear-gradient(rgba(234, 88, 12, 0.06) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(234, 88, 12, 0.06) 1px, transparent 1px);
   background-size: 34px 34px;
 }
 .glow-amber {
-  background: radial-gradient(60% 60% at 50% 0%, rgba(141, 182, 0, 0.18), transparent 70%);
+  background: radial-gradient(60% 60% at 50% 0%, rgba(234, 88, 12, 0.12), transparent 70%);
 }
 .grain::before {
   content: none;
@@ -65,31 +66,62 @@
 
 /* Entrance animation with stagger */
 @keyframes rise {
-  from { opacity: 0; transform: translateY(18px); }
-  to { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(18px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 .site .rise {
   opacity: 0;
   animation: rise 0.7s cubic-bezier(0.22, 1, 0.36, 1) forwards;
 }
-.site .d1 { animation-delay: 0.05s; }
-.site .d2 { animation-delay: 0.15s; }
-.site .d3 { animation-delay: 0.25s; }
-.site .d4 { animation-delay: 0.35s; }
-.site .d5 { animation-delay: 0.45s; }
-.site .d6 { animation-delay: 0.55s; }
+.site .d1 {
+  animation-delay: 0.05s;
+}
+.site .d2 {
+  animation-delay: 0.15s;
+}
+.site .d3 {
+  animation-delay: 0.25s;
+}
+.site .d4 {
+  animation-delay: 0.35s;
+}
+.site .d5 {
+  animation-delay: 0.45s;
+}
+.site .d6 {
+  animation-delay: 0.55s;
+}
 
 .reveal {
   opacity: 0;
   transform: translateY(22px);
-  transition: opacity 0.6s ease, transform 0.6s cubic-bezier(0.22, 1, 0.36, 1);
+  transition:
+    opacity 0.6s ease,
+    transform 0.6s cubic-bezier(0.22, 1, 0.36, 1);
 }
-.reveal.in { opacity: 1; transform: none; }
+.reveal.in {
+  opacity: 1;
+  transform: none;
+}
 
-@keyframes spin-slow { to { transform: rotate(360deg); } }
-.spin-slow { animation: spin-slow 26s linear infinite; }
+@keyframes spin-slow {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.spin-slow {
+  animation: spin-slow 26s linear infinite;
+}
 
-.site a { color: inherit; }
+.site a {
+  color: inherit;
+}
 
 .site-btn {
   display: inline-flex;
@@ -99,24 +131,44 @@
   padding: 0.72rem 1.2rem;
   font-weight: 600;
   font-size: 0.92rem;
-  transition: transform 0.15s ease, box-shadow 0.2s ease, background 0.2s ease, border-color 0.2s ease;
+  transition:
+    transform 0.15s ease,
+    box-shadow 0.2s ease,
+    background 0.2s ease,
+    border-color 0.2s ease;
 }
-.site-btn:active { transform: translateY(1px); }
+.site-btn:active {
+  transform: translateY(1px);
+}
 .site-btn-primary {
-  background: linear-gradient(135deg, #a4d13a, #739400 55%, #8db600);
-  color: #1c2610;
-  box-shadow: 0 12px 28px -12px rgba(115, 148, 0, 0.6);
+  background: linear-gradient(135deg, #fb923c, #c2410c 55%, #ea580c);
+  color: #ffffff;
+  box-shadow: 0 12px 28px -12px rgba(194, 65, 12, 0.6);
 }
-.site-btn-primary:hover { box-shadow: 0 16px 34px -12px rgba(115, 148, 0, 0.78); }
+.site-btn-primary:hover {
+  box-shadow: 0 16px 34px -12px rgba(194, 65, 12, 0.78);
+}
 .site-btn-ghost {
   border: 1px solid var(--line);
   background: rgba(255, 255, 255, 0.7);
   color: var(--ink);
 }
-.site-btn-ghost:hover { border-color: var(--amber); color: var(--amber); }
+.site-btn-ghost:hover {
+  border-color: var(--amber);
+  color: var(--amber);
+}
 
-.hair { border-color: var(--line); }
+.hair {
+  border-color: var(--line);
+}
 
 @media (prefers-reduced-motion: reduce) {
-  .site .rise, .reveal, .spin-slow { animation: none !important; transition: none !important; opacity: 1 !important; transform: none !important; }
+  .site .rise,
+  .reveal,
+  .spin-slow {
+    animation: none !important;
+    transition: none !important;
+    opacity: 1 !important;
+    transform: none !important;
+  }
 }

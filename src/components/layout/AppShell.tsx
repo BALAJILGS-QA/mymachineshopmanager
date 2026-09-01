@@ -24,8 +24,8 @@ import type { ReactNode } from 'react'
 const NAV_BASE =
   'relative flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors'
 const NAV_ACTIVE =
-  'bg-brand-50 text-brand-800 font-semibold before:absolute before:left-0 before:top-1/2 before:h-5 before:w-1 before:-translate-y-1/2 before:rounded-r-full before:bg-brand-600'
-const NAV_INACTIVE = 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+  'bg-brand-600/15 text-brand-400 font-semibold before:absolute before:left-0 before:top-1/2 before:h-5 before:w-1 before:-translate-y-1/2 before:rounded-r-full before:bg-brand-500'
+const NAV_INACTIVE = 'text-charcoal-100/70 hover:bg-white/5 hover:text-white'
 
 function PendingPill({ count }: { count: number }) {
   return (
@@ -108,7 +108,7 @@ function Brand({ collapsed }: { collapsed?: boolean }) {
   return (
     <div
       className={clsx(
-        'flex items-center gap-2.5 border-b border-slate-100 py-4',
+        'flex items-center gap-2.5 border-b border-charcoal-700 py-4',
         collapsed ? 'justify-center px-2' : 'px-4',
       )}
     >
@@ -116,11 +116,11 @@ function Brand({ collapsed }: { collapsed?: boolean }) {
         src={logoSrc}
         alt={`${company.name} logo`}
         title={collapsed ? company.name : undefined}
-        className="h-[36px] w-[36px] shrink-0 rounded-[26%] object-contain ring-1 ring-slate-200"
+        className="h-[36px] w-[36px] shrink-0 rounded-[26%] bg-white object-contain ring-1 ring-charcoal-600"
       />
       {/* Only the configured shop-profile name — no product tagline. */}
       {!collapsed && (
-        <p className="truncate text-sm font-bold leading-tight text-slate-900">{company.name}</p>
+        <p className="truncate text-sm font-bold leading-tight text-white">{company.name}</p>
       )}
     </div>
   )
@@ -188,7 +188,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       {/* Desktop sidebar */}
       <aside
         className={clsx(
-          'fixed inset-y-0 left-0 z-30 hidden flex-col border-r border-slate-200 bg-white transition-[width] duration-200 lg:flex',
+          'fixed inset-y-0 left-0 z-30 hidden flex-col border-r border-charcoal-800 bg-charcoal-900 transition-[width] duration-200 lg:flex',
           collapsed ? 'w-16' : 'w-60',
         )}
       >
@@ -202,7 +202,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         {/* Collapse toggle pinned to the foot of the rail. */}
         <button
           onClick={toggleCollapsed}
-          className="flex items-center gap-2 border-t border-slate-100 px-3 py-2.5 text-sm font-medium text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-800"
+          className="flex items-center gap-2 border-t border-charcoal-700 px-3 py-2.5 text-sm font-medium text-charcoal-400 transition-colors hover:bg-white/5 hover:text-white"
           title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
           aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
         >
@@ -221,11 +221,11 @@ export function AppShell({ children }: { children: ReactNode }) {
       {drawerOpen && (
         <div className="fixed inset-0 z-40 lg:hidden">
           <div className="absolute inset-0 bg-slate-900/40" onClick={() => setDrawerOpen(false)} />
-          <aside className="absolute inset-y-0 left-0 flex w-64 flex-col bg-white shadow-xl">
+          <aside className="absolute inset-y-0 left-0 flex w-64 flex-col bg-charcoal-900 shadow-xl">
             <div className="flex items-center justify-between">
               <Brand />
               <button
-                className="mr-3 rounded-md p-1.5 text-slate-500 hover:bg-slate-100"
+                className="mr-3 rounded-md p-1.5 text-charcoal-400 hover:bg-white/5 hover:text-white"
                 onClick={() => setDrawerOpen(false)}
               >
                 <X size={20} />
@@ -237,8 +237,11 @@ export function AppShell({ children }: { children: ReactNode }) {
               activeGroupTitle={activeGroup?.title}
               onNavigate={() => setDrawerOpen(false)}
             />
-            <div className="border-t border-slate-100 p-3">
-              <button onClick={logout} className="btn-secondary w-full">
+            <div className="border-t border-charcoal-700 p-3">
+              <button
+                onClick={logout}
+                className="btn flex w-full items-center justify-center border border-charcoal-600 text-charcoal-100 hover:bg-white/5"
+              >
                 <LogOut size={16} /> Sign out
               </button>
             </div>

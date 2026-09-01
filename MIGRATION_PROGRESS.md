@@ -182,6 +182,35 @@ Verification (all green): Vite `tsc` ✓ · Vitest 26/26 ✓ · Vite SPA build �
 - **Production flips to Next.js only when `dev` is merged to `main`** (config + code travel together — atomic cutover). Verify the preview URL first.
 - Netlify (`netlify.toml`) still builds the Vite SSR app — decide at cleanup whether to retire or repoint it.
 
+## 🚧 Phase 5 — premium design system (IN PROGRESS)
+
+### Increment 5.1 — shadcn foundation + industrial rebrand (DONE)
+
+**shadcn/ui scaffolding** (manual init — deterministic diff, CLI-ready):
+
+- deps: `tailwind-merge`, `class-variance-authority`, `tailwindcss-animate`.
+- `components.json` (style new-york; ui alias → `@/components/ui/shadcn` so generated components never collide with the existing hand-written `ui/*`).
+- `src/lib/utils.ts` — canonical `cn()`.
+- shadcn theme tokens (HSL vars) in `src/index.css` `:root` + canonical token colours (`border/input/ring/background/primary/…`) and `tailwindcss-animate` in `tailwind.config.js`. `--primary` = industrial orange; light theme.
+
+**MSM rebrand — white + charcoal + industrial orange (§16), one central token swap:**
+
+- `brand.*` Tailwind scale: apple-green → industrial orange (50 `#fff7ed` … 900 `#7c2d12`; action = 600 `#ea580c`). Every existing `brand-*` class (buttons, active nav, focus rings, KPI tints) rebrands automatically. New `charcoal.*` scale for navigation surfaces.
+- `src/index.css`: `--brand/--brand-hover/--brand-soft` → orange; `--ink` → charcoal `#1f2430`; gradient/ring utilities → orange.
+- **Charcoal sidebar** in BOTH shells (Next `app/_shell/app-shell.tsx` + Vite `AppShell.tsx`): `bg-charcoal-900` rail + mobile drawer, white brand text, `text-charcoal-100/70` inactive links, orange active state (15% orange tint + `text-brand-400` + orange left bar). Top bar/workspace stay white (orange must not dominate).
+- Marketing site (`site.css`): green palette → warm neutrals + orange accents (`--amber #c2410c`, buttons orange-gradient/white text, blueprint grid + glows re-tinted).
+- `Logo.tsx`: tile gradient → orange (`#fb923c→#ea580c→#7c2d12`), tooling edge → charcoal.
+- Dashboard chart colours (PIE/Bar greens → orange family), `theme-color` meta `#ea580c` (both roots), AuthForm glow lime→orange.
+
+Verification: Vite `tsc` ✓ · Vite build ✓ · `next build` ✓ (30 pages) · site.spec 3/3 on rebranded build ✓ · **rebranded dashboard verified in-browser (authenticated)**: charcoal rail + orange active nav + white workspace + orange chart accents, 0 console errors.
+
+### Remaining Phase 5 increments (per UI_MIGRATION_MAP.md)
+
+- 5.2 shadcn primitives (Button/Input/Label/Select/Textarea/Badge/Card/Skeleton) with adapters preserving existing APIs.
+- 5.3 overlays: Dialog (Modal), AlertDialog (ConfirmDialog, keep `useConfirm`), Sonner (keep `useToast`), Popover+Calendar (DateInput), Command multi-select.
+- 5.4 shared DataTable + ERP components (PageHeader/FilterBar/StatusBadge/SummaryCard…), module-by-module rollout.
+- 5.5 accessibility + polish pass.
+
 ### Next phases
 
 - **Phase 4 (per master plan): deployment cutover decision + E2E repoint** — point `playwright.config.ts` at the Next server, run the full suite, then flip Vercel to the Next build.

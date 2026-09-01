@@ -21,9 +21,9 @@ export function Logo({ size = 40, className }: { size?: number; className?: stri
     >
       <defs>
         <linearGradient id={g} x1="6" y1="4" x2="58" y2="60" gradientUnits="userSpaceOnUse">
-          <stop stopColor="#a4d13a" />
-          <stop offset="0.55" stopColor="#8db600" />
-          <stop offset="1" stopColor="#4f6a00" />
+          <stop stopColor="#fb923c" />
+          <stop offset="0.55" stopColor="#ea580c" />
+          <stop offset="1" stopColor="#7c2d12" />
         </linearGradient>
         <linearGradient id={sheen} x1="32" y1="4" x2="32" y2="34" gradientUnits="userSpaceOnUse">
           <stop stopColor="#ffffff" stopOpacity="0.28" />
@@ -65,8 +65,8 @@ export function Logo({ size = 40, className }: { size?: number; className?: stri
         MSM
       </text>
 
-      {/* amber tooling edge */}
-      <rect x="21" y="46.5" width="22" height="3" rx="1.5" fill="#f4b400" />
+      {/* charcoal tooling edge — machined-steel cue against the orange tile */}
+      <rect x="21" y="46.5" width="22" height="3" rx="1.5" fill="#1a1d23" fillOpacity="0.85" />
     </svg>
   )
 }

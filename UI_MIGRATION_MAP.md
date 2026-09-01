@@ -1,6 +1,6 @@
 # UI_MIGRATION_MAP.md — custom UI → shadcn/ui + Radix
 
-> Status: **PLAN ONLY — no components migrated yet.** All rows `Pending`.
+> Status: **Foundation + rebrand DONE (Phase 5.1).** shadcn scaffolding in place; component-by-component migration in progress.
 > Current state: **no shadcn/ui, no Radix, no `components.json`** (0 `@radix-ui/*` in the lockfile). All primitives are hand-written Tailwind components. Brand is **apple-green**; target direction is **white + charcoal + industrial orange + Lucide**.
 > Rule: wrap Radix primitives in reusable app components (don't scatter raw Radix through business code). Search before creating — reuse the existing component's props/behaviour; preserve accessibility and keyboard behaviour.
 

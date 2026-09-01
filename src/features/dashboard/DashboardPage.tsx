@@ -55,7 +55,7 @@ import {
   YAxis,
 } from 'recharts'
 
-const PIE_COLORS = ['#8db600', '#f59e0b', '#0ea5e9', '#ef4444', '#587200', '#a855f7', '#a4d13a']
+const PIE_COLORS = ['#ea580c', '#f59e0b', '#0ea5e9', '#ef4444', '#9a3412', '#a855f7', '#fb923c']
 
 function lastMonths(n: number) {
   const months: { key: string; label: string }[] = []
@@ -385,8 +385,8 @@ export function DashboardPage() {
             <YAxis tick={{ fontSize: 11 }} tickLine={false} axisLine={false} width={48} />
             <Tooltip formatter={(v: number) => currency(v)} />
             <Legend wrapperStyle={{ fontSize: 12 }} />
-            <Bar dataKey="invoiced" name="Invoiced" fill="#a4d13a" radius={[3, 3, 0, 0]} />
-            <Bar dataKey="received" name="Received" fill="#587200" radius={[3, 3, 0, 0]} />
+            <Bar dataKey="invoiced" name="Invoiced" fill="#fb923c" radius={[3, 3, 0, 0]} />
+            <Bar dataKey="received" name="Received" fill="#9a3412" radius={[3, 3, 0, 0]} />
           </BarChart>
         </ChartCard>
         <ChartCard
@@ -424,7 +424,7 @@ export function DashboardPage() {
             <XAxis dataKey="label" tick={{ fontSize: 11 }} tickLine={false} axisLine={false} />
             <YAxis tick={{ fontSize: 11 }} tickLine={false} axisLine={false} width={44} />
             <Tooltip formatter={(v: number) => qty(v)} />
-            <Bar dataKey="qty" name="Dispatched" fill="#739400" radius={[3, 3, 0, 0]} />
+            <Bar dataKey="qty" name="Dispatched" fill="#c2410c" radius={[3, 3, 0, 0]} />
           </BarChart>
         </ChartCard>
         <ChartCard title="Cash flow: Payments vs Expenses (6 months)">
@@ -434,7 +434,7 @@ export function DashboardPage() {
             <YAxis tick={{ fontSize: 11 }} tickLine={false} axisLine={false} width={48} />
             <Tooltip formatter={(v: number) => currency(v)} />
             <Legend wrapperStyle={{ fontSize: 12 }} />
-            <Bar dataKey="payments" name="Payments" fill="#8db600" radius={[3, 3, 0, 0]} />
+            <Bar dataKey="payments" name="Payments" fill="#ea580c" radius={[3, 3, 0, 0]} />
             <Bar dataKey="expenses" name="Expenses" fill="#f59e0b" radius={[3, 3, 0, 0]} />
           </BarChart>
         </ChartCard>

@@ -7,26 +7,54 @@
     color-scheme: light;
 
     /* ---- Design tokens — the single source of truth for the app palette.
-       Premium Industrial: neutral cool workspace, white surfaces, restrained
-       green reserved for primary actions / active / positive states. ---- */
-    --canvas: #f7f9fc; /* application background */
+       Premium Industrial (MSM rebrand): white workspace, charcoal navigation,
+       restrained industrial orange reserved for primary actions / active /
+       highlight states. ---- */
+    --canvas: #f7f8fa; /* application background */
     --surface: #ffffff; /* cards / panels */
     --surface-muted: #f8fafc; /* table header / subtle fills */
     --line: #e2e8f0; /* default border */
     --line-strong: #cbd5e1; /* emphasised border */
-    --ink: #172033; /* headings */
+    --ink: #1f2430; /* headings */
     --ink-body: #1e293b; /* body text */
     --ink-muted: #64748b; /* secondary text */
 
-    --brand: #739400; /* primary action (solid) */
-    --brand-hover: #587200;
-    --brand-soft: #eef6d2; /* active nav / selected tint */
+    --brand: #ea580c; /* primary action (solid, industrial orange) */
+    --brand-hover: #c2410c;
+    --brand-soft: #ffedd5; /* active nav / selected tint */
+
+    /* Charcoal navigation surfaces (sidebar / rails). */
+    --charcoal: #1a1d23;
+    --charcoal-line: #32363f;
 
     /* Elevation — subtle, neutral (no coloured/neon shadows). */
     --shadow-card: 0 1px 2px rgba(16, 24, 40, 0.04);
     --shadow-pop: 0 4px 6px -2px rgba(16, 24, 40, 0.06), 0 12px 20px -8px rgba(16, 24, 40, 0.12);
     --shadow-dialog:
       0 10px 15px -3px rgba(16, 24, 40, 0.1), 0 24px 48px -12px rgba(16, 24, 40, 0.24);
+
+    /* ---- shadcn/ui theme variables (HSL triplets; consumed by the shadcn
+       token colours in tailwind.config.js). Light theme only. ---- */
+    --background: 0 0% 100%;
+    --foreground: 222 22% 15%;
+    --card: 0 0% 100%;
+    --card-foreground: 222 22% 15%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 222 22% 15%;
+    --primary: 21 90% 48%; /* industrial orange (#ea580c) */
+    --primary-foreground: 0 0% 100%;
+    --secondary: 220 14% 96%;
+    --secondary-foreground: 222 22% 15%;
+    --muted: 220 14% 96%;
+    --muted-foreground: 215 16% 47%;
+    --accent: 24 100% 95%;
+    --accent-foreground: 15 75% 28%;
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 214 32% 91%;
+    --input: 213 27% 84%;
+    --ring: 21 90% 48%;
+    --radius: 0.5rem;
   }
   html,
   body,
@@ -109,21 +137,21 @@
 }
 
 @layer utilities {
-  /* Apple-green gradient fills + gradient text for headings and accents. */
+  /* Industrial-orange gradient fills + gradient text for headings and accents. */
   .bg-brand-gradient {
-    background-image: linear-gradient(135deg, #a4d13a 0%, #8db600 45%, #587200 100%);
+    background-image: linear-gradient(135deg, #fb923c 0%, #ea580c 45%, #9a3412 100%);
   }
   .bg-brand-soft {
-    background-image: linear-gradient(135deg, #f5fbe7 0%, #e8f6c6 100%);
+    background-image: linear-gradient(135deg, #fff7ed 0%, #ffedd5 100%);
   }
   .text-gradient-brand {
-    background-image: linear-gradient(120deg, #739400 0%, #8db600 40%, #465a09 100%);
+    background-image: linear-gradient(120deg, #c2410c 0%, #ea580c 40%, #7c2d12 100%);
     -webkit-background-clip: text;
     background-clip: text;
     color: transparent;
   }
   .ring-brand-soft {
-    box-shadow: 0 0 0 1px rgba(141, 182, 0, 0.35);
+    box-shadow: 0 0 0 1px rgba(234, 88, 12, 0.35);
   }
 }
 

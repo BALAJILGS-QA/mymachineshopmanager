@@ -99,7 +99,7 @@ export function AuthForm({ onAuthenticated }: { onAuthenticated: () => void }) {
 
   if (session) {
     return (
-      <div className="rounded-2xl border border-[var(--line)] bg-white/90 p-8 text-center shadow-xl shadow-lime-900/10 backdrop-blur">
+      <div className="rounded-2xl border border-[var(--line)] bg-white/90 p-8 text-center shadow-xl shadow-orange-900/10 backdrop-blur">
         <Logo size={48} className="mx-auto mb-3 rounded-[28%] shadow-sm" />
         <p className="text-sm text-slate-500">Signed in as</p>
         <p className="font-semibold text-slate-800">{session.username}</p>
@@ -115,7 +115,7 @@ export function AuthForm({ onAuthenticated }: { onAuthenticated: () => void }) {
     return (
       <div
         id="access"
-        className="rounded-2xl border border-[var(--line)] bg-white/90 p-7 text-center shadow-xl shadow-lime-900/10 backdrop-blur"
+        className="rounded-2xl border border-[var(--line)] bg-white/90 p-7 text-center shadow-xl shadow-orange-900/10 backdrop-blur"
       >
         <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-xl bg-emerald-100 text-emerald-700">
           <CheckCircle2 size={24} />
@@ -135,7 +135,7 @@ export function AuthForm({ onAuthenticated }: { onAuthenticated: () => void }) {
   return (
     <div
       id="access"
-      className="max-h-[80vh] overflow-y-auto rounded-2xl border border-[var(--line)] bg-white/90 p-6 shadow-xl shadow-lime-900/10 backdrop-blur sm:p-7"
+      className="max-h-[80vh] overflow-y-auto rounded-2xl border border-[var(--line)] bg-white/90 p-6 shadow-xl shadow-orange-900/10 backdrop-blur sm:p-7"
     >
       <div className="mb-4 flex items-center gap-2.5 border-b border-slate-100 pb-4">
         <Logo size={44} className="shrink-0 rounded-[28%] shadow-sm" />

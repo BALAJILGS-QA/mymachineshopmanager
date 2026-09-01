@@ -28,7 +28,7 @@ export const Route = createRootRouteWithContext<RouterContext>()({
     meta: [
       { charSet: 'utf-8' },
       { name: 'viewport', content: 'width=device-width, initial-scale=1.0, maximum-scale=5.0' },
-      { name: 'theme-color', content: '#8db600' },
+      { name: 'theme-color', content: '#ea580c' },
       { title: 'Machine Shop Management — Job Orders, Invoices & Delivery Challans' },
       {
         name: 'description',
