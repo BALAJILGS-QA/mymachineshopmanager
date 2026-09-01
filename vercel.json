@@ -1,6 +1,5 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "buildCommand": "npx next build",
   "framework": "nextjs",
   "trailingSlash": false,
   "github": { "silent": true }

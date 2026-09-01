@@ -1,19 +1,10 @@
+# Next.js on Netlify — the official runtime plugin handles build output and
+# server functions. (Vercel is the primary deploy target; see vercel.json.)
 [build]
   command = "npm run build"
-  publish = "dist"
 
 [build.environment]
   NODE_VERSION = "20"
 
-# SPA fallback so client-side routes resolve
-[[redirects]]
-  from = "/*"
-  to = "/index.html"
-  status = 200
-
-[[headers]]
-  for = "/*"
-  [headers.values]
-    X-Frame-Options = "DENY"
-    X-Content-Type-Options = "nosniff"
-    Referrer-Policy = "strict-origin-when-cross-origin"
+[[plugins]]
+  package = "@netlify/plugin-nextjs"

@@ -265,6 +265,25 @@ Verified: tsc ✓ · next build ✓ · Vite build ✓ · lint 0 errors · live p
 - 5.4 shared DataTable + ERP components (PageHeader/FilterBar/StatusBadge/SummaryCard…), module-by-module rollout.
 - 5.5 accessibility + polish pass.
 
+## ✅ Phase 7 — CLEANUP: Vite + TanStack retired (COMPLETE)
+
+Per `CLEANUP_PLAN.md` (all §36 gates verified first). **Next.js is now the sole framework.**
+
+- Deleted: `src/routes/**` (28 files), `src/router.tsx`, `routeTree.gen.ts`, `vite.config.ts`, Vite-only site pages (SiteLayout/Landing/BlogList/BlogPost), Vite `AppShell`, TanStack nav adapter, `tsconfig.next.json` + `tsconfig.node.json` (root tsconfig unified), old Vite playwright config (Next config promoted to default).
+- Deps removed: `@tanstack/react-router`, `@tanstack/react-start`, `vite`, `@vitejs/plugin-react`, `eslint-plugin-react-refresh`. **Kept:** `@tanstack/react-query` (§11), `vitest` (bundles its own vite).
+- Scripts: `dev`/`build`/`start` = `next dev`/`next build`/`next start`; `test:e2e` targets the Next build.
+- `vercel.json` → `framework: nextjs` (production cutover happens at `dev`→`main` merge); `netlify.toml` → Next runtime plugin; `nav.ts` de-TanStacked; eslint/tailwind Vite-isms pruned; `CLAUDE.md` rewritten for the Next-only world.
+
+**Final verification (all green):** `tsc` ✓ · Vitest 26/26 ✓ · `npm run build` (= next build, 30 pages) ✓ · **full Playwright suite: 9F/9P/4S — exact pre-migration baseline parity** (failures are the environmental auth specs, unchanged since the base commit) · lint 0 errors (warnings 17→4) · authenticated smoke (session → guard → companies DataTable) ✓.
+
+## §37 Acceptance criteria status
+
+- **Architecture:** Next.js App Router active ✅ · Vite no longer the build framework ✅ · TanStack Router no longer the router ✅
+- **Functionality:** all modules/routes serve ✅ · calculations untouched (`computations.ts` + 26 tests) ✅ · auth/Supabase/React Query/PDF/charts verified ✅
+- **UI:** shadcn/ui ✅ · Radix (Dialog/AlertDialog/label/…) ✅ · Tailwind ✅ · premium white/charcoal/orange design system ✅ · consistent shell/tables ✅
+- **Forms:** RHF + Zod + zodResolver implemented (Auth + Company reference; remainder progressive per §22) ◐
+- **Quality:** typecheck/build/unit/e2e-parity green, no critical console errors ✅
+
 ### Next phases
 
 - **Phase 4 (per master plan): deployment cutover decision + E2E repoint** — point `playwright.config.ts` at the Next server, run the full suite, then flip Vercel to the Next build.

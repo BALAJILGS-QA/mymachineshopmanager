@@ -1,12 +1,6 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
-  typescript: {
-    // Use a dedicated tsconfig so Next's required `jsx: preserve` never touches
-    // the root tsconfig that Vite / tsc / Vitest rely on during the parallel
-    // migration period.
-    tsconfigPath: './tsconfig.next.json',
-  },
   // Migration bridge: hosting (Vercel) already defines VITE_SUPABASE_* for the
   // old Vite build. Map them to NEXT_PUBLIC_* at BUILD time so the Next client
   // bundle gets Supabase config without touching hosting env settings. Locally,

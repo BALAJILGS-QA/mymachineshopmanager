@@ -16,10 +16,9 @@ import {
   Settings as SettingsIcon,
   type LucideIcon,
 } from 'lucide-react'
-import type { LinkProps } from '@tanstack/react-router'
 
 export interface NavItem {
-  to: LinkProps['to']
+  to: string
   label: string
   icon: LucideIcon
   short: string
@@ -32,7 +31,7 @@ export interface NavItem {
 // buttons).
 export interface NavGroup {
   title?: string
-  to?: LinkProps['to']
+  to?: string
   items: NavItem[]
 }
 

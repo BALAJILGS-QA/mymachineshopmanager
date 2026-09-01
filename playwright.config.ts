@@ -1,9 +1,8 @@
 import { defineConfig, devices } from '@playwright/test'
 
-// TanStack Start SSR build is served by the Nitro node server
-// (`npm run start` → node .output/server/index.mjs), not `vite preview`.
-// PORT is passed via `env` so it works cross-platform.
-const PORT = process.env.E2E_PORT || '4173'
+// E2E suite — runs against the production Next.js build
+// (`next build && next start`).
+const PORT = process.env.E2E_PORT || '3200'
 
 export default defineConfig({
   testDir: './e2e',
@@ -15,9 +14,7 @@ export default defineConfig({
     trace: 'on-first-retry',
   },
   webServer: {
-    // `vite preview` serves the TanStack Start SSR build (public pages
-    // server-rendered, /app client-only).
-    command: `npm run build && npm run preview -- --port ${PORT}`,
+    command: `npm run build && npx next start -p ${PORT}`,
     url: `http://localhost:${PORT}`,
     reuseExistingServer: !process.env.CI,
     timeout: 180_000,
