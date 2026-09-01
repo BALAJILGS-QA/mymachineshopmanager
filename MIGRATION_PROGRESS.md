@@ -204,9 +204,17 @@ Verification (all green): Vite `tsc` ✓ · Vitest 26/26 ✓ · Vite SPA build �
 
 Verification: Vite `tsc` ✓ · Vite build ✓ · `next build` ✓ (30 pages) · site.spec 3/3 on rebranded build ✓ · **rebranded dashboard verified in-browser (authenticated)**: charcoal rail + orange active nav + white workspace + orange chart accents, 0 console errors.
 
+### Increment 5.2 — shadcn primitives in the repo (DONE)
+
+- `npx shadcn add button input label textarea badge card skeleton separator` → 8 canonical new-york components in `src/components/ui/shadcn/` (per the components.json alias — no collision with hand-written `ui/*`). New deps: `@radix-ui/react-label`, `-separator`, `-slot`.
+- All components consume the Phase-5.1 tokens (`bg-primary` = industrial orange, `border-input`, `ring-ring`).
+- First delegation proven: `common/Skeleton.tsx` now renders the shadcn Skeleton internally (API unchanged, all call sites untouched).
+- **Deliberate scope decision (behaviour preservation, §14/§18):** the existing native `Input`/`Select`/`Textarea` primitives and `.btn-*`/`.input` classes stay as-is for now — they already carry the rebranded tokens, and the native `<select>` API (13 files) must not silently become Radix Select outside the forms phase. shadcn components are the base for NEW design-system components (5.3/5.4) and the RHF forms (Phase 6).
+
+Verified: tsc ✓, next build ✓, Vite build ✓, lint 0 errors.
+
 ### Remaining Phase 5 increments (per UI_MIGRATION_MAP.md)
 
-- 5.2 shadcn primitives (Button/Input/Label/Select/Textarea/Badge/Card/Skeleton) with adapters preserving existing APIs.
 - 5.3 overlays: Dialog (Modal), AlertDialog (ConfirmDialog, keep `useConfirm`), Sonner (keep `useToast`), Popover+Calendar (DateInput), Command multi-select.
 - 5.4 shared DataTable + ERP components (PageHeader/FilterBar/StatusBadge/SummaryCard…), module-by-module rollout.
 - 5.5 accessibility + polish pass.

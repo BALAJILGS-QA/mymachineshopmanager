@@ -1,10 +1,12 @@
 import { clsx } from 'clsx'
 import { Card } from '@/components/ui/primitives'
+import { Skeleton as ShadcnSkeleton } from '@/components/ui/shadcn/skeleton'
 
-// Neutral shimmer block. Compose these into skeleton rows/cards so data-heavy
-// pages never flash a blank white screen (premium loading states, §41).
+// Neutral shimmer block. Delegates to the shadcn Skeleton (design-system base)
+// while keeping this module's API; compose into skeleton rows/cards so
+// data-heavy pages never flash a blank white screen (premium loading states).
 export function Skeleton({ className }: { className?: string }) {
-  return <div className={clsx('animate-pulse rounded-md bg-slate-200/70', className)} />
+  return <ShadcnSkeleton className={clsx('bg-slate-200/70', className)} />
 }
 
 // Skeleton rows for a table that is still loading. Renders card-less so it drops
