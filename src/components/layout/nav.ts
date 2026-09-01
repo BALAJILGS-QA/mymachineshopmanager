@@ -96,6 +96,16 @@ export const NAV_GROUPS: NavGroup[] = [
 // Flattened list — used for the current-page label lookup and mobile nav.
 export const NAV_ITEMS: NavItem[] = NAV_GROUPS.flatMap((g) => g.items)
 
+// The titled module a path belongs to — matched by a sub-item (prefix) or the
+// group's own hub path. Drives the in-module tab bar and sidebar highlight.
+// Untitled groups (Dashboard, Sales) are standalone and return undefined.
+export function moduleGroupForPath(pathname: string): NavGroup | undefined {
+  const within = (to?: string) => !!to && (pathname === to || pathname.startsWith(`${to}/`))
+  return NAV_GROUPS.find(
+    (g) => g.title && (g.items.some((i) => within(i.to as string)) || within(g.to as string)),
+  )
+}
+
 // Items shown in the mobile bottom bar (most-used shop-floor screens); the rest
 // (Dashboard, Job Orders, Production, Expenses, Reports, …) live in the "More" sheet.
 export const MOBILE_PRIMARY = [

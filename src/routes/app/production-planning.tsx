@@ -1,11 +1,9 @@
-import { createFileRoute } from '@tanstack/react-router'
-import { ModuleHub } from '@/features/hub/ModuleHub'
+import { createFileRoute, redirect } from '@tanstack/react-router'
 
+// The module landing redirects to its first tab — the sub-pages render as a tab
+// strip (see AppShell), so there is no separate hub/button page.
 export const Route = createFileRoute('/app/production-planning')({
-  component: () => (
-    <ModuleHub
-      title="Production Planning"
-      subtitle="Plan and run shop-floor work — job orders, production and material stock"
-    />
-  ),
+  beforeLoad: () => {
+    throw redirect({ to: '/app/jobs' })
+  },
 })

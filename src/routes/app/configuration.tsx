@@ -1,11 +1,9 @@
-import { createFileRoute } from '@tanstack/react-router'
-import { ModuleHub } from '@/features/hub/ModuleHub'
+import { createFileRoute, redirect } from '@tanstack/react-router'
 
+// The module landing redirects to its first tab — the sub-pages render as a tab
+// strip (see AppShell), so there is no separate hub/button page.
 export const Route = createFileRoute('/app/configuration')({
-  component: () => (
-    <ModuleHub
-      title="Configuration & Settings"
-      subtitle="Companies, user approvals, reports and shop settings"
-    />
-  ),
+  beforeLoad: () => {
+    throw redirect({ to: '/app/companies' })
+  },
 })

@@ -44,13 +44,14 @@ export function SalesPage() {
     return (id?: string) => (id ? (m.get(id) ?? '') : '')
   }, [materials])
 
-  // Every material that actually left the shop as a sale.
+  // Every OWN material that left the shop as a sale. Sales of customer-supplied
+  // stock (ownerType 'Company') are excluded — only own/shop stock ('Shop').
   const allSales = useMemo(() => {
     const rows: SaleRow[] = []
     for (const d of challans) {
       if (d.status === 'Cancelled') continue
       for (const l of d.lines) {
-        if (!l.materialId) continue
+        if (!l.materialId || l.ownerType !== 'Shop') continue
         rows.push({
           key: `dc:${d.id}:${l.id}`,
           date: d.date,
@@ -66,7 +67,7 @@ export function SalesPage() {
     for (const inv of invoices) {
       if (inv.status === 'Cancelled') continue
       for (const l of inv.lines) {
-        if (!l.materialId) continue
+        if (!l.materialId || l.ownerType !== 'Shop') continue
         rows.push({
           key: `inv:${inv.id}:${l.id}`,
           date: inv.date,
@@ -137,7 +138,7 @@ export function SalesPage() {
     <div>
       <PageHeader
         title="Sales"
-        subtitle="Materials sold out via delivery challans and invoices — the stock that left the shop"
+        subtitle="Own materials sold via delivery challans and invoices — customer-supplied stock is excluded"
         actions={
           <button className="btn-secondary" onClick={exportExcel}>
             <Download size={16} /> Excel

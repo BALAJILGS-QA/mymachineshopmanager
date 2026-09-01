@@ -16,6 +16,7 @@ import { DEFAULT_SETTINGS } from '@/data/seed'
 import { uid } from '@/lib/id'
 import { Field, Input, Select, Textarea } from '@/components/ui/primitives'
 import { Modal } from '@/components/ui/Modal'
+import { MultiSelectDropdown } from '@/components/ui/MultiSelectDropdown'
 import { useToast } from '@/components/ui/Toast'
 
 export function InvoiceForm({
@@ -190,6 +191,33 @@ export function InvoiceForm({
   }
   function addLine() {
     setLines((ls) => [...ls, { id: uid('l_'), description: '', quantity: 1, rate: 0 }])
+  }
+  // Materials currently billed directly from stock (drives the multi-select
+  // ticks). Challan-derived lines carry no materialId, so they're excluded.
+  const selectedMaterialIds = useMemo(
+    () => new Set(lines.map((l) => l.materialId).filter(Boolean) as string[]),
+    [lines],
+  )
+  // Toggle a stock material on/off — ticking adds a stock-deducting line,
+  // unticking removes it. Each material maps to a single line here.
+  function toggleMaterial(materialId: string) {
+    const m = materials.find((x) => x.id === materialId)
+    setLines((ls) => {
+      if (ls.some((l) => l.materialId === materialId))
+        return ls.filter((l) => l.materialId !== materialId)
+      return [
+        ...ls.filter((l) => l.description.trim() || l.rate || l.materialId),
+        {
+          id: uid('l_'),
+          description: m?.name ?? '',
+          quantity: 1,
+          rate: 0,
+          materialId,
+          ownerType: 'Company',
+          unit: m?.unit,
+        },
+      ]
+    })
   }
   function removeLine(id: string) {
     setLines((ls) => (ls.length > 1 ? ls.filter((l) => l.id !== id) : ls))
@@ -483,11 +511,24 @@ export function InvoiceForm({
 
       <div className="mt-4">
         {!invoice && (
-          <p className="mb-1 text-2xs text-slate-500">
-            Pick a <b>Stock item</b> on a line to bill directly against stock — saving reduces that
-            material's balance. Leave it blank for service/labour lines, or when the line came from
-            a delivery challan (already deducted).
-          </p>
+          <>
+            <div className="mb-2">
+              <label className="label">Add stock materials (deducts stock)</label>
+              <MultiSelectDropdown
+                options={materials.map((m) => ({ id: m.id, label: m.name, hint: m.unit }))}
+                selectedIds={selectedMaterialIds}
+                onToggle={toggleMaterial}
+                placeholder="Select materials to bill from stock…"
+                emptyText="No active materials"
+              />
+            </div>
+            <p className="mb-1 text-2xs text-slate-500">
+              Pick one or more <b>materials</b> above (or a <b>Stock item</b> on a line) to bill
+              directly against stock — saving reduces that material's balance. Leave blank for
+              service/labour lines, or when the line came from a delivery challan (already
+              deducted).
+            </p>
+          </>
         )}
         <div className="mb-1 flex items-center justify-between gap-2">
           <label className="label mb-0">Line Items</label>

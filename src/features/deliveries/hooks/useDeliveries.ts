@@ -58,6 +58,24 @@ export function useUpdateChallanQuantities() {
   })
 }
 
+// Full edit re-syncs stock (materials can be added/removed), so refresh balances.
+export function useUpdateChallanFull() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({
+      id,
+      patch,
+    }: {
+      id: string
+      patch: Parameters<typeof api.updateChallanFull>[1]
+    }) => api.updateChallanFull(id, patch),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: qk.deliveries.all })
+      qc.invalidateQueries({ queryKey: qk.stock.all })
+    },
+  })
+}
+
 export function useDeleteChallan() {
   const qc = useQueryClient()
   return useMutation({

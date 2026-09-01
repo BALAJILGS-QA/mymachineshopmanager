@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
 import { Link, useLocation } from '@tanstack/react-router'
 import { LogOut, Menu, MoreHorizontal, X } from 'lucide-react'
-import { NAV_ITEMS, NAV_GROUPS, MOBILE_PRIMARY, type NavGroup } from './nav'
+import { clsx } from 'clsx'
+import { NAV_ITEMS, NAV_GROUPS, MOBILE_PRIMARY, moduleGroupForPath, type NavGroup } from './nav'
 import { useAuth } from '@/features/auth/auth'
 import { useSettings } from '@/features/settings/hooks/useSettings'
 import { useUsers } from '@/features/approvals/hooks/useUsers'
@@ -12,55 +13,63 @@ import type { ReactNode } from 'react'
 function SidebarLinks({
   groups,
   pendingCount,
+  activeGroupTitle,
   onNavigate,
 }: {
   groups: NavGroup[]
   pendingCount: number
+  activeGroupTitle?: string
   onNavigate?: () => void
 }) {
   return (
-    <nav className="flex-1 space-y-3 overflow-y-auto px-2 py-3">
-      {groups.map((group, gi) => (
-        <div key={group.title ?? `group-${gi}`} className="space-y-0.5">
-          {group.title &&
-            (group.to ? (
-              // Clickable header → the group's hub page (buttons for each item).
-              <Link
-                to={group.to}
-                onClick={onNavigate}
-                className="flex items-center px-3 pb-0.5 pt-1 text-2xs font-semibold uppercase tracking-wider text-slate-400 transition hover:text-brand-600"
-                activeProps={{ className: 'text-brand-600' }}
-              >
-                {group.title}
-              </Link>
-            ) : (
-              <p className="px-3 pb-0.5 pt-1 text-2xs font-semibold uppercase tracking-wider text-slate-400">
-                {group.title}
-              </p>
-            ))}
-          {group.items.map((item) => (
+    <nav className="flex-1 space-y-1 overflow-y-auto px-2 py-3">
+      {groups.map((group) => {
+        // Titled groups collapse to a single top-level link to their hub page —
+        // the child items (submenus) are hidden here and reached via the tabs
+        // that appear across the module. Highlight the group of the active page.
+        if (group.title) {
+          const GroupIcon = group.items[0]?.icon
+          const active = group.title === activeGroupTitle
+          return (
             <Link
-              key={item.to}
-              to={item.to}
-              activeOptions={{ exact: item.to === '/app' }}
+              key={group.title}
+              to={group.to}
               onClick={onNavigate}
-              className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition"
-              activeProps={{
-                className: 'bg-brand-gradient text-white shadow-sm shadow-brand-700/30',
-              }}
-              inactiveProps={{ className: 'text-slate-700 hover:bg-brand-50 hover:text-brand-800' }}
-            >
-              <item.icon size={18} />
-              <span className="flex-1">{item.label}</span>
-              {item.to === '/app/approvals' && pendingCount > 0 && (
-                <span className="rounded-full bg-amber-500 px-1.5 py-0.5 text-2xs font-bold text-white">
-                  {pendingCount}
-                </span>
+              className={clsx(
+                'flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition',
+                active
+                  ? 'bg-brand-gradient text-white shadow-sm shadow-brand-700/30'
+                  : 'text-slate-700 hover:bg-brand-50 hover:text-brand-800',
               )}
+            >
+              {GroupIcon && <GroupIcon size={18} />}
+              <span className="flex-1">{group.title}</span>
             </Link>
-          ))}
-        </div>
-      ))}
+          )
+        }
+        // Untitled groups (Dashboard, Sales) stay as standalone links.
+        return group.items.map((item) => (
+          <Link
+            key={item.to}
+            to={item.to}
+            activeOptions={{ exact: item.to === '/app' }}
+            onClick={onNavigate}
+            className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition"
+            activeProps={{
+              className: 'bg-brand-gradient text-white shadow-sm shadow-brand-700/30',
+            }}
+            inactiveProps={{ className: 'text-slate-700 hover:bg-brand-50 hover:text-brand-800' }}
+          >
+            <item.icon size={18} />
+            <span className="flex-1">{item.label}</span>
+            {item.to === '/app/approvals' && pendingCount > 0 && (
+              <span className="rounded-full bg-amber-500 px-1.5 py-0.5 text-2xs font-bold text-white">
+                {pendingCount}
+              </span>
+            )}
+          </Link>
+        ))
+      })}
     </nav>
   )
 }
@@ -108,6 +117,11 @@ export function AppShell({ children }: { children: ReactNode }) {
       n.to === '/app' ? location.pathname === '/app' : location.pathname.startsWith(n.to ?? ''),
     )?.label ?? 'Portal'
 
+  // The module the current page belongs to — its sub-items render as tabs, and
+  // its sidebar entry is highlighted. Untitled standalone pages have no tabs.
+  const activeGroup = moduleGroupForPath(location.pathname)
+  const tabItems = (activeGroup?.items ?? []).filter((n) => !n.superAdmin || isSuperAdmin)
+
   // Apply the configured shop profile as global SEO/title on every route, so a
   // change in Settings → Shop Profile reflects across all app pages.
   useEffect(() => {
@@ -129,7 +143,11 @@ export function AppShell({ children }: { children: ReactNode }) {
       {/* Desktop sidebar */}
       <aside className="fixed inset-y-0 left-0 z-30 hidden w-60 flex-col border-r border-slate-200 bg-gradient-to-b from-white to-brand-50/50 lg:flex">
         <Brand />
-        <SidebarLinks groups={navGroups} pendingCount={pendingCount} />
+        <SidebarLinks
+          groups={navGroups}
+          pendingCount={pendingCount}
+          activeGroupTitle={activeGroup?.title}
+        />
       </aside>
 
       {/* Mobile drawer */}
@@ -149,6 +167,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             <SidebarLinks
               groups={navGroups}
               pendingCount={pendingCount}
+              activeGroupTitle={activeGroup?.title}
               onNavigate={() => setDrawerOpen(false)}
             />
             <div className="border-t border-slate-100 p-3">
@@ -187,6 +206,34 @@ export function AppShell({ children }: { children: ReactNode }) {
           </button>
         </div>
       </header>
+
+      {/* In-module tabs — the current module's sub-pages as a tab strip. Shown
+          across every page in the module so siblings are one click apart. */}
+      {activeGroup && tabItems.length > 0 && (
+        <div className="border-b border-slate-200 bg-white lg:ml-60">
+          <nav className="flex gap-1 overflow-x-auto px-4 lg:px-8" aria-label={activeGroup.title}>
+            {tabItems.map((item) => (
+              <Link
+                key={item.to}
+                to={item.to}
+                className="flex items-center gap-2 whitespace-nowrap border-b-2 px-3 py-2.5 text-sm font-medium transition"
+                activeProps={{ className: 'border-brand-600 text-brand-700' }}
+                inactiveProps={{
+                  className: 'border-transparent text-slate-500 hover:text-brand-700',
+                }}
+              >
+                <item.icon size={16} />
+                <span>{item.label}</span>
+                {item.to === '/app/approvals' && pendingCount > 0 && (
+                  <span className="rounded-full bg-amber-500 px-1.5 py-0.5 text-2xs font-bold text-white">
+                    {pendingCount}
+                  </span>
+                )}
+              </Link>
+            ))}
+          </nav>
+        </div>
+      )}
 
       {/* Main content */}
       <main className="px-4 pb-24 pt-4 lg:ml-60 lg:px-8 lg:pb-10">

@@ -74,6 +74,36 @@ export async function updateChallanQuantities(
   return fromRow<DeliveryChallan>((data as Row[])[0], maps.deliveryChallans)
 }
 
+// Full edit of an Open challan: every field is editable (company, date, job,
+// reference, vehicle, notes) and materials can be added/removed/swapped. The RPC
+// reverses the old dispatch and re-posts fresh issues, so stock is re-synced
+// atomically. Rejected server-side for invoiced/cancelled challans.
+export async function updateChallanFull(
+  id: string,
+  patch: {
+    date: string
+    companyId: string
+    jobId?: string
+    reference?: string
+    vehicleNo?: string
+    notes?: string
+    lines: DeliveryChallan['lines']
+  },
+): Promise<DeliveryChallan> {
+  const { data, error } = await sb().rpc('update_challan_full', {
+    p_id: id,
+    p_date: patch.date,
+    p_company_id: patch.companyId,
+    p_job_id: patch.jobId ?? null,
+    p_reference: patch.reference ?? null,
+    p_vehicle_no: patch.vehicleNo ?? null,
+    p_notes: patch.notes ?? null,
+    p_lines: patch.lines,
+  })
+  if (error) throw error
+  return fromRow<DeliveryChallan>((data as Row[])[0], maps.deliveryChallans)
+}
+
 export async function deleteChallan(id: string): Promise<void> {
   return deleteRow(maps.deliveryChallans, id)
 }

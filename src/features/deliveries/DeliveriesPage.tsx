@@ -20,7 +20,7 @@ import {
   useChallans,
   useCreateChallan,
   useUpdateChallan,
-  useUpdateChallanQuantities,
+  useUpdateChallanFull,
   useDeleteChallan,
   useSetChallanStatus,
   useReopenChallan,
@@ -48,6 +48,7 @@ import { PageHeader, ResponsiveTable } from '@/components/common/PageHeader'
 import { StatTile } from '@/components/common/StatTile'
 import { Badge, Card, EmptyState, Field, Input, Select, Textarea } from '@/components/ui/primitives'
 import { Modal } from '@/components/ui/Modal'
+import { MultiSelectDropdown } from '@/components/ui/MultiSelectDropdown'
 import { CompanyFilter, DateRangeFilter, FilterBar, SearchBox } from '@/components/common/Filters'
 import { Pagination, usePagination } from '@/components/common/Pagination'
 import { useToast } from '@/components/ui/Toast'
@@ -450,8 +451,8 @@ function DcForm({ dc, onClose }: { dc: DeliveryChallan | null; onClose: () => vo
   const toast = useToast()
   const createChallan = useCreateChallan()
   const updateChallan = useUpdateChallan()
-  const updateChallanQty = useUpdateChallanQuantities()
-  const saving = createChallan.isPending || updateChallan.isPending || updateChallanQty.isPending
+  const updateChallanFull = useUpdateChallanFull()
+  const saving = createChallan.isPending || updateChallan.isPending || updateChallanFull.isPending
   const { data: allCompanies = [] } = useCompanies()
   const companies = allCompanies.filter((c) => c.active || c.id === dc?.companyId)
   const { data: jobs = [] } = useJobs()
@@ -459,10 +460,12 @@ function DcForm({ dc, onClose }: { dc: DeliveryChallan | null; onClose: () => vo
   const materials = allMaterials.filter((m) => m.active)
   const { data: existingChallans = [] } = useChallans()
   const dcNoPreview = usePreviewNo('dc')
-  const isEdit = !!dc // existing challan already dispatched -> materials are locked
-  // Quantities can be corrected while the challan is still Open (un-invoiced);
-  // the stock deducted at dispatch is re-synced on save. Materials stay fixed.
-  const canEditQty = isEdit && dc.status === 'Open'
+  const isEdit = !!dc
+  // An Open (un-invoiced) challan is fully editable — every field and the set of
+  // materials — and its stock is re-synced on save. Once invoiced/cancelled it is
+  // locked (only reference/vehicle/notes), since stock is frozen against it.
+  const canFullEdit = isEdit && dc.status === 'Open'
+  const metaOnly = isEdit && dc.status !== 'Open'
 
   const [companyId, setCompanyId] = useState(dc?.companyId ?? companies[0]?.id ?? '')
   const [date, setDate] = useState(dc?.date ?? todayISO())
@@ -474,48 +477,58 @@ function DcForm({ dc, onClose }: { dc: DeliveryChallan | null; onClose: () => vo
   // override the user types in. Auto mode never consumes the counter early.
   const [autoNumber, setAutoNumber] = useState(true)
   const [manualDcNo, setManualDcNo] = useState('')
-  const emptyLine = (): DcLine => ({
-    id: uid('dl_'),
-    materialId: '',
-    ownerType: 'Company',
-    description: '',
-    quantity: 1,
-    unit: 'Nos',
-  })
-  const [lines, setLines] = useState<DcLine[]>(dc?.lines ?? [emptyLine()])
+  // New challans start empty — materials are added via the multi-select below.
+  const [lines, setLines] = useState<DcLine[]>(dc?.lines ?? [])
+
+  // Materials currently mapped onto this challan (drives the multi-select ticks).
+  const selectedMaterialIds = useMemo(
+    () => new Set(lines.map((l) => l.materialId).filter(Boolean) as string[]),
+    [lines],
+  )
 
   function updateLine(id: string, patch: Partial<DcLine>) {
     setLines((ls) => ls.map((l) => (l.id === id ? { ...l, ...patch } : l)))
   }
-  function pickMaterial(id: string, materialId: string) {
+  // Toggle a material on/off — ticking adds a dispatch line, unticking removes it.
+  function toggleMaterial(materialId: string) {
     const m = materials.find((x) => x.id === materialId)
-    updateLine(id, {
-      materialId,
-      description: m?.name ?? '',
-      unit: m?.unit ?? 'Nos',
+    setLines((ls) => {
+      if (ls.some((l) => l.materialId === materialId))
+        return ls.filter((l) => l.materialId !== materialId)
+      return [
+        ...ls,
+        {
+          id: uid('dl_'),
+          materialId,
+          ownerType: 'Company',
+          description: m?.name ?? '',
+          quantity: 1,
+          unit: m?.unit ?? 'Nos',
+        },
+      ]
     })
   }
-  function addLine() {
-    setLines((ls) => [...ls, emptyLine()])
-  }
   function removeLine(id: string) {
-    setLines((ls) => (ls.length > 1 ? ls.filter((l) => l.id !== id) : ls))
+    setLines((ls) => ls.filter((l) => l.id !== id))
   }
 
   async function submit() {
     try {
       if (isEdit) {
-        if (canEditQty) {
-          // Open challan: quantities are editable and the dispatched stock is
-          // re-synced. Materials are unchanged (add/remove needs cancel+recreate).
+        if (canFullEdit) {
+          // Open challan: every field + the set of materials is editable and the
+          // dispatched stock is re-synced (old issues reversed, new ones posted).
           const cleaned = lines.filter((l) => l.materialId && Number(l.quantity) > 0)
           if (!cleaned.length) {
-            toast.error('Every item needs a quantity greater than zero')
+            toast.error('Add at least one item with a material and quantity')
             return
           }
-          await updateChallanQty.mutateAsync({
+          await updateChallanFull.mutateAsync({
             id: dc.id,
             patch: {
+              date,
+              companyId,
+              jobId: jobId || undefined,
               reference: reference || undefined,
               vehicleNo: vehicleNo || undefined,
               notes: notes || undefined,
@@ -614,10 +627,10 @@ function DcForm({ dc, onClose }: { dc: DeliveryChallan | null; onClose: () => vo
         <p className="mb-3 rounded-lg bg-brand-50 px-3 py-2 text-xs text-brand-700">
           Creating this challan dispatches the items and reduces stock.
         </p>
-      ) : canEditQty ? (
+      ) : canFullEdit ? (
         <p className="mb-3 rounded-lg bg-brand-50 px-3 py-2 text-xs text-brand-700">
-          You can adjust quantities — stock is re-synced on save. To add or remove a material,
-          cancel this challan (which restores stock) and create a new one.
+          This challan is open — you can change every field and add or remove materials. Stock is
+          re-synced on save (old dispatch reversed, new one posted).
         </p>
       ) : (
         <p className="mb-3 rounded-lg bg-slate-100 px-3 py-2 text-xs text-slate-600">
@@ -626,9 +639,15 @@ function DcForm({ dc, onClose }: { dc: DeliveryChallan | null; onClose: () => vo
         </p>
       )}
       {dc && (
-        <p className="mb-3 text-right text-2xs text-slate-500">
-          Last updated {fmtDateTime(dc.updatedAt)}
-        </p>
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-2xs text-slate-500">
+          <span>
+            Created <span className="font-medium text-slate-700">{fmtDateTime(dc.createdAt)}</span>
+          </span>
+          <span>
+            Last updated{' '}
+            <span className="font-medium text-slate-700">{fmtDateTime(dc.updatedAt)}</span>
+          </span>
+        </div>
       )}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         {isEdit ? (
@@ -681,7 +700,7 @@ function DcForm({ dc, onClose }: { dc: DeliveryChallan | null; onClose: () => vo
           <Select
             value={companyId}
             onChange={(e) => setCompanyId(e.target.value)}
-            disabled={isEdit}
+            disabled={metaOnly}
           >
             <option value="">Select…</option>
             {companies.map((c) => (
@@ -696,11 +715,11 @@ function DcForm({ dc, onClose }: { dc: DeliveryChallan | null; onClose: () => vo
             type="date"
             value={date}
             onChange={(e) => setDate(e.target.value)}
-            disabled={isEdit}
+            disabled={metaOnly}
           />
         </Field>
         <Field label="Job (optional)">
-          <Select value={jobId} onChange={(e) => setJobId(e.target.value)} disabled={isEdit}>
+          <Select value={jobId} onChange={(e) => setJobId(e.target.value)} disabled={metaOnly}>
             <option value="">—</option>
             {jobs.map((j) => (
               <option key={j.id} value={j.id}>
@@ -720,89 +739,89 @@ function DcForm({ dc, onClose }: { dc: DeliveryChallan | null; onClose: () => vo
       <div className="mt-4">
         <div className="mb-1 flex items-center justify-between gap-2">
           <label className="label mb-0">Items (dispatched from stock)</label>
-          {!isEdit && (
-            <button className="btn-ghost btn-sm text-brand-600" onClick={addLine}>
-              <Plus size={14} /> Add item
-            </button>
-          )}
         </div>
-        <div className="overflow-x-auto rounded-lg border border-slate-200">
-          <table className="w-full min-w-[34rem]">
-            <thead>
-              <tr className="bg-slate-50">
-                <th className="th">Material</th>
-                <th className="th w-36">From stock</th>
-                <th className="th w-24 text-right">Qty</th>
-                <th className="th w-16">Unit</th>
-                <th className="th w-10"></th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {lines.map((l) => (
-                <tr key={l.id}>
-                  <td className="px-2 py-1.5">
-                    {isEdit ? (
-                      <span className="text-sm text-slate-700">{l.description || '—'}</span>
-                    ) : (
-                      <select
-                        className="input"
-                        value={l.materialId ?? ''}
-                        onChange={(e) => pickMaterial(l.id, e.target.value)}
-                      >
-                        <option value="">Select material…</option>
-                        {materials.map((m) => (
-                          <option key={m.id} value={m.id}>
-                            {m.name} ({m.unit})
-                          </option>
-                        ))}
-                      </select>
-                    )}
-                  </td>
-                  <td className="px-2 py-1.5">
-                    {isEdit ? (
-                      <span className="text-2xs text-slate-500">
-                        {l.ownerType === 'Shop' ? 'Own (shop)' : 'Customer'}
-                      </span>
-                    ) : (
-                      <select
-                        className="input"
-                        value={l.ownerType ?? 'Company'}
-                        onChange={(e) =>
-                          updateLine(l.id, { ownerType: e.target.value as DcLine['ownerType'] })
-                        }
-                      >
-                        <option value="Company">This customer's stock</option>
-                        <option value="Shop">Own (shop) stock</option>
-                      </select>
-                    )}
-                  </td>
-                  <td className="px-2 py-1.5">
-                    <input
-                      type="number"
-                      step="0.001"
-                      min={0}
-                      className="input text-right"
-                      value={l.quantity}
-                      disabled={isEdit && !canEditQty}
-                      onChange={(e) => updateLine(l.id, { quantity: Number(e.target.value) })}
-                    />
-                  </td>
-                  <td className="px-2 py-1.5 text-slate-600">{l.unit}</td>
-                  <td className="px-2 py-1.5 text-right">
-                    {!isEdit && (
-                      <button
-                        className="btn-ghost btn-sm text-red-500"
-                        onClick={() => removeLine(l.id)}
-                      >
-                        <Trash2 size={15} />
-                      </button>
-                    )}
-                  </td>
+        {!metaOnly && (
+          <div className="mb-2">
+            <MultiSelectDropdown
+              options={materials.map((m) => ({ id: m.id, label: m.name, hint: m.unit }))}
+              selectedIds={selectedMaterialIds}
+              onToggle={toggleMaterial}
+              placeholder="Select materials to dispatch…"
+              emptyText="No active materials"
+            />
+            <p className="mt-1 text-2xs text-slate-500">
+              Pick one or more materials — each becomes a line below whose quantity reduces stock.
+            </p>
+          </div>
+        )}
+        {lines.length === 0 ? (
+          <p className="rounded-lg border border-dashed border-slate-200 px-3 py-4 text-center text-xs text-slate-500">
+            No materials selected yet.
+          </p>
+        ) : (
+          <div className="overflow-x-auto rounded-lg border border-slate-200">
+            <table className="w-full min-w-[34rem]">
+              <thead>
+                <tr className="bg-slate-50">
+                  <th className="th">Material</th>
+                  <th className="th w-36">From stock</th>
+                  <th className="th w-24 text-right">Qty</th>
+                  <th className="th w-16">Unit</th>
+                  <th className="th w-10"></th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {lines.map((l) => (
+                  <tr key={l.id}>
+                    <td className="px-2 py-1.5">
+                      <span className="text-sm text-slate-700">{l.description || '—'}</span>
+                    </td>
+                    <td className="px-2 py-1.5">
+                      {metaOnly ? (
+                        <span className="text-2xs text-slate-500">
+                          {l.ownerType === 'Shop' ? 'Own (shop)' : 'Customer'}
+                        </span>
+                      ) : (
+                        <select
+                          className="input"
+                          value={l.ownerType ?? 'Company'}
+                          onChange={(e) =>
+                            updateLine(l.id, { ownerType: e.target.value as DcLine['ownerType'] })
+                          }
+                        >
+                          <option value="Company">This customer's stock</option>
+                          <option value="Shop">Own (shop) stock</option>
+                        </select>
+                      )}
+                    </td>
+                    <td className="px-2 py-1.5">
+                      <input
+                        type="number"
+                        step="0.001"
+                        min={0}
+                        className="input text-right"
+                        value={l.quantity}
+                        disabled={metaOnly}
+                        onChange={(e) => updateLine(l.id, { quantity: Number(e.target.value) })}
+                      />
+                    </td>
+                    <td className="px-2 py-1.5 text-slate-600">{l.unit}</td>
+                    <td className="px-2 py-1.5 text-right">
+                      {!metaOnly && (
+                        <button
+                          className="btn-ghost btn-sm text-red-500"
+                          onClick={() => removeLine(l.id)}
+                        >
+                          <Trash2 size={15} />
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
 
       <Field label="Notes" className="mt-3">
