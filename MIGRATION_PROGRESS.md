@@ -229,6 +229,15 @@ Live verification (authenticated Playwright on Next): Companies → Add Company 
 
 Note: an incidental empty-name company created during testing was deleted via the new confirm flow (pre-existing gap: the Companies form has no client-side name validation — flagged for the Phase 6 forms pass, not fixed here per §14).
 
+### Increment 5.4 — shared DataTable + reference rollout (CORE DONE)
+
+- shadcn `table`, `tooltip`, `tabs`, `dropdown-menu` fetched into `ui/shadcn/` (bases for later composition).
+- **`src/components/common/DataTable.tsx`** — generic typed `DataTable<T>` centralising the composition every list page repeats (ResponsiveTable + `.th/.td` + `TableSkeleton` + `EmptyState`) behind column definitions. Deliberately presentational: search/filter/pagination stay in the page (business state) so adoption changes zero behaviour. Opt-in `maxHeight` gives honest sticky headers (scroll-area based — no fake `sticky` inside overflow-x).
+- **Reference rollout: CompaniesPage** now renders through `DataTable` — verified live (authenticated): identical 7 columns, identical cell content, search filters 3→1 through the new component, 0 console errors.
+- Remaining modules (jobs/materials/deliveries/invoices/payments/vendors/subcontracting/expenses) adopt the same pattern incrementally — each a small, verifiable diff.
+
+Verified: tsc ✓ · next build ✓ · Vite build ✓ · lint 0 errors · live parity check ✓.
+
 ### Remaining Phase 5 increments (per UI_MIGRATION_MAP.md)
 
 - (deferred from 5.3, High risk → forms phase) Popover+Calendar (DateInput), Command multi-select (MultiSelectDropdown).

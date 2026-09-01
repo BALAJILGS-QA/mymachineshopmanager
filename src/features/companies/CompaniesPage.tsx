@@ -11,9 +11,9 @@ import { useJobs } from '@/features/jobs/hooks/useJobs'
 import { useInvoices } from '@/features/invoices/hooks/useInvoices'
 import { toUserMessage } from '@/lib/api/errors'
 import { fmtDateTime } from '@/lib/format'
-import { PageHeader, ResponsiveTable } from '@/components/common/PageHeader'
-import { TableSkeleton } from '@/components/common/Skeleton'
-import { Badge, Card, EmptyState, Field, Input, Textarea } from '@/components/ui/primitives'
+import { PageHeader } from '@/components/common/PageHeader'
+import { DataTable, type DataTableColumn } from '@/components/common/DataTable'
+import { Badge, Card, Field, Input, Textarea } from '@/components/ui/primitives'
 import { Modal } from '@/components/ui/Modal'
 import { Pagination, usePagination } from '@/components/common/Pagination'
 import { useToast } from '@/components/ui/Toast'
@@ -40,6 +40,49 @@ export function CompaniesPage() {
   )
 
   const pg = usePagination(filtered)
+
+  const columns: DataTableColumn<Company>[] = [
+    {
+      key: 'code',
+      header: 'Code',
+      cellClassName: 'font-mono text-xs text-slate-500',
+      render: (c) => c.code,
+    },
+    {
+      key: 'name',
+      header: 'Name',
+      cellClassName: 'font-semibold text-slate-800',
+      render: (c) => c.name,
+    },
+    { key: 'contact', header: 'Contact', render: (c) => c.contactPerson || '—' },
+    { key: 'phone', header: 'Phone', render: (c) => c.phone || '—' },
+    { key: 'gstin', header: 'GSTIN', render: (c) => c.gstin || '—' },
+    {
+      key: 'status',
+      header: 'Status',
+      render: (c) =>
+        c.active ? <Badge tone="green">Active</Badge> : <Badge tone="gray">Inactive</Badge>,
+    },
+    {
+      key: 'actions',
+      header: 'Actions',
+      headerClassName: 'text-right',
+      render: (c) => (
+        <div className="flex justify-end gap-1">
+          <button className="btn-ghost btn-sm" onClick={() => setEditing(c)} title="Edit">
+            <Pencil size={15} />
+          </button>
+          <button
+            className="btn-ghost btn-sm text-red-500"
+            onClick={() => onDelete(c)}
+            title={txnCount(c.id) ? 'Has transactions' : 'Delete'}
+          >
+            <Trash2 size={15} />
+          </button>
+        </div>
+      ),
+    },
+  ]
 
   const txnCount = (id: string) =>
     jobs.filter((j) => j.companyId === id).length +
@@ -86,65 +129,17 @@ export function CompaniesPage() {
       </Card>
 
       <Card>
-        {isLoading ? (
-          <TableSkeleton rows={8} cols={6} />
-        ) : filtered.length === 0 ? (
-          <EmptyState
-            icon={<Building2 size={40} />}
-            title="No companies found"
-            description="Add your first customer/company to start creating job orders."
-          />
-        ) : (
-          <ResponsiveTable>
-            <thead>
-              <tr className="border-b border-slate-100">
-                <th className="th">Code</th>
-                <th className="th">Name</th>
-                <th className="th">Contact</th>
-                <th className="th">Phone</th>
-                <th className="th">GSTIN</th>
-                <th className="th">Status</th>
-                <th className="th text-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-50">
-              {pg.pageItems.map((c) => (
-                <tr key={c.id} className="hover:bg-slate-50/60">
-                  <td className="td font-mono text-xs text-slate-500">{c.code}</td>
-                  <td className="td font-semibold text-slate-800">{c.name}</td>
-                  <td className="td">{c.contactPerson || '—'}</td>
-                  <td className="td">{c.phone || '—'}</td>
-                  <td className="td">{c.gstin || '—'}</td>
-                  <td className="td">
-                    {c.active ? (
-                      <Badge tone="green">Active</Badge>
-                    ) : (
-                      <Badge tone="gray">Inactive</Badge>
-                    )}
-                  </td>
-                  <td className="td">
-                    <div className="flex justify-end gap-1">
-                      <button
-                        className="btn-ghost btn-sm"
-                        onClick={() => setEditing(c)}
-                        title="Edit"
-                      >
-                        <Pencil size={15} />
-                      </button>
-                      <button
-                        className="btn-ghost btn-sm text-red-500"
-                        onClick={() => onDelete(c)}
-                        title={txnCount(c.id) ? 'Has transactions' : 'Delete'}
-                      >
-                        <Trash2 size={15} />
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </ResponsiveTable>
-        )}
+        <DataTable
+          columns={columns}
+          rows={pg.pageItems}
+          rowKey={(c) => c.id}
+          loading={isLoading}
+          empty={{
+            icon: <Building2 size={40} />,
+            title: 'No companies found',
+            description: 'Add your first customer/company to start creating job orders.',
+          }}
+        />
         <Pagination pg={pg} />
       </Card>
 
