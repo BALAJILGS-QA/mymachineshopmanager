@@ -3,17 +3,17 @@ import { clsx } from 'clsx'
 import { Card } from '@/components/ui/primitives'
 
 const TILE_TONES: Record<string, string> = {
-  brand: 'bg-brand-100 text-brand-700',
-  green: 'bg-emerald-100 text-emerald-700',
-  amber: 'bg-amber-100 text-amber-700',
-  red: 'bg-red-100 text-red-700',
-  blue: 'bg-blue-100 text-blue-700',
-  violet: 'bg-violet-100 text-violet-700',
-  slate: 'bg-slate-200 text-slate-700',
+  brand: 'bg-brand-50 text-brand-700',
+  green: 'bg-emerald-50 text-emerald-600',
+  amber: 'bg-amber-50 text-amber-600',
+  red: 'bg-red-50 text-red-600',
+  blue: 'bg-blue-50 text-blue-600',
+  violet: 'bg-violet-50 text-violet-600',
+  slate: 'bg-slate-100 text-slate-600',
 }
 
-// Compact summary tile: coloured icon chip + big value + small label.
-// Matches the summary cards used on the Inventory / Dashboard screens.
+// Compact summary tile: label + prominent value, with a subtle tinted icon chip.
+// The value leads (data over decoration); the icon is a quiet accent.
 export function StatTile({
   icon,
   label,
@@ -26,18 +26,22 @@ export function StatTile({
   tone?: keyof typeof TILE_TONES
 }) {
   return (
-    <Card className="flex items-center gap-3 p-3">
+    <Card className="flex items-center justify-between gap-3 p-4">
+      <div className="min-w-0">
+        <div className="truncate text-2xs font-medium uppercase tracking-wide text-slate-500">
+          {label}
+        </div>
+        <div className="tnum mt-1 truncate text-2xl font-bold leading-none text-slate-900">
+          {value}
+        </div>
+      </div>
       <div
         className={clsx(
-          'flex h-9 w-9 shrink-0 items-center justify-center rounded-lg',
+          'flex h-10 w-10 shrink-0 items-center justify-center rounded-lg',
           TILE_TONES[tone] ?? TILE_TONES.brand,
         )}
       >
         {icon}
-      </div>
-      <div className="min-w-0">
-        <div className="truncate text-lg font-bold leading-none text-slate-900">{value}</div>
-        <div className="mt-0.5 text-2xs text-slate-500">{label}</div>
       </div>
     </Card>
   )

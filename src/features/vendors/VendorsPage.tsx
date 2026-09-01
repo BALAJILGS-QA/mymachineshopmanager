@@ -5,6 +5,7 @@ import { useVendors, useCreateVendor, useUpdateVendor, useDeleteVendor } from '.
 import { toUserMessage } from '@/lib/api/errors'
 import { fmtDateTime } from '@/lib/format'
 import { PageHeader, ResponsiveTable } from '@/components/common/PageHeader'
+import { TableSkeleton } from '@/components/common/Skeleton'
 import { Badge, Card, EmptyState, Field, Input, Textarea } from '@/components/ui/primitives'
 import { Modal } from '@/components/ui/Modal'
 import { Pagination, usePagination } from '@/components/common/Pagination'
@@ -75,7 +76,7 @@ export function VendorsPage() {
 
       <Card>
         {isLoading ? (
-          <div className="p-8 text-center text-sm text-slate-500">Loading vendors…</div>
+          <TableSkeleton rows={8} cols={5} />
         ) : rows.length === 0 ? (
           <EmptyState
             icon={<Building2 size={40} />}

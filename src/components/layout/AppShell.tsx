@@ -1,6 +1,14 @@
 import { useEffect, useState } from 'react'
 import { Link, useLocation } from '@tanstack/react-router'
-import { LogOut, Menu, MoreHorizontal, X } from 'lucide-react'
+import {
+  ChevronRight,
+  LogOut,
+  Menu,
+  MoreHorizontal,
+  PanelLeftClose,
+  PanelLeftOpen,
+  X,
+} from 'lucide-react'
 import { clsx } from 'clsx'
 import { NAV_ITEMS, NAV_GROUPS, MOBILE_PRIMARY, moduleGroupForPath, type NavGroup } from './nav'
 import { useAuth } from '@/features/auth/auth'
@@ -10,19 +18,38 @@ import { DEFAULT_SETTINGS } from '@/data/seed'
 import { applyAppSeo, applyFavicon } from '@/lib/seo'
 import type { ReactNode } from 'react'
 
+// Restrained premium active state: soft green tint, dark green text (the lucide
+// icon inherits via currentColor) and a green left indicator bar — no bright
+// full-width green block. Inactive links stay neutral until hovered.
+const NAV_BASE =
+  'relative flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors'
+const NAV_ACTIVE =
+  'bg-brand-50 text-brand-800 font-semibold before:absolute before:left-0 before:top-1/2 before:h-5 before:w-1 before:-translate-y-1/2 before:rounded-r-full before:bg-brand-600'
+const NAV_INACTIVE = 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+
+function PendingPill({ count }: { count: number }) {
+  return (
+    <span className="rounded-full bg-amber-500 px-1.5 py-0.5 text-2xs font-bold text-white">
+      {count}
+    </span>
+  )
+}
+
 function SidebarLinks({
   groups,
   pendingCount,
   activeGroupTitle,
+  collapsed,
   onNavigate,
 }: {
   groups: NavGroup[]
   pendingCount: number
   activeGroupTitle?: string
+  collapsed?: boolean
   onNavigate?: () => void
 }) {
   return (
-    <nav className="flex-1 space-y-1 overflow-y-auto px-2 py-3">
+    <nav className={clsx('flex-1 space-y-0.5 overflow-y-auto py-3', collapsed ? 'px-2' : 'px-3')}>
       {groups.map((group) => {
         // Titled groups collapse to a single top-level link to their hub page —
         // the child items (submenus) are hidden here and reached via the tabs
@@ -35,15 +62,15 @@ function SidebarLinks({
               key={group.title}
               to={group.to}
               onClick={onNavigate}
+              title={collapsed ? group.title : undefined}
               className={clsx(
-                'flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition',
-                active
-                  ? 'bg-brand-gradient text-white shadow-sm shadow-brand-700/30'
-                  : 'text-slate-700 hover:bg-brand-50 hover:text-brand-800',
+                NAV_BASE,
+                active ? NAV_ACTIVE : NAV_INACTIVE,
+                collapsed && 'justify-center',
               )}
             >
-              {GroupIcon && <GroupIcon size={18} />}
-              <span className="flex-1">{group.title}</span>
+              {GroupIcon && <GroupIcon size={18} className="shrink-0" />}
+              {!collapsed && <span className="flex-1 truncate">{group.title}</span>}
             </Link>
           )
         }
@@ -54,18 +81,15 @@ function SidebarLinks({
             to={item.to}
             activeOptions={{ exact: item.to === '/app' }}
             onClick={onNavigate}
-            className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition"
-            activeProps={{
-              className: 'bg-brand-gradient text-white shadow-sm shadow-brand-700/30',
-            }}
-            inactiveProps={{ className: 'text-slate-700 hover:bg-brand-50 hover:text-brand-800' }}
+            title={collapsed ? item.label : undefined}
+            className={clsx(NAV_BASE, collapsed && 'justify-center')}
+            activeProps={{ className: NAV_ACTIVE }}
+            inactiveProps={{ className: NAV_INACTIVE }}
           >
-            <item.icon size={18} />
-            <span className="flex-1">{item.label}</span>
-            {item.to === '/app/approvals' && pendingCount > 0 && (
-              <span className="rounded-full bg-amber-500 px-1.5 py-0.5 text-2xs font-bold text-white">
-                {pendingCount}
-              </span>
+            <item.icon size={18} className="shrink-0" />
+            {!collapsed && <span className="flex-1 truncate">{item.label}</span>}
+            {!collapsed && item.to === '/app/approvals' && pendingCount > 0 && (
+              <PendingPill count={pendingCount} />
             )}
           </Link>
         ))
@@ -74,7 +98,7 @@ function SidebarLinks({
   )
 }
 
-function Brand() {
+function Brand({ collapsed }: { collapsed?: boolean }) {
   // Brand reflects the configured shop profile so a rename in Settings shows
   // everywhere the shell renders (sidebar + mobile drawer).
   const { data: settings } = useSettings()
@@ -82,14 +106,22 @@ function Brand() {
   // Uploaded logo when set, otherwise the bundled Sree Balaji mark.
   const logoSrc = company.logoUrl || '/sbi-logo.svg'
   return (
-    <div className="flex items-center gap-2.5 px-4 py-4">
+    <div
+      className={clsx(
+        'flex items-center gap-2.5 border-b border-slate-100 py-4',
+        collapsed ? 'justify-center px-2' : 'px-4',
+      )}
+    >
       <img
         src={logoSrc}
         alt={`${company.name} logo`}
-        className="h-[38px] w-[38px] shrink-0 rounded-[28%] object-contain shadow-sm"
+        title={collapsed ? company.name : undefined}
+        className="h-[36px] w-[36px] shrink-0 rounded-[26%] object-contain ring-1 ring-slate-200"
       />
       {/* Only the configured shop-profile name — no product tagline. */}
-      <p className="text-sm font-bold leading-tight text-slate-900">{company.name}</p>
+      {!collapsed && (
+        <p className="truncate text-sm font-bold leading-tight text-slate-900">{company.name}</p>
+      )}
     </div>
   )
 }
@@ -102,6 +134,19 @@ export function AppShell({ children }: { children: ReactNode }) {
   const pendingCount = users.filter((u) => u.status === 'pending').length
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [moreOpen, setMoreOpen] = useState(false)
+  // Collapsed desktop sidebar (icons only) — persisted across sessions.
+  const [collapsed, setCollapsed] = useState(
+    () => typeof window !== 'undefined' && localStorage.getItem('sbi.sidebarCollapsed') === '1',
+  )
+  const toggleCollapsed = () =>
+    setCollapsed((c) => {
+      const next = !c
+      if (typeof window !== 'undefined')
+        localStorage.setItem('sbi.sidebarCollapsed', next ? '1' : '0')
+      return next
+    })
+  // Content offset tracks the sidebar width so the shell stays aligned.
+  const ml = collapsed ? 'lg:ml-16' : 'lg:ml-60'
   const location = useLocation()
 
   // Super-admin-only items (e.g. User Approvals) are hidden for regular users.
@@ -141,13 +186,35 @@ export function AppShell({ children }: { children: ReactNode }) {
   return (
     <div className="min-h-screen">
       {/* Desktop sidebar */}
-      <aside className="fixed inset-y-0 left-0 z-30 hidden w-60 flex-col border-r border-slate-200 bg-gradient-to-b from-white to-brand-50/50 lg:flex">
-        <Brand />
+      <aside
+        className={clsx(
+          'fixed inset-y-0 left-0 z-30 hidden flex-col border-r border-slate-200 bg-white transition-[width] duration-200 lg:flex',
+          collapsed ? 'w-16' : 'w-60',
+        )}
+      >
+        <Brand collapsed={collapsed} />
         <SidebarLinks
           groups={navGroups}
           pendingCount={pendingCount}
           activeGroupTitle={activeGroup?.title}
+          collapsed={collapsed}
         />
+        {/* Collapse toggle pinned to the foot of the rail. */}
+        <button
+          onClick={toggleCollapsed}
+          className="flex items-center gap-2 border-t border-slate-100 px-3 py-2.5 text-sm font-medium text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-800"
+          title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+          aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+        >
+          {collapsed ? (
+            <PanelLeftOpen size={18} className="mx-auto shrink-0" />
+          ) : (
+            <>
+              <PanelLeftClose size={18} className="shrink-0" />
+              <span>Collapse</span>
+            </>
+          )}
+        </button>
       </aside>
 
       {/* Mobile drawer */}
@@ -180,8 +247,13 @@ export function AppShell({ children }: { children: ReactNode }) {
       )}
 
       {/* Top bar — visible on all sizes; logout sits at the right end */}
-      <header className="sticky top-0 z-20 flex items-center justify-between border-b border-slate-300 bg-white/90 px-4 py-2.5 backdrop-blur lg:ml-60 lg:px-8">
-        <div className="flex items-center gap-2">
+      <header
+        className={clsx(
+          'sticky top-0 z-20 flex h-14 items-center justify-between border-b border-slate-200 bg-white/85 px-4 backdrop-blur lg:px-8',
+          ml,
+        )}
+      >
+        <div className="flex min-w-0 items-center gap-2">
           <button
             className="rounded-lg p-1.5 text-slate-700 hover:bg-slate-100 lg:hidden"
             onClick={() => setDrawerOpen(true)}
@@ -189,15 +261,27 @@ export function AppShell({ children }: { children: ReactNode }) {
           >
             <Menu size={22} />
           </button>
+          {/* Breadcrumb — current module › page. */}
+          <nav aria-label="Breadcrumb" className="flex min-w-0 items-center gap-1.5 text-sm">
+            {activeGroup?.title && (
+              <>
+                <span className="hidden truncate text-slate-500 sm:inline">
+                  {activeGroup.title}
+                </span>
+                <ChevronRight size={15} className="hidden shrink-0 text-slate-300 sm:inline" />
+              </>
+            )}
+            <span className="truncate font-semibold text-slate-900">{currentLabel}</span>
+          </nav>
         </div>
         <div className="flex items-center gap-2.5">
           <div className="hidden text-right leading-tight sm:block">
             <p className="text-xs font-semibold text-slate-900">{session?.username}</p>
-            <p className="text-2xs text-slate-600">
+            <p className="text-2xs text-slate-500">
               {session?.role === 'SuperAdmin' ? 'Super Admin' : 'User'}
             </p>
           </div>
-          <div className="h-8 w-8 rounded-full bg-brand-100 text-center text-sm font-bold leading-8 text-brand-800 ring-1 ring-brand-300">
+          <div className="flex h-8 w-8 items-center justify-center rounded-full bg-brand-100 text-sm font-bold text-brand-800 ring-1 ring-brand-200">
             {session?.username?.[0]?.toUpperCase() ?? 'A'}
           </div>
           <button onClick={logout} className="btn-secondary btn-sm" title="Sign out">
@@ -210,16 +294,17 @@ export function AppShell({ children }: { children: ReactNode }) {
       {/* In-module tabs — the current module's sub-pages as a tab strip. Shown
           across every page in the module so siblings are one click apart. */}
       {activeGroup && tabItems.length > 0 && (
-        <div className="border-b border-slate-200 bg-white lg:ml-60">
+        <div className={clsx('border-b border-slate-200 bg-white', ml)}>
           <nav className="flex gap-1 overflow-x-auto px-4 lg:px-8" aria-label={activeGroup.title}>
             {tabItems.map((item) => (
               <Link
                 key={item.to}
                 to={item.to}
-                className="flex items-center gap-2 whitespace-nowrap border-b-2 px-3 py-2.5 text-sm font-medium transition"
+                className="-mb-px flex items-center gap-2 whitespace-nowrap border-b-2 px-3 py-2.5 text-sm font-medium transition-colors"
                 activeProps={{ className: 'border-brand-600 text-brand-700' }}
                 inactiveProps={{
-                  className: 'border-transparent text-slate-500 hover:text-brand-700',
+                  className:
+                    'border-transparent text-slate-500 hover:border-slate-300 hover:text-slate-800',
                 }}
               >
                 <item.icon size={16} />
@@ -236,7 +321,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       )}
 
       {/* Main content */}
-      <main className="px-4 pb-24 pt-4 lg:ml-60 lg:px-8 lg:pb-10">
+      <main className={clsx('px-4 pb-24 pt-4 lg:px-8 lg:pb-10', ml)}>
         <div className="mx-auto max-w-7xl">{children}</div>
       </main>
 

@@ -1,9 +1,9 @@
 import { useMemo, useState } from 'react'
+import { clsx } from 'clsx'
 import { Factory, History, Pause, Play, CheckCircle2, Truck } from 'lucide-react'
 import type { JobOrder, JobStatus } from '@/types'
 import { useJobs, useTransitionJob, useJobEvents } from '@/features/jobs/hooks/useJobs'
 import { toUserMessage } from '@/lib/api/errors'
-import { jobPendingQty } from '@/data/computations'
 import { fmtDate, fmtDateTime, inRange, qty } from '@/lib/format'
 import { PageHeader } from '@/components/common/PageHeader'
 import { Card, EmptyState, Field, Input, Textarea } from '@/components/ui/primitives'
@@ -78,7 +78,6 @@ export function ProductionPage() {
       ) : (
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
           {queue.map((job) => {
-            const pending = jobPendingQty(job.orderedQty, job.completedQty)
             const pct = job.orderedQty
               ? Math.min(100, (job.completedQty / job.orderedQty) * 100)
               : 0
@@ -97,15 +96,18 @@ export function ProductionPage() {
                 </div>
 
                 <div className="mb-2">
-                  <div className="mb-1 flex justify-between text-2xs text-slate-500">
-                    <span>
+                  <div className="mb-1 flex items-center justify-between text-2xs text-slate-500">
+                    <span className="tnum">
                       {qty(job.completedQty)} / {qty(job.orderedQty)} done
                     </span>
-                    <span>{qty(pending)} pending</span>
+                    <span className="tnum font-semibold text-slate-700">{Math.round(pct)}%</span>
                   </div>
-                  <div className="h-1.5 w-full overflow-hidden rounded-full bg-slate-100">
+                  <div className="h-2 w-full overflow-hidden rounded-full bg-slate-100">
                     <div
-                      className="h-full rounded-full bg-brand-500"
+                      className={clsx(
+                        'h-full rounded-full transition-all',
+                        pct >= 100 ? 'bg-emerald-500' : 'bg-brand-500',
+                      )}
                       style={{ width: `${pct}%` }}
                     />
                   </div>

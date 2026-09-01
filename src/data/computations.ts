@@ -7,6 +7,7 @@ import type {
   Material,
   MaterialIssue,
   MaterialReceipt,
+  MaterialReceiptStock,
   MaterialStock,
   Payment,
   StockAdjustment,
@@ -90,6 +91,77 @@ export function materialStock(db: StockDb, materialId: string, companyId?: strin
     issued: roundMoney(issued),
     adjusted: roundMoney(adjusted),
     balance: roundMoney(received - issued + adjusted),
+  }
+}
+
+// Per-source stock position for ONE received stock (a material_receipts row).
+// Available is computed strictly from movements attributed to THIS receipt
+// (source_receipt_id), so two intakes of the same material never merge — the
+// pure-TS mirror of the material_receipt_stock DB view. DC and Invoice both
+// consume the same source, so both count toward totalDispatched.
+export interface ReceiptStock {
+  receiptId: string
+  received: number
+  dcQty: number
+  invoiceQty: number
+  otherOut: number
+  totalDispatched: number
+  adjusted: number
+  available: number
+  status: 'Available' | 'Fully Dispatched'
+}
+
+export function receiptStock(db: StockDb, receipt: MaterialReceipt): ReceiptStock {
+  const issues = db.issues.filter((i) => i.sourceReceiptId === receipt.id)
+  const dcQty = issues
+    .filter((i) => i.note?.toLowerCase().includes('challan') ?? false)
+    .reduce((s, i) => s + i.quantity, 0)
+  const invoiceQty = issues
+    .filter((i) => i.note?.toLowerCase().includes('invoice') ?? false)
+    .reduce((s, i) => s + i.quantity, 0)
+  const totalDispatched = issues.reduce((s, i) => s + i.quantity, 0)
+  const otherOut = roundMoney(totalDispatched - dcQty - invoiceQty)
+  const adjusted = db.adjustments
+    .filter((a) => a.sourceReceiptId === receipt.id)
+    .reduce((s, a) => s + a.quantity, 0)
+  const available = roundMoney(receipt.quantity - totalDispatched + adjusted)
+  return {
+    receiptId: receipt.id,
+    received: roundMoney(receipt.quantity),
+    dcQty: roundMoney(dcQty),
+    invoiceQty: roundMoney(invoiceQty),
+    otherOut,
+    totalDispatched: roundMoney(totalDispatched),
+    adjusted: roundMoney(adjusted),
+    available,
+    status: available <= 0 ? 'Fully Dispatched' : 'Available',
+  }
+}
+
+// A full per-source stock row (matching the material_receipt_stock DB view)
+// derived client-side from a receipt + the movement ledger. Lets the UI show
+// source-wise stock without depending on the DB view being present.
+export function receiptStockRow(db: StockDb, r: MaterialReceipt): MaterialReceiptStock {
+  const s = receiptStock(db, r)
+  return {
+    receiptId: r.id,
+    receiptNo: r.receiptNo,
+    date: r.date,
+    materialId: r.materialId,
+    companyId: r.companyId,
+    ownerType: r.ownerType,
+    ownership: r.companyId == null ? 'Shop' : 'Company',
+    sourceDocNo: r.reference,
+    supplier: r.supplier,
+    unit: r.unit,
+    received: s.received,
+    dcQty: s.dcQty,
+    invoiceQty: s.invoiceQty,
+    otherOut: s.otherOut,
+    totalDispatched: s.totalDispatched,
+    adjusted: s.adjusted,
+    available: s.available,
+    status: s.status,
   }
 }
 

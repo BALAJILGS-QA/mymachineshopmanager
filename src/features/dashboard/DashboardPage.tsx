@@ -3,10 +3,12 @@ import { Link, type LinkProps } from '@tanstack/react-router'
 import {
   AlertTriangle,
   ArrowRight,
+  Boxes,
   ClipboardList,
   Factory,
   FileText,
   IndianRupee,
+  PackageCheck,
   PackageX,
   Percent,
   Receipt,
@@ -25,6 +27,7 @@ import {
 import { currency, fmtDate, qty } from '@/lib/format'
 import { Card, Select } from '@/components/ui/primitives'
 import { PageHeader } from '@/components/common/PageHeader'
+import { WorkflowStepper } from '@/components/common/WorkflowStepper'
 import { JobStatusBadge, PriorityBadge } from '@/components/common/status'
 import { useCompanyName, useMaterialName } from '@/features/shared/lookups'
 import { useJobs } from '@/features/jobs/hooks/useJobs'
@@ -225,6 +228,21 @@ export function DashboardPage() {
 
   const scopeLabel = company ? companyName(company) : 'All companies'
 
+  // Shop-floor flow counts for the workflow stepper (from existing data).
+  const flow = useMemo(() => {
+    const inStock = materials.filter(
+      (m) => materialStock(stockDb, m.id, company || undefined).balance > 0,
+    ).length
+    return {
+      inStock,
+      open: jobsF.filter((j) => ['Pending', 'Draft'].includes(j.status)).length,
+      machining: jobsF.filter((j) => j.status === 'In Progress').length,
+      ready: jobsF.filter((j) => j.status === 'Completed').length,
+      dispatched: jobsF.filter((j) => j.status === 'Delivered').length,
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [jobsF, materials, stamp, company])
+
   return (
     <div>
       <PageHeader
@@ -245,6 +263,47 @@ export function DashboardPage() {
             ))}
           </Select>
         }
+      />
+
+      {/* Shop-floor flow — Received → Stock → Machining → Ready → Dispatched */}
+      <WorkflowStepper
+        stages={[
+          {
+            label: 'Material Stock',
+            count: flow.inStock,
+            icon: Boxes,
+            to: '/app/materials',
+            tone: 'brand',
+          },
+          {
+            label: 'Job Orders',
+            count: flow.open,
+            icon: ClipboardList,
+            to: '/app/jobs',
+            tone: 'amber',
+          },
+          {
+            label: 'In Machining',
+            count: flow.machining,
+            icon: Factory,
+            to: '/app/production',
+            tone: 'blue',
+          },
+          {
+            label: 'Ready to Dispatch',
+            count: flow.ready,
+            icon: PackageCheck,
+            to: '/app/production',
+            tone: 'green',
+          },
+          {
+            label: 'Dispatched',
+            count: flow.dispatched,
+            icon: Send,
+            to: '/app/deliveries',
+            tone: 'slate',
+          },
+        ]}
       />
 
       {/* KPI cards */}
@@ -493,12 +552,12 @@ export function DashboardPage() {
 }
 
 const TONES: Record<string, string> = {
-  amber: 'bg-amber-100 text-amber-700 ring-1 ring-amber-300',
-  blue: 'bg-sky-100 text-sky-700 ring-1 ring-sky-300',
-  green: 'bg-emerald-100 text-emerald-700 ring-1 ring-emerald-300',
-  violet: 'bg-violet-100 text-violet-700 ring-1 ring-violet-300',
-  red: 'bg-red-100 text-red-700 ring-1 ring-red-300',
-  slate: 'bg-slate-200 text-slate-700 ring-1 ring-slate-300',
+  amber: 'bg-amber-50 text-amber-600',
+  blue: 'bg-blue-50 text-blue-600',
+  green: 'bg-emerald-50 text-emerald-600',
+  violet: 'bg-violet-50 text-violet-600',
+  red: 'bg-red-50 text-red-600',
+  slate: 'bg-slate-100 text-slate-600',
 }
 
 function Kpi({
@@ -517,15 +576,19 @@ function Kpi({
   return (
     <Link
       to={to}
-      className="card p-3.5 transition duration-200 hover:-translate-y-0.5 hover:shadow-md"
+      className="card flex items-center justify-between gap-3 p-4 transition-colors hover:border-slate-300 hover:bg-slate-50/60"
     >
-      <div
-        className={`mb-2 inline-flex h-8 w-8 items-center justify-center rounded-lg ${TONES[tone]}`}
-      >
-        <Icon size={17} />
+      <div className="min-w-0">
+        <p className="truncate text-2xs font-medium uppercase tracking-wide text-slate-500">
+          {label}
+        </p>
+        <p className="tnum mt-1 truncate text-xl font-bold leading-none text-slate-900">{value}</p>
       </div>
-      <p className="text-lg font-bold leading-tight text-slate-900">{value}</p>
-      <p className="text-2xs font-medium text-slate-600">{label}</p>
+      <div
+        className={`inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg ${TONES[tone]}`}
+      >
+        <Icon size={18} />
+      </div>
     </Link>
   )
 }

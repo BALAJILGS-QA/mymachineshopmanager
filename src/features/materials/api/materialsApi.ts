@@ -11,6 +11,7 @@ import type {
   Material,
   MaterialIssue,
   MaterialReceipt,
+  MaterialReceiptStock,
   OwnMaterialPurchase,
   PaymentMethod,
   StockAdjustment,
@@ -148,6 +149,29 @@ export async function createOwnPurchase(input: OwnPurchaseInput): Promise<OwnMat
   })
   if (error) throw error
   return fromRow<OwnMaterialPurchase>((data as Row[])[0], maps.ownPurchases)
+}
+
+// ---- Per-source stock (material_receipt_stock view) ----
+export interface ReceiptStockFilter {
+  scope?: string // undefined = all, SHOP_SCOPE = own/shop, else a company id
+  materialId?: string
+  availableOnly?: boolean // only sources with available > 0 (dispatch pickers)
+}
+
+// One row per received stock with its dispatch split (Received / DC / Invoice /
+// Total Dispatched / Available / Status). The single source of truth for the
+// per-source stock grid and the delivery-challan / invoice source picker.
+export async function listReceiptStock(
+  f: ReceiptStockFilter = {},
+): Promise<MaterialReceiptStock[]> {
+  let q = sb().from('material_receipt_stock').select('*')
+  if (f.scope === SHOP_SCOPE) q = q.is('company_id', null)
+  else if (f.scope) q = q.eq('company_id', f.scope)
+  if (f.materialId) q = q.eq('material_id', f.materialId)
+  if (f.availableOnly) q = q.gt('available', 0)
+  const { data, error } = await q.order('date', { ascending: true }).limit(1000)
+  if (error) throw error
+  return (data ?? []).map((r) => fromRow<MaterialReceiptStock>(r as Row, maps.materialReceiptStock))
 }
 
 // ---- Inventory ledger (unified transaction history) ----

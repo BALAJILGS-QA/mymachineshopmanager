@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate } from '@tanstack/react-router'
 import { clsx } from 'clsx'
 import {
@@ -29,31 +29,23 @@ import {
 import { useInvoices } from '@/features/invoices/hooks/useInvoices'
 import { useCompanies } from '@/features/companies/hooks/useCompanies'
 import { useJobs } from '@/features/jobs/hooks/useJobs'
-import { useMaterials } from '@/features/materials/hooks/useMaterials'
+import { useSourceStock } from '@/features/materials/hooks/useMaterials'
 import { usePreviewNo } from '@/features/shared/usePreviewNo'
 import { toUserMessage } from '@/lib/api/errors'
-import {
-  fmtDate,
-  fmtDateTime,
-  inRange,
-  monthEndISO,
-  monthStartISO,
-  qty,
-  thisMonthLabel,
-  thisMonthPrefix,
-  todayISO,
-} from '@/lib/format'
+import { fmtDate, fmtDateTime, inRange, qty, thisMonthLabel, thisMonthPrefix } from '@/lib/format'
 import { uid } from '@/lib/id'
 import { PageHeader, ResponsiveTable } from '@/components/common/PageHeader'
+import { TableSkeleton } from '@/components/common/Skeleton'
 import { StatTile } from '@/components/common/StatTile'
 import { Badge, Card, EmptyState, Field, Input, Select, Textarea } from '@/components/ui/primitives'
+import { DateInput } from '@/components/ui/DateInput'
 import { Modal } from '@/components/ui/Modal'
 import { MultiSelectDropdown } from '@/components/ui/MultiSelectDropdown'
 import { CompanyFilter, DateRangeFilter, FilterBar, SearchBox } from '@/components/common/Filters'
 import { Pagination, usePagination } from '@/components/common/Pagination'
 import { useToast } from '@/components/ui/Toast'
 import { useConfirm } from '@/components/ui/ConfirmDialog'
-import { useCompanyName } from '@/features/shared/lookups'
+import { useCompanyName, useMaterialName } from '@/features/shared/lookups'
 import { InvoiceForm } from '@/features/invoices/InvoiceForm'
 
 export function DeliveriesPage() {
@@ -81,8 +73,8 @@ export function DeliveriesPage() {
   const [invoiceFor, setInvoiceFor] = useState<DeliveryChallan[] | null>(null)
   const [search, setSearch] = useState('')
   const [company, setCompany] = useState('')
-  const [from, setFrom] = useState(monthStartISO())
-  const [to, setTo] = useState(monthEndISO())
+  const [from, setFrom] = useState('')
+  const [to, setTo] = useState('')
 
   // The live invoice a challan was billed on (undefined if none / cancelled).
   const linkedInvoice = (d: DeliveryChallan) =>
@@ -269,7 +261,7 @@ export function DeliveriesPage() {
 
       <Card>
         {isLoading ? (
-          <div className="p-8 text-center text-sm text-slate-500">Loading challans…</div>
+          <TableSkeleton rows={8} cols={6} />
         ) : rows.length === 0 ? (
           <EmptyState
             icon={<Truck size={40} />}
@@ -456,9 +448,8 @@ function DcForm({ dc, onClose }: { dc: DeliveryChallan | null; onClose: () => vo
   const { data: allCompanies = [] } = useCompanies()
   const companies = allCompanies.filter((c) => c.active || c.id === dc?.companyId)
   const { data: jobs = [] } = useJobs()
-  const { data: allMaterials = [] } = useMaterials()
-  const materials = allMaterials.filter((m) => m.active)
   const { data: existingChallans = [] } = useChallans()
+  const materialName = useMaterialName()
   const dcNoPreview = usePreviewNo('dc')
   const isEdit = !!dc
   // An Open (un-invoiced) challan is fully editable — every field and the set of
@@ -468,7 +459,7 @@ function DcForm({ dc, onClose }: { dc: DeliveryChallan | null; onClose: () => vo
   const metaOnly = isEdit && dc.status !== 'Open'
 
   const [companyId, setCompanyId] = useState(dc?.companyId ?? companies[0]?.id ?? '')
-  const [date, setDate] = useState(dc?.date ?? todayISO())
+  const [date, setDate] = useState(dc?.date ?? '')
   const [jobId, setJobId] = useState(dc?.jobId ?? '')
   const [reference, setReference] = useState(dc?.reference ?? '')
   const [vehicleNo, setVehicleNo] = useState(dc?.vehicleNo ?? '')
@@ -477,33 +468,80 @@ function DcForm({ dc, onClose }: { dc: DeliveryChallan | null; onClose: () => vo
   // override the user types in. Auto mode never consumes the counter early.
   const [autoNumber, setAutoNumber] = useState(true)
   const [manualDcNo, setManualDcNo] = useState('')
-  // New challans start empty — materials are added via the multi-select below.
+  // New challans start empty — sources are added via the source picker below.
   const [lines, setLines] = useState<DcLine[]>(dc?.lines ?? [])
 
-  // Materials currently mapped onto this challan (drives the multi-select ticks).
-  const selectedMaterialIds = useMemo(
-    () => new Set(lines.map((l) => l.materialId).filter(Boolean) as string[]),
+  // Per-source stock. Fetch all sources (for accurate grid figures even when a
+  // source is fully consumed by THIS challan in edit mode); the picker itself
+  // only offers this customer's / own sources with available stock (rule §7),
+  // plus any already on this challan so its ticks stay correct.
+  // Exclude THIS challan's own dispatch when editing, so its lines are free to
+  // re-allocate (Available shows headroom excluding itself; other documents still
+  // count). For a new challan there is nothing to exclude.
+  const allSources = useSourceStock({ excludeChallanId: dc?.id })
+  // Fast lookup of a source's current stock position (for the grid figures).
+  const sourceById = useMemo(() => {
+    const m = new Map<string, (typeof allSources)[number]>()
+    for (const r of allSources) m.set(r.receiptId, r)
+    return m
+  }, [allSources])
+
+  // Sources already placed on this challan (drives the picker ticks).
+  const selectedSourceIds = useMemo(
+    () => new Set(lines.map((l) => l.sourceReceiptId).filter(Boolean) as string[]),
     [lines],
   )
+
+  const sources = useMemo(
+    () =>
+      allSources.filter(
+        (r) =>
+          (r.companyId === companyId || r.ownerType === 'Shop') &&
+          (r.available > 0 || selectedSourceIds.has(r.receiptId)),
+      ),
+    [allSources, companyId, selectedSourceIds],
+  )
+
+  // Switching company invalidates any customer-scoped source lines (they belong
+  // to the previous customer). Drop them; keep own/shop and legacy lines. Skip
+  // the first run so an edited challan's lines survive mount.
+  const companyChanged = useRef(false)
+  useEffect(() => {
+    if (!companyChanged.current) {
+      companyChanged.current = true
+      return
+    }
+    setLines((ls) =>
+      ls.filter((l) => {
+        if (!l.sourceReceiptId) return true
+        const src = sourceById.get(l.sourceReceiptId)
+        return !src || src.ownerType === 'Shop' || src.companyId === companyId
+      }),
+    )
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [companyId])
 
   function updateLine(id: string, patch: Partial<DcLine>) {
     setLines((ls) => ls.map((l) => (l.id === id ? { ...l, ...patch } : l)))
   }
-  // Toggle a material on/off — ticking adds a dispatch line, unticking removes it.
-  function toggleMaterial(materialId: string) {
-    const m = materials.find((x) => x.id === materialId)
+  // Toggle a source on/off — ticking adds a dispatch line bound to that specific
+  // received stock, unticking removes it. Quantity defaults to all-available.
+  function toggleSource(receiptId: string) {
+    const r = sourceById.get(receiptId)
     setLines((ls) => {
-      if (ls.some((l) => l.materialId === materialId))
-        return ls.filter((l) => l.materialId !== materialId)
+      if (ls.some((l) => l.sourceReceiptId === receiptId))
+        return ls.filter((l) => l.sourceReceiptId !== receiptId)
+      if (!r) return ls
       return [
         ...ls,
         {
           id: uid('dl_'),
-          materialId,
-          ownerType: 'Company',
-          description: m?.name ?? '',
-          quantity: 1,
-          unit: m?.unit ?? 'Nos',
+          materialId: r.materialId,
+          ownerType: r.ownerType,
+          sourceReceiptId: r.receiptId,
+          description: materialName(r.materialId),
+          quantity: r.available,
+          unit: r.unit,
         },
       ]
     })
@@ -512,41 +550,25 @@ function DcForm({ dc, onClose }: { dc: DeliveryChallan | null; onClose: () => vo
     setLines((ls) => ls.filter((l) => l.id !== id))
   }
 
+  // Per-line source position for the grid + validation. `allSources` already
+  // excludes this challan's own dispatch (excludeChallanId), so the source's
+  // figures are exactly what this line needs: Prev. Sent = dispatched by OTHER
+  // documents, Available = Received − Prev. Sent (+ adjustments).
+  function lineStock(l: DcLine) {
+    if (!l.sourceReceiptId) return undefined
+    const src = sourceById.get(l.sourceReceiptId)
+    if (!src) return undefined
+    return {
+      received: src.received,
+      prevSent: src.totalDispatched,
+      available: src.available,
+      unit: src.unit,
+    }
+  }
+
   async function submit() {
     try {
-      if (isEdit) {
-        if (canFullEdit) {
-          // Open challan: every field + the set of materials is editable and the
-          // dispatched stock is re-synced (old issues reversed, new ones posted).
-          const cleaned = lines.filter((l) => l.materialId && Number(l.quantity) > 0)
-          if (!cleaned.length) {
-            toast.error('Add at least one item with a material and quantity')
-            return
-          }
-          await updateChallanFull.mutateAsync({
-            id: dc.id,
-            patch: {
-              date,
-              companyId,
-              jobId: jobId || undefined,
-              reference: reference || undefined,
-              vehicleNo: vehicleNo || undefined,
-              notes: notes || undefined,
-              lines: cleaned.map((l) => ({
-                id: l.id,
-                materialId: l.materialId,
-                ownerType: l.ownerType,
-                description: l.description,
-                quantity: Number(l.quantity),
-                unit: l.unit,
-                jobId: l.jobId,
-              })),
-            },
-          })
-          toast.success('Challan updated — stock re-synced')
-          onClose()
-          return
-        }
+      if (isEdit && !canFullEdit) {
         // Cancelled/invoiced challan: only metadata is editable.
         await updateChallan.mutateAsync({
           id: dc.id,
@@ -560,11 +582,54 @@ function DcForm({ dc, onClose }: { dc: DeliveryChallan | null; onClose: () => vo
         onClose()
         return
       }
+
       const cleaned = lines.filter((l) => l.materialId && Number(l.quantity) > 0)
       if (!cleaned.length) {
-        toast.error('Add at least one item with a material and quantity')
+        toast.error('Add at least one source with a quantity')
         return
       }
+      // Client-side over-dispatch guard per source (the backend RPC is the final,
+      // race-safe gate). Skip lines with no known source (legacy) — server checks.
+      for (const l of cleaned) {
+        const st = lineStock(l)
+        if (st && Number(l.quantity) > st.available) {
+          toast.error(
+            `Cannot dispatch ${qty(Number(l.quantity))} of ${l.description}. Only ${qty(st.available)} ${st.unit} available for this source.`,
+          )
+          return
+        }
+      }
+      const payloadLines = cleaned.map((l) => ({
+        id: l.id,
+        materialId: l.materialId,
+        ownerType: l.ownerType,
+        sourceReceiptId: l.sourceReceiptId,
+        description: l.description,
+        quantity: Number(l.quantity),
+        unit: l.unit,
+        jobId: l.jobId ?? (jobId || undefined),
+      }))
+
+      if (isEdit) {
+        // Open challan: every field + the set of sources is editable; stock is
+        // re-synced (old issues reversed, new ones posted) atomically.
+        await updateChallanFull.mutateAsync({
+          id: dc.id,
+          patch: {
+            date,
+            companyId,
+            jobId: jobId || undefined,
+            reference: reference || undefined,
+            vehicleNo: vehicleNo || undefined,
+            notes: notes || undefined,
+            lines: payloadLines,
+          },
+        })
+        toast.success('Challan updated — stock re-synced')
+        onClose()
+        return
+      }
+
       // Resolve the challan number: undefined => server mints the next sequential
       // one; a trimmed manual value is validated for presence + uniqueness here
       // (the DB unique constraint is the final guard).
@@ -589,15 +654,7 @@ function DcForm({ dc, onClose }: { dc: DeliveryChallan | null; onClose: () => vo
         vehicleNo: vehicleNo || undefined,
         notes: notes || undefined,
         status: 'Open',
-        lines: cleaned.map((l) => ({
-          id: l.id,
-          materialId: l.materialId,
-          ownerType: l.ownerType,
-          description: l.description,
-          quantity: Number(l.quantity),
-          unit: l.unit,
-          jobId: jobId || undefined,
-        })),
+        lines: payloadLines,
       })
       toast.success('Challan created — stock dispatched')
       onClose()
@@ -711,12 +768,7 @@ function DcForm({ dc, onClose }: { dc: DeliveryChallan | null; onClose: () => vo
           </Select>
         </Field>
         <Field label="Date" required>
-          <Input
-            type="date"
-            value={date}
-            onChange={(e) => setDate(e.target.value)}
-            disabled={metaOnly}
-          />
+          <DateInput value={date} onChange={setDate} disabled={metaOnly} />
         </Field>
         <Field label="Job (optional)">
           <Select value={jobId} onChange={(e) => setJobId(e.target.value)} disabled={metaOnly}>
@@ -738,86 +790,118 @@ function DcForm({ dc, onClose }: { dc: DeliveryChallan | null; onClose: () => vo
 
       <div className="mt-4">
         <div className="mb-1 flex items-center justify-between gap-2">
-          <label className="label mb-0">Items (dispatched from stock)</label>
+          <label className="label mb-0">Dispatch from received stock</label>
         </div>
         {!metaOnly && (
           <div className="mb-2">
             <MultiSelectDropdown
-              options={materials.map((m) => ({ id: m.id, label: m.name, hint: m.unit }))}
-              selectedIds={selectedMaterialIds}
-              onToggle={toggleMaterial}
-              placeholder="Select materials to dispatch…"
-              emptyText="No active materials"
+              options={sources.map((r) => ({
+                id: r.receiptId,
+                label: `${materialName(r.materialId)}${r.ownerType === 'Shop' ? ' · Own' : ''}`,
+                hint: `${r.sourceDocNo || r.receiptNo} · avail ${qty(r.available)} ${r.unit}`,
+              }))}
+              selectedIds={selectedSourceIds}
+              onToggle={toggleSource}
+              placeholder={
+                companyId ? 'Select material sources to dispatch…' : 'Select a company first'
+              }
+              emptyText={
+                companyId
+                  ? 'No received stock with available quantity for this customer'
+                  : 'Select a company to list its available stock'
+              }
             />
             <p className="mt-1 text-2xs text-slate-500">
-              Pick one or more materials — each becomes a line below whose quantity reduces stock.
+              Each option is one received stock (source challan/invoice). Only this customer's
+              materials and own stock with available quantity are shown — each becomes a line whose
+              quantity reduces that specific source.
             </p>
           </div>
         )}
         {lines.length === 0 ? (
           <p className="rounded-lg border border-dashed border-slate-200 px-3 py-4 text-center text-xs text-slate-500">
-            No materials selected yet.
+            No material sources selected yet.
           </p>
         ) : (
           <div className="overflow-x-auto rounded-lg border border-slate-200">
-            <table className="w-full min-w-[34rem]">
+            <table className="w-full min-w-[46rem]">
               <thead>
                 <tr className="bg-slate-50">
                   <th className="th">Material</th>
-                  <th className="th w-36">From stock</th>
-                  <th className="th w-24 text-right">Qty</th>
-                  <th className="th w-16">Unit</th>
+                  <th className="th">Source</th>
+                  <th className="th w-20 text-right">Received</th>
+                  <th className="th w-24 text-right">Prev. Sent</th>
+                  <th className="th w-20 text-right">Available</th>
+                  <th className="th w-24 text-right">Dispatch</th>
+                  <th className="th w-20 text-right">Remaining</th>
                   <th className="th w-10"></th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {lines.map((l) => (
-                  <tr key={l.id}>
-                    <td className="px-2 py-1.5">
-                      <span className="text-sm text-slate-700">{l.description || '—'}</span>
-                    </td>
-                    <td className="px-2 py-1.5">
-                      {metaOnly ? (
-                        <span className="text-2xs text-slate-500">
-                          {l.ownerType === 'Shop' ? 'Own (shop)' : 'Customer'}
-                        </span>
-                      ) : (
-                        <select
-                          className="input"
-                          value={l.ownerType ?? 'Company'}
-                          onChange={(e) =>
-                            updateLine(l.id, { ownerType: e.target.value as DcLine['ownerType'] })
-                          }
-                        >
-                          <option value="Company">This customer's stock</option>
-                          <option value="Shop">Own (shop) stock</option>
-                        </select>
-                      )}
-                    </td>
-                    <td className="px-2 py-1.5">
-                      <input
-                        type="number"
-                        step="0.001"
-                        min={0}
-                        className="input text-right"
-                        value={l.quantity}
-                        disabled={metaOnly}
-                        onChange={(e) => updateLine(l.id, { quantity: Number(e.target.value) })}
-                      />
-                    </td>
-                    <td className="px-2 py-1.5 text-slate-600">{l.unit}</td>
-                    <td className="px-2 py-1.5 text-right">
-                      {!metaOnly && (
-                        <button
-                          className="btn-ghost btn-sm text-red-500"
-                          onClick={() => removeLine(l.id)}
-                        >
-                          <Trash2 size={15} />
-                        </button>
-                      )}
-                    </td>
-                  </tr>
-                ))}
+                {lines.map((l) => {
+                  const src = l.sourceReceiptId ? sourceById.get(l.sourceReceiptId) : undefined
+                  const st = lineStock(l)
+                  const max = st?.available
+                  const remaining =
+                    max != null ? Math.round((max - Number(l.quantity)) * 1000) / 1000 : undefined
+                  const over = max != null && Number(l.quantity) > max
+                  return (
+                    <tr key={l.id}>
+                      <td className="px-2 py-1.5">
+                        <span className="text-sm text-slate-700">{l.description || '—'}</span>
+                        {l.ownerType === 'Shop' && (
+                          <span className="ml-1 text-2xs text-slate-400">(Own)</span>
+                        )}
+                      </td>
+                      <td className="px-2 py-1.5 font-mono text-2xs text-slate-500">
+                        {src?.sourceDocNo || src?.receiptNo || '—'}
+                      </td>
+                      <td className="px-2 py-1.5 text-right text-slate-600">
+                        {st ? qty(st.received) : '—'}
+                      </td>
+                      <td className="px-2 py-1.5 text-right text-slate-600">
+                        {st ? qty(st.prevSent) : '—'}
+                      </td>
+                      <td className="px-2 py-1.5 text-right font-medium text-slate-700">
+                        {max != null ? qty(max) : '—'}
+                      </td>
+                      <td className="px-2 py-1.5">
+                        <input
+                          type="number"
+                          step="0.001"
+                          min={0}
+                          max={max}
+                          className={clsx(
+                            'input text-right',
+                            over && 'border-red-400 text-red-600',
+                          )}
+                          value={l.quantity}
+                          disabled={metaOnly}
+                          onChange={(e) => updateLine(l.id, { quantity: Number(e.target.value) })}
+                        />
+                      </td>
+                      <td
+                        className={clsx(
+                          'px-2 py-1.5 text-right font-semibold',
+                          over ? 'text-red-600' : 'text-slate-900',
+                        )}
+                      >
+                        {remaining != null ? qty(remaining) : '—'}
+                        <span className="ml-1 text-2xs font-normal text-slate-500">{l.unit}</span>
+                      </td>
+                      <td className="px-2 py-1.5 text-right">
+                        {!metaOnly && (
+                          <button
+                            className="btn-ghost btn-sm text-red-500"
+                            onClick={() => removeLine(l.id)}
+                          >
+                            <Trash2 size={15} />
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  )
+                })}
               </tbody>
             </table>
           </div>

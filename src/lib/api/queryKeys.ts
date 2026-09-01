@@ -38,6 +38,7 @@ export const qk = {
     issues: ['stock', 'issues'] as const,
     adjustments: ['stock', 'adjustments'] as const,
     ledger: ['stock', 'ledger'] as const,
+    receiptStock: ['stock', 'receiptStock'] as const,
     ownPurchases: ['stock', 'ownPurchases'] as const,
   },
   deliveries: {

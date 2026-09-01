@@ -14,11 +14,13 @@ import { useMaterials } from '@/features/materials/hooks/useMaterials'
 import { useCompanies } from '@/features/companies/hooks/useCompanies'
 import { useCompanyName, useMaterialName } from '@/features/shared/lookups'
 import { toUserMessage } from '@/lib/api/errors'
-import { currency, fmtDate, qty, todayISO } from '@/lib/format'
+import { currency, fmtDate, qty } from '@/lib/format'
 import { PAYMENT_METHODS as METHODS } from '@/constants/domain'
 import { PageHeader, ResponsiveTable } from '@/components/common/PageHeader'
+import { TableSkeleton } from '@/components/common/Skeleton'
 import { StatTile } from '@/components/common/StatTile'
 import { Badge, Card, EmptyState, Field, Input, Select, Textarea } from '@/components/ui/primitives'
+import { DateInput } from '@/components/ui/DateInput'
 import { Modal } from '@/components/ui/Modal'
 import { Pagination, usePagination } from '@/components/common/Pagination'
 import { SearchBox } from '@/components/common/Filters'
@@ -135,7 +137,7 @@ export function SubcontractingPage() {
 
       <Card>
         {isLoading ? (
-          <div className="p-8 text-center text-sm text-slate-500">Loading subcontracts…</div>
+          <TableSkeleton rows={8} cols={7} />
         ) : rows.length === 0 ? (
           <EmptyState
             icon={<Factory size={40} />}
@@ -234,7 +236,7 @@ function NewSubcontractForm({ onClose }: { onClose: () => void }) {
   const [companyId, setCompanyId] = useState('')
   const [materialId, setMaterialId] = useState('')
   const [vendorId, setVendorId] = useState(vendors[0]?.id ?? '')
-  const [date, setDate] = useState(todayISO())
+  const [date, setDate] = useState('')
   const [process, setProcess] = useState('')
   const [notes, setNotes] = useState('')
 
@@ -315,7 +317,7 @@ function NewSubcontractForm({ onClose }: { onClose: () => void }) {
           </Field>
         ) : (
           <Field label="Date" required>
-            <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+            <DateInput value={date} onChange={setDate} />
           </Field>
         )}
         <Field label="Material" required>
@@ -340,7 +342,7 @@ function NewSubcontractForm({ onClose }: { onClose: () => void }) {
         </Field>
         {ownerType === 'Company' && (
           <Field label="Date" required>
-            <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+            <DateInput value={date} onChange={setDate} />
           </Field>
         )}
         <Field label="Job Work / Process" className="sm:col-span-2">
@@ -362,7 +364,7 @@ function DispatchForm({ order, onClose }: { order: SubcontractOrder; onClose: ()
   const toast = useToast()
   const dispatch = useDispatchSubcontract()
   const materialName = useMaterialName()
-  const [date, setDate] = useState(todayISO())
+  const [date, setDate] = useState('')
   const [quantity, setQuantity] = useState('')
   const [notes, setNotes] = useState('')
 
@@ -403,7 +405,7 @@ function DispatchForm({ order, onClose }: { order: SubcontractOrder; onClose: ()
       </p>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <Field label="Date" required>
-          <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+          <DateInput value={date} onChange={setDate} />
         </Field>
         <Field label={`Quantity (${order.unit})`} required>
           <Input
@@ -426,7 +428,7 @@ function ReceiveForm({ order, onClose }: { order: SubcontractOrder; onClose: () 
   const toast = useToast()
   const receive = useReceiveSubcontract()
   const outstanding = atVendor(order)
-  const [date, setDate] = useState(todayISO())
+  const [date, setDate] = useState('')
   const [docKind, setDocKind] = useState<'DC' | 'INVOICE'>('DC')
   const [vendorRef, setVendorRef] = useState('')
   const [quantity, setQuantity] = useState(String(outstanding > 0 ? outstanding : ''))
@@ -497,7 +499,7 @@ function ReceiveForm({ order, onClose }: { order: SubcontractOrder; onClose: () 
           <Input value={vendorRef} onChange={(e) => setVendorRef(e.target.value)} />
         </Field>
         <Field label="Date" required>
-          <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+          <DateInput value={date} onChange={setDate} />
         </Field>
         <Field label={`Good Qty (${order.unit})`} required>
           <Input

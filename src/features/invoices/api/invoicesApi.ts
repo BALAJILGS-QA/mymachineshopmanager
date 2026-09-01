@@ -22,6 +22,7 @@ function lineFromRow(r: Row): InvoiceLine {
     rate: Number(r.rate),
     materialId: (r.material_id as string) ?? undefined,
     ownerType: (r.owner_type as InvoiceLine['ownerType']) ?? undefined,
+    sourceReceiptId: (r.source_receipt_id as string) ?? undefined,
   }
 }
 
@@ -49,9 +50,11 @@ export async function createInvoice(input: InvoiceCreateInput): Promise<Invoice>
     description: l.description,
     quantity: l.quantity,
     rate: l.rate,
-    // A line with a materialId deducts stock server-side (create_invoice RPC).
+    // A line with a materialId deducts stock server-side (create_invoice RPC);
+    // a sourceReceiptId makes it consume that specific received stock.
     materialId: l.materialId ?? '',
     ownerType: l.ownerType ?? '',
+    sourceReceiptId: l.sourceReceiptId ?? '',
     unit: l.unit ?? '',
   }))
   const { data, error } = await sb().rpc('create_invoice', {

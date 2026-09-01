@@ -8,6 +8,7 @@ import { jobPendingQty } from '@/data/computations'
 import { fmtDate, inRange, qty } from '@/lib/format'
 import { downloadXlsx } from '@/lib/xlsx'
 import { PageHeader, ResponsiveTable } from '@/components/common/PageHeader'
+import { TableSkeleton } from '@/components/common/Skeleton'
 import { Card, EmptyState, Select } from '@/components/ui/primitives'
 import { CompanyFilter, FilterBar, SearchBox, DateRangeFilter } from '@/components/common/Filters'
 import { JobStatusBadge, PriorityBadge } from '@/components/common/status'
@@ -125,7 +126,7 @@ export function JobsPage() {
 
       <Card>
         {isLoading ? (
-          <div className="p-8 text-center text-sm text-slate-500">Loading job orders…</div>
+          <TableSkeleton rows={8} cols={7} />
         ) : filtered.length === 0 ? (
           <EmptyState
             icon={<ClipboardList size={40} />}

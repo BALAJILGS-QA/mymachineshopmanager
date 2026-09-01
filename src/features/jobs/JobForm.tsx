@@ -6,8 +6,9 @@ import { useCompanies } from '@/features/companies/hooks/useCompanies'
 import { useMaterials, useMaterialBalance } from '@/features/materials/hooks/useMaterials'
 import { usePreviewNo } from '@/features/shared/usePreviewNo'
 import { toUserMessage } from '@/lib/api/errors'
-import { todayISO, qty, fmtDateTime } from '@/lib/format'
+import { qty, fmtDateTime } from '@/lib/format'
 import { Field, Input, Select, Textarea } from '@/components/ui/primitives'
+import { DateInput } from '@/components/ui/DateInput'
 import { Modal } from '@/components/ui/Modal'
 import { useToast } from '@/components/ui/Toast'
 import { JOB_PRIORITIES as PRIORITIES, JOB_STATUSES as STATUSES } from '@/constants/domain'
@@ -34,7 +35,7 @@ export function JobForm({ job, onClose }: { job: JobOrder | null; onClose: () =>
     orderedQty: job?.orderedQty ?? 1,
     completedQty: job?.completedQty ?? 0,
     rate: job?.rate ?? '',
-    orderDate: job?.orderDate ?? todayISO(),
+    orderDate: job?.orderDate ?? '',
     dueDate: job?.dueDate ?? '',
     priority: job?.priority ?? ('Normal' as JobPriority),
     status: job?.status ?? ('Pending' as JobStatus),
@@ -204,18 +205,10 @@ export function JobForm({ job, onClose }: { job: JobOrder | null; onClose: () =>
           />
         </Field>
         <Field label="Order Date" required>
-          <Input
-            type="date"
-            value={form.orderDate}
-            onChange={(e) => set('orderDate', e.target.value)}
-          />
+          <DateInput value={form.orderDate} onChange={(v) => set('orderDate', v)} />
         </Field>
         <Field label="Due Date">
-          <Input
-            type="date"
-            value={form.dueDate}
-            onChange={(e) => set('dueDate', e.target.value)}
-          />
+          <DateInput value={form.dueDate} onChange={(v) => set('dueDate', v)} />
         </Field>
         <Field label="Priority">
           <Select

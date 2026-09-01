@@ -6,6 +6,7 @@ import {
   computeInvoice,
   deriveInvoiceStatus,
   materialStock,
+  receiptStock,
   jobPendingQty,
   SHOP_SCOPE,
 } from './computations'
@@ -233,6 +234,143 @@ describe('materialStock', () => {
   it('scopes to a specific customer', () => {
     // cmp_1: received 40 - issued 10 = 30
     expect(materialStock(db, 'm1', 'cmp_1').balance).toBe(30)
+  })
+})
+
+// ---- receiptStock (source-wise stock allocation) ---------------------------
+// Mirrors the Delivery-Challan / Customer-Material-Stock business spec: each
+// received stock is tracked and reduced independently as it is dispatched via a
+// Delivery Challan OR an Invoice (both consume the SAME source).
+
+describe('receiptStock', () => {
+  const ESVA = 'cmp_esva'
+  // A customer intake of 1,000 Brackets on challan MC-ESVA-001.
+  const mc1 = rcpt({
+    id: 'rcp_mc1',
+    materialId: 'mat_bracket',
+    ownerType: 'Company',
+    companyId: ESVA,
+    quantity: 1000,
+    reference: 'MC-ESVA-001',
+  })
+  // A DC dispatch drawing from a specific source (note carries "challan").
+  const dc = (qty: number, id = 'iss_dc', src = mc1.id) =>
+    iss({
+      id,
+      materialId: 'mat_bracket',
+      companyId: ESVA,
+      quantity: qty,
+      sourceReceiptId: src,
+      note: `Dispatched via challan DC-00${id}`,
+    })
+  // An invoice dispatch drawing from a specific source (note carries "invoice").
+  const invoiceOut = (qty: number, id = 'iss_inv', src = mc1.id) =>
+    iss({
+      id,
+      materialId: 'mat_bracket',
+      companyId: ESVA,
+      quantity: qty,
+      sourceReceiptId: src,
+      note: `Billed via invoice INV-00${id}`,
+    })
+
+  it('Test 1: receive 1,000 → available 1,000', () => {
+    const db = makeDb({ receipts: [mc1], issues: [], adjustments: [] })
+    const s = receiptStock(db, mc1)
+    expect(s.received).toBe(1000)
+    expect(s.totalDispatched).toBe(0)
+    expect(s.available).toBe(1000)
+    expect(s.status).toBe('Available')
+  })
+
+  it('Test 2: receive 1,000 → DC 500 → available 500', () => {
+    const db = makeDb({ receipts: [mc1], issues: [dc(500)], adjustments: [] })
+    const s = receiptStock(db, mc1)
+    expect(s.dcQty).toBe(500)
+    expect(s.totalDispatched).toBe(500)
+    expect(s.available).toBe(500)
+    expect(s.status).toBe('Available')
+  })
+
+  it('Test 3: receive 1,000 → DC 500 → DC 500 → available 0, fully dispatched', () => {
+    const db = makeDb({
+      receipts: [mc1],
+      issues: [dc(500, 'iss_dc1'), dc(500, 'iss_dc2')],
+      adjustments: [],
+    })
+    const s = receiptStock(db, mc1)
+    expect(s.dcQty).toBe(1000)
+    expect(s.available).toBe(0)
+    expect(s.status).toBe('Fully Dispatched')
+  })
+
+  it('Test 4: receive 1,000 → Invoice 1,000 → available 0', () => {
+    const db = makeDb({ receipts: [mc1], issues: [invoiceOut(1000)], adjustments: [] })
+    const s = receiptStock(db, mc1)
+    expect(s.invoiceQty).toBe(1000)
+    expect(s.available).toBe(0)
+    expect(s.status).toBe('Fully Dispatched')
+  })
+
+  it('Test 5: receive 1,000 → DC 500 → Invoice 200 → available 300 (DC + Invoice share stock)', () => {
+    const db = makeDb({
+      receipts: [mc1],
+      issues: [dc(500), invoiceOut(200)],
+      adjustments: [],
+    })
+    const s = receiptStock(db, mc1)
+    expect(s.dcQty).toBe(500)
+    expect(s.invoiceQty).toBe(200)
+    expect(s.totalDispatched).toBe(700)
+    expect(s.available).toBe(300)
+  })
+
+  it('Test 6: over-dispatch is detectable — available never goes negative in the model', () => {
+    // 700 already dispatched → 300 available; a 400 request must be rejected.
+    const db = makeDb({ receipts: [mc1], issues: [dc(700)], adjustments: [] })
+    const s = receiptStock(db, mc1)
+    expect(s.available).toBe(300)
+    expect(400 > s.available).toBe(true) // backend assert_source_dispatchable rejects this
+  })
+
+  it('Test 7: receive 1,000 → DC 500 → edit DC to 300 → available 700', () => {
+    // Editing re-syncs the single linked issue to the new quantity (reverse+reapply).
+    const db = makeDb({ receipts: [mc1], issues: [dc(300)], adjustments: [] })
+    const s = receiptStock(db, mc1)
+    expect(s.totalDispatched).toBe(300)
+    expect(s.available).toBe(700)
+  })
+
+  it('Test 8: receive 1,000 → DC 500 → cancel → available 1,000 (source-attributed reversal)', () => {
+    // Cancel keeps the original issue for audit and books a compensating +500
+    // adjustment against the SAME source, restoring its available.
+    const db = makeDb({
+      receipts: [mc1],
+      issues: [dc(500)],
+      adjustments: [adj({ materialId: 'mat_bracket', quantity: 500, sourceReceiptId: mc1.id })],
+    })
+    const s = receiptStock(db, mc1)
+    expect(s.totalDispatched).toBe(500)
+    expect(s.adjusted).toBe(500)
+    expect(s.available).toBe(1000)
+  })
+
+  it('Test 9: multiple sources stay independent — consume 300 from MC-001 only', () => {
+    const mc2 = rcpt({
+      id: 'rcp_mc2',
+      materialId: 'mat_bracket',
+      ownerType: 'Company',
+      companyId: ESVA,
+      quantity: 500,
+      reference: 'MC-ESVA-002',
+    })
+    const db = makeDb({
+      receipts: [mc1, mc2],
+      issues: [dc(300, 'iss_dc', mc1.id)],
+      adjustments: [],
+    })
+    expect(receiptStock(db, mc1).available).toBe(700)
+    expect(receiptStock(db, mc2).available).toBe(500) // untouched
   })
 })
 

@@ -7,6 +7,7 @@ import { useCompanyName } from '@/features/shared/lookups'
 import { currency, fmtDate, inRange, qty } from '@/lib/format'
 import { downloadXlsx } from '@/lib/xlsx'
 import { PageHeader, ResponsiveTable } from '@/components/common/PageHeader'
+import { TableSkeleton } from '@/components/common/Skeleton'
 import { StatTile } from '@/components/common/StatTile'
 import { Badge, Card, EmptyState } from '@/components/ui/primitives'
 import { CompanyFilter, DateRangeFilter, FilterBar, SearchBox } from '@/components/common/Filters'
@@ -198,7 +199,7 @@ export function SalesPage() {
 
       <Card>
         {isLoading ? (
-          <div className="p-8 text-center text-sm text-slate-500">Loading sales…</div>
+          <TableSkeleton rows={8} cols={6} />
         ) : rows.length === 0 ? (
           <EmptyState
             icon={<TrendingUp size={40} />}

@@ -1,6 +1,7 @@
 import { Search } from 'lucide-react'
 import { useId, type ReactNode } from 'react'
 import { Card, Select } from '@/components/ui/primitives'
+import { DateInput } from '@/components/ui/DateInput'
 import { useCompanies } from '@/features/companies/hooks/useCompanies'
 
 export function FilterBar({ children }: { children: ReactNode }) {
@@ -88,27 +89,13 @@ export function DateRangeFilter({
         <label className="label" htmlFor={fromId}>
           From
         </label>
-        <input
-          id={fromId}
-          name={fromId}
-          type="date"
-          className="input"
-          value={from}
-          onChange={(e) => onFrom(e.target.value)}
-        />
+        <DateInput id={fromId} name={fromId} value={from} onChange={onFrom} />
       </div>
       <div>
         <label className="label" htmlFor={toId}>
           To
         </label>
-        <input
-          id={toId}
-          name={toId}
-          type="date"
-          className="input"
-          value={to}
-          onChange={(e) => onTo(e.target.value)}
-        />
+        <DateInput id={toId} name={toId} value={to} onChange={onTo} />
       </div>
     </>
   )

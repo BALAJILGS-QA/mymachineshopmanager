@@ -6,15 +6,17 @@ import { useCreateInvoice, useUpdateInvoice } from './hooks/useInvoices'
 import { useChallans, useSetChallanStatus } from '@/features/deliveries/hooks/useDeliveries'
 import { useCompanies } from '@/features/companies/hooks/useCompanies'
 import { useJobs } from '@/features/jobs/hooks/useJobs'
-import { useMaterials } from '@/features/materials/hooks/useMaterials'
+import { useSourceStock } from '@/features/materials/hooks/useMaterials'
+import { useMaterialName } from '@/features/shared/lookups'
 import { useProducts, useSettings } from '@/features/settings/hooks/useSettings'
 import { usePreviewNo } from '@/features/shared/usePreviewNo'
 import { toUserMessage } from '@/lib/api/errors'
 import { invoiceSubtotal, roundMoney } from '@/data/computations'
-import { currency, fmtDate, fmtDateTime, qty, todayISO } from '@/lib/format'
+import { currency, fmtDate, fmtDateTime, qty } from '@/lib/format'
 import { DEFAULT_SETTINGS } from '@/data/seed'
 import { uid } from '@/lib/id'
 import { Field, Input, Select, Textarea } from '@/components/ui/primitives'
+import { DateInput } from '@/components/ui/DateInput'
 import { Modal } from '@/components/ui/Modal'
 import { MultiSelectDropdown } from '@/components/ui/MultiSelectDropdown'
 import { useToast } from '@/components/ui/Toast'
@@ -37,8 +39,7 @@ export function InvoiceForm({
   const { data: allCompanies = [] } = useCompanies()
   const companies = allCompanies.filter((c) => c.active || c.id === invoice?.companyId)
   const { data: jobs = [] } = useJobs()
-  const { data: allMaterials = [] } = useMaterials()
-  const materials = allMaterials.filter((m) => m.active)
+  const materialName = useMaterialName()
   const { data: allProducts = [] } = useProducts()
   const products = allProducts.filter((p) => p.active)
   const settings = useSettings().data ?? DEFAULT_SETTINGS
@@ -51,7 +52,7 @@ export function InvoiceForm({
   const [companyId, setCompanyId] = useState(
     invoice?.companyId ?? prefill?.companyId ?? companies[0]?.id ?? '',
   )
-  const [date, setDate] = useState(invoice?.date ?? todayISO())
+  const [date, setDate] = useState(invoice?.date ?? '')
   const [reference, setReference] = useState(invoice?.reference ?? prefill?.reference ?? '')
   const [dcReference, setDcReference] = useState(invoice?.dcReference ?? prefill?.dcReference ?? '')
   // Ship-to defaults to the billing address; toggle off to enter a different one.
@@ -167,23 +168,37 @@ export function InvoiceForm({
     [jobs, companyId, lines],
   )
 
+  // Per-source stock available for direct billing: this customer's materials +
+  // own/shop stock, only sources with available quantity (business rule §7, §11).
+  const allSources = useSourceStock({ availableOnly: true })
+  const sources = useMemo(
+    () => allSources.filter((r) => r.companyId === companyId || r.ownerType === 'Shop'),
+    [allSources, companyId],
+  )
+  const sourceById = useMemo(() => {
+    const m = new Map<string, (typeof allSources)[number]>()
+    for (const r of allSources) m.set(r.receiptId, r)
+    return m
+  }, [allSources])
+
   function updateLine(id: string, patch: Partial<InvoiceLine>) {
     setLines((ls) => ls.map((l) => (l.id === id ? { ...l, ...patch } : l)))
   }
-  // Link a line to a stock material (new invoices only). Picking a material makes
-  // this line deduct stock on save; it also fills the unit, a default owner and
-  // the description (when still blank). Clearing it makes the line description-only.
-  function pickMaterial(id: string, materialId: string) {
-    const m = materials.find((x) => x.id === materialId)
+  // Link a line to a specific received stock (new invoices only). Picking a
+  // source makes this line deduct THAT stock on save; it fills the material,
+  // owner, unit and description. Clearing it makes the line description-only.
+  function pickSource(id: string, receiptId: string) {
+    const r = receiptId ? sourceById.get(receiptId) : undefined
     setLines((ls) =>
       ls.map((l) =>
         l.id === id
           ? {
               ...l,
-              materialId: materialId || undefined,
-              unit: m?.unit,
-              ownerType: materialId ? (l.ownerType ?? 'Company') : undefined,
-              description: !l.description.trim() && m ? m.name : l.description,
+              materialId: r?.materialId,
+              ownerType: r?.ownerType,
+              sourceReceiptId: r?.receiptId,
+              unit: r?.unit,
+              description: !l.description.trim() && r ? materialName(r.materialId) : l.description,
             }
           : l,
       ),
@@ -192,29 +207,31 @@ export function InvoiceForm({
   function addLine() {
     setLines((ls) => [...ls, { id: uid('l_'), description: '', quantity: 1, rate: 0 }])
   }
-  // Materials currently billed directly from stock (drives the multi-select
-  // ticks). Challan-derived lines carry no materialId, so they're excluded.
-  const selectedMaterialIds = useMemo(
-    () => new Set(lines.map((l) => l.materialId).filter(Boolean) as string[]),
+  // Sources currently billed directly from stock (drives the multi-select ticks).
+  // Challan-derived lines carry no sourceReceiptId, so they're excluded.
+  const selectedSourceIds = useMemo(
+    () => new Set(lines.map((l) => l.sourceReceiptId).filter(Boolean) as string[]),
     [lines],
   )
-  // Toggle a stock material on/off — ticking adds a stock-deducting line,
-  // unticking removes it. Each material maps to a single line here.
-  function toggleMaterial(materialId: string) {
-    const m = materials.find((x) => x.id === materialId)
+  // Toggle a source on/off — ticking adds a stock-deducting line bound to that
+  // received stock (default quantity = all available), unticking removes it.
+  function toggleSource(receiptId: string) {
+    const r = sourceById.get(receiptId)
     setLines((ls) => {
-      if (ls.some((l) => l.materialId === materialId))
-        return ls.filter((l) => l.materialId !== materialId)
+      if (ls.some((l) => l.sourceReceiptId === receiptId))
+        return ls.filter((l) => l.sourceReceiptId !== receiptId)
+      if (!r) return ls
       return [
         ...ls.filter((l) => l.description.trim() || l.rate || l.materialId),
         {
           id: uid('l_'),
-          description: m?.name ?? '',
-          quantity: 1,
+          description: materialName(r.materialId),
+          quantity: r.available,
           rate: 0,
-          materialId,
-          ownerType: 'Company',
-          unit: m?.unit,
+          materialId: r.materialId,
+          ownerType: r.ownerType,
+          sourceReceiptId: r.receiptId,
+          unit: r.unit,
         },
       ]
     })
@@ -256,6 +273,27 @@ export function InvoiceForm({
 
   async function submit(asDraft: boolean) {
     try {
+      // Client-side per-source over-dispatch guard for new invoices (the backend
+      // RPC is the final, race-safe gate). Sum this invoice's quantities per
+      // source and compare to that source's available.
+      if (!invoice) {
+        const perSource = new Map<string, number>()
+        for (const l of lines)
+          if (l.sourceReceiptId && l.materialId)
+            perSource.set(
+              l.sourceReceiptId,
+              (perSource.get(l.sourceReceiptId) ?? 0) + Number(l.quantity),
+            )
+        for (const [receiptId, want] of perSource) {
+          const src = sourceById.get(receiptId)
+          if (src && want > src.available) {
+            toast.error(
+              `Cannot bill ${qty(want)} of ${materialName(src.materialId)}. Only ${qty(src.available)} ${src.unit} available for source ${src.sourceDocNo || src.receiptNo}.`,
+            )
+            return
+          }
+        }
+      }
       const payload = {
         invoiceNo: invoiceNo.trim() || undefined,
         date,
@@ -343,7 +381,7 @@ export function InvoiceForm({
           </Select>
         </Field>
         <Field label="Invoice Date" required>
-          <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+          <DateInput value={date} onChange={setDate} />
         </Field>
       </div>
 
@@ -513,18 +551,28 @@ export function InvoiceForm({
         {!invoice && (
           <>
             <div className="mb-2">
-              <label className="label">Add stock materials (deducts stock)</label>
+              <label className="label">Bill directly from received stock (deducts stock)</label>
               <MultiSelectDropdown
-                options={materials.map((m) => ({ id: m.id, label: m.name, hint: m.unit }))}
-                selectedIds={selectedMaterialIds}
-                onToggle={toggleMaterial}
-                placeholder="Select materials to bill from stock…"
-                emptyText="No active materials"
+                options={sources.map((r) => ({
+                  id: r.receiptId,
+                  label: `${materialName(r.materialId)}${r.ownerType === 'Shop' ? ' · Own' : ''}`,
+                  hint: `${r.sourceDocNo || r.receiptNo} · avail ${qty(r.available)} ${r.unit}`,
+                }))}
+                selectedIds={selectedSourceIds}
+                onToggle={toggleSource}
+                placeholder={
+                  companyId ? 'Select material sources to bill…' : 'Select a company first'
+                }
+                emptyText={
+                  companyId
+                    ? 'No received stock with available quantity for this customer'
+                    : 'Select a company to list its available stock'
+                }
               />
             </div>
             <p className="mb-1 text-2xs text-slate-500">
-              Pick one or more <b>materials</b> above (or a <b>Stock item</b> on a line) to bill
-              directly against stock — saving reduces that material's balance. Leave blank for
+              Each option is one received stock (source challan/invoice). Billing consumes that
+              specific source — the same stock a delivery challan would. Leave blank for
               service/labour lines, or when the line came from a delivery challan (already
               deducted).
             </p>
@@ -590,13 +638,11 @@ export function InvoiceForm({
                     </td>
                     <td className="px-2 py-1.5">
                       {invoice ? (
-                        // Edit mode: show the linked material read-only (its stock
-                        // was already deducted); no new links on an existing invoice.
+                        // Edit mode: show the linked source read-only (its stock was
+                        // already deducted); no new links on an existing invoice.
                         <span className="text-2xs text-slate-500">
                           {l.materialId
-                            ? `${materials.find((m) => m.id === l.materialId)?.name ?? 'Material'} · ${
-                                l.ownerType === 'Shop' ? 'Own' : 'Customer'
-                              }`
+                            ? `${materialName(l.materialId)} · ${l.ownerType === 'Shop' ? 'Own' : 'Customer'}`
                             : '—'}
                         </span>
                       ) : fromChallan ? (
@@ -604,36 +650,21 @@ export function InvoiceForm({
                           From challan (already deducted)
                         </span>
                       ) : (
-                        <div className="flex flex-col gap-1">
-                          <select
-                            className="input h-8 py-1 text-xs"
-                            aria-label="Stock material to deduct"
-                            value={l.materialId ?? ''}
-                            onChange={(e) => pickMaterial(l.id, e.target.value)}
-                          >
-                            <option value="">No stock deduction</option>
-                            {materials.map((m) => (
-                              <option key={m.id} value={m.id}>
-                                {m.name} ({m.unit})
-                              </option>
-                            ))}
-                          </select>
-                          {l.materialId && (
-                            <select
-                              className="input h-8 py-1 text-2xs"
-                              aria-label="Stock owner"
-                              value={l.ownerType ?? 'Company'}
-                              onChange={(e) =>
-                                updateLine(l.id, {
-                                  ownerType: e.target.value as InvoiceLine['ownerType'],
-                                })
-                              }
-                            >
-                              <option value="Company">This customer's stock</option>
-                              <option value="Shop">Own (shop) stock</option>
-                            </select>
-                          )}
-                        </div>
+                        <select
+                          className="input h-8 py-1 text-xs"
+                          aria-label="Stock source to deduct"
+                          value={l.sourceReceiptId ?? ''}
+                          onChange={(e) => pickSource(l.id, e.target.value)}
+                        >
+                          <option value="">No stock deduction</option>
+                          {sources.map((r) => (
+                            <option key={r.receiptId} value={r.receiptId}>
+                              {materialName(r.materialId)}
+                              {r.ownerType === 'Shop' ? ' · Own' : ''} —{' '}
+                              {r.sourceDocNo || r.receiptNo} (avail {qty(r.available)} {r.unit})
+                            </option>
+                          ))}
+                        </select>
                       )}
                     </td>
                     <td className="px-2 py-1.5">
@@ -705,9 +736,16 @@ export function InvoiceForm({
               aria-label="CGST %"
             />
           </div>
-          <div className="flex items-center justify-between text-2xs text-slate-500">
-            <span>CGST amount</span>
-            <span>{currency(cgstAmount)}</span>
+          <div className="flex items-center justify-between gap-2 text-sm">
+            <span className="text-slate-600">CGST {cgstNum}%</span>
+            <input
+              type="text"
+              readOnly
+              disabled
+              className="input w-28 text-right"
+              value={currency(cgstAmount)}
+              aria-label={`CGST ${cgstNum}% amount`}
+            />
           </div>
           <div className="flex items-center justify-between gap-2 text-sm">
             <span className="text-slate-600">SGST %</span>
@@ -720,9 +758,16 @@ export function InvoiceForm({
               aria-label="SGST %"
             />
           </div>
-          <div className="flex items-center justify-between text-2xs text-slate-500">
-            <span>SGST amount</span>
-            <span>{currency(sgstAmount)}</span>
+          <div className="flex items-center justify-between gap-2 text-sm">
+            <span className="text-slate-600">SGST {sgstNum}%</span>
+            <input
+              type="text"
+              readOnly
+              disabled
+              className="input w-28 text-right"
+              value={currency(sgstAmount)}
+              aria-label={`SGST ${sgstNum}% amount`}
+            />
           </div>
           <div className="flex items-center justify-between border-t border-slate-200 pt-2 text-base font-bold text-slate-900">
             <span>Total</span>

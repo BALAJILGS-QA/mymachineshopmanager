@@ -1,6 +1,8 @@
 import type { ReactNode } from 'react'
 import { clsx } from 'clsx'
 
+// Premium ERP page header: left-aligned title + description on the left, primary
+// actions on the right. Consistent across every module.
 export function PageHeader({
   title,
   subtitle,
@@ -11,16 +13,14 @@ export function PageHeader({
   actions?: ReactNode
 }) {
   return (
-    <div className="mb-4 flex flex-col items-center gap-3 sm:flex-row sm:items-center sm:gap-3">
-      {/* Left spacer balances the actions column so the title stays centered. */}
-      <div className="hidden sm:block sm:flex-1" aria-hidden />
-      <div className="min-w-0 text-center">
-        <h1 className="text-gradient-brand text-lg font-bold sm:text-xl">{title}</h1>
-        {subtitle && <p className="mt-0.5 text-sm text-slate-600">{subtitle}</p>}
+    <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+      <div className="min-w-0">
+        <h1 className="text-xl font-bold tracking-tight text-slate-900 sm:text-2xl">{title}</h1>
+        {subtitle && <p className="mt-1 text-sm text-slate-500">{subtitle}</p>}
       </div>
-      <div className="flex flex-wrap items-center justify-center gap-2 sm:flex-1 sm:justify-end">
-        {actions}
-      </div>
+      {actions && (
+        <div className="flex flex-wrap items-center gap-2 sm:justify-end sm:pt-0.5">{actions}</div>
+      )}
     </div>
   )
 }

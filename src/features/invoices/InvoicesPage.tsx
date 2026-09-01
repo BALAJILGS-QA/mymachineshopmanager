@@ -19,17 +19,10 @@ import { useInvoices, useSetInvoiceStatus } from './hooks/useInvoices'
 import { usePayments } from '@/features/payments/hooks/usePayments'
 import { toUserMessage } from '@/lib/api/errors'
 import { computeInvoice } from '@/data/computations'
-import {
-  currency,
-  fmtDate,
-  inRange,
-  monthEndISO,
-  monthStartISO,
-  thisMonthLabel,
-  thisMonthPrefix,
-} from '@/lib/format'
+import { currency, fmtDate, inRange, thisMonthLabel, thisMonthPrefix } from '@/lib/format'
 import { downloadXlsx } from '@/lib/xlsx'
 import { PageHeader, ResponsiveTable } from '@/components/common/PageHeader'
+import { TableSkeleton } from '@/components/common/Skeleton'
 import { StatTile } from '@/components/common/StatTile'
 import { Card, EmptyState, Select } from '@/components/ui/primitives'
 import { CompanyFilter, DateRangeFilter, FilterBar, SearchBox } from '@/components/common/Filters'
@@ -56,8 +49,8 @@ export function InvoicesPage() {
   const [search, setSearch] = useState('')
   const [company, setCompany] = useState('')
   const [status, setStatus] = useState('')
-  const [from, setFrom] = useState(monthStartISO())
-  const [to, setTo] = useState(monthEndISO())
+  const [from, setFrom] = useState('')
+  const [to, setTo] = useState('')
 
   const rows = useMemo(() => {
     const s = search.toLowerCase()
@@ -311,7 +304,7 @@ export function InvoicesPage() {
 
       <Card>
         {isLoading ? (
-          <div className="p-8 text-center text-sm text-slate-500">Loading invoices…</div>
+          <TableSkeleton rows={8} cols={8} />
         ) : rows.length === 0 ? (
           <EmptyState
             icon={<FileText size={40} />}

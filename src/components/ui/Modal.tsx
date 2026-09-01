@@ -42,21 +42,18 @@ export function Modal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center">
-      <div
-        className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm"
-        onClick={onClose}
-      />
+      <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={onClose} />
       <div
         role="dialog"
         aria-modal="true"
         aria-label={title}
         className={clsx(
-          'relative flex max-h-[92vh] w-full flex-col rounded-t-2xl bg-white shadow-2xl sm:rounded-2xl',
+          'relative flex max-h-[92vh] w-full flex-col rounded-t-2xl bg-white shadow-dialog sm:rounded-2xl',
           sizes[size],
         )}
       >
         <div className="flex items-center justify-between border-b border-slate-100 px-5 py-3.5">
-          <h3 className="text-sm font-semibold text-slate-800">{title}</h3>
+          <h3 className="text-sm font-semibold text-slate-900">{title}</h3>
           <button
             onClick={onClose}
             className="rounded-lg p-1 text-slate-500 hover:bg-slate-100 hover:text-slate-600"

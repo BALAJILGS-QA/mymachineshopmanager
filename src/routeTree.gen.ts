@@ -600,7 +600,9 @@ const AppRouteRouteChildren: AppRouteRouteChildren = {
   AppInvoicesIdPrintRoute: AppInvoicesIdPrintRoute,
 }
 
-const AppRouteRouteWithChildren = AppRouteRoute._addFileChildren(AppRouteRouteChildren)
+const AppRouteRouteWithChildren = AppRouteRoute._addFileChildren(
+  AppRouteRouteChildren,
+)
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,

@@ -1,5 +1,14 @@
 import { useMemo, useState } from 'react'
-import { Download, Pencil, Plus, Receipt, Trash2 } from 'lucide-react'
+import {
+  CalendarClock,
+  Download,
+  Layers,
+  Pencil,
+  Plus,
+  Receipt,
+  Trash2,
+  Wallet,
+} from 'lucide-react'
 import type { Expense, PaymentMethod } from '@/types'
 import {
   useExpenses,
@@ -17,7 +26,10 @@ import { toUserMessage } from '@/lib/api/errors'
 import { currency, fmtDate, fmtDateTime, inRange, todayISO } from '@/lib/format'
 import { downloadXlsx } from '@/lib/xlsx'
 import { PageHeader, ResponsiveTable } from '@/components/common/PageHeader'
+import { StatTile } from '@/components/common/StatTile'
+import { TableSkeleton } from '@/components/common/Skeleton'
 import { Card, EmptyState, Field, Input, Select, Textarea } from '@/components/ui/primitives'
+import { DateInput } from '@/components/ui/DateInput'
 import { CompanyFilter, DateRangeFilter, FilterBar, SearchBox } from '@/components/common/Filters'
 import { Modal } from '@/components/ui/Modal'
 import { Pagination, usePagination } from '@/components/common/Pagination'
@@ -57,6 +69,17 @@ export function ExpensesPage() {
   }, [expenses, company, category, from, to, search])
 
   const pg = usePagination(rows)
+
+  // Summary metrics for the current filter selection (§36).
+  const stats = useMemo(() => {
+    const monthPrefix = todayISO().slice(0, 7)
+    const total = rows.reduce((s, e) => s + e.amount, 0)
+    const thisMonth = rows
+      .filter((e) => e.date.slice(0, 7) === monthPrefix)
+      .reduce((s, e) => s + e.amount, 0)
+    const cats = new Set(rows.map((e) => e.category)).size
+    return { total, thisMonth, count: rows.length, cats }
+  }, [rows])
 
   async function del(e: Expense) {
     const ok = await confirm({ message: `Delete expense ${e.expenseNo}?`, danger: true })
@@ -104,6 +127,22 @@ export function ExpensesPage() {
         }
       />
 
+      <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <StatTile
+          icon={<Wallet size={18} />}
+          label="Total (filtered)"
+          value={currency(stats.total)}
+        />
+        <StatTile
+          icon={<CalendarClock size={18} />}
+          label="This month"
+          value={currency(stats.thisMonth)}
+          tone="blue"
+        />
+        <StatTile icon={<Receipt size={18} />} label="Entries" value={stats.count} tone="slate" />
+        <StatTile icon={<Layers size={18} />} label="Categories" value={stats.cats} tone="violet" />
+      </div>
+
       <FilterBar>
         <SearchBox value={search} onChange={setSearch} placeholder="Search vendor, category…" />
         <div>
@@ -125,7 +164,7 @@ export function ExpensesPage() {
 
       <Card>
         {isLoading ? (
-          <div className="p-8 text-center text-sm text-slate-500">Loading expenses…</div>
+          <TableSkeleton rows={8} cols={7} />
         ) : rows.length === 0 ? (
           <EmptyState icon={<Receipt size={40} />} title="No expenses recorded" />
         ) : (
@@ -202,7 +241,7 @@ function ExpenseForm({ expense, onClose }: { expense: Expense | null; onClose: (
 
   // Shared fields (both modes).
   const [form, setForm] = useState({
-    date: expense?.date ?? todayISO(),
+    date: expense?.date ?? '',
     category: expense?.category ?? categories[0] ?? '',
     amount: expense?.amount ?? '',
     method: expense?.method ?? ('Cash' as PaymentMethod),
@@ -336,7 +375,7 @@ function ExpenseForm({ expense, onClose }: { expense: Expense | null; onClose: (
       {isPurchase ? (
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <Field label="Purchase Date" required>
-            <Input type="date" value={form.date} onChange={(e) => set('date', e.target.value)} />
+            <DateInput value={form.date} onChange={(v) => set('date', v)} />
           </Field>
           <Field
             label="Supplier / Vendor"
@@ -413,7 +452,7 @@ function ExpenseForm({ expense, onClose }: { expense: Expense | null; onClose: (
       ) : (
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <Field label="Date" required>
-            <Input type="date" value={form.date} onChange={(e) => set('date', e.target.value)} />
+            <DateInput value={form.date} onChange={(v) => set('date', v)} />
           </Field>
           <Field label="Category" required>
             <Select value={form.category} onChange={(e) => set('category', e.target.value)}>

@@ -17,8 +17,9 @@ import { useJobs } from '@/features/jobs/hooks/useJobs'
 import { useSettings } from '@/features/settings/hooks/useSettings'
 import { DEFAULT_SETTINGS } from '@/data/seed'
 import { toUserMessage } from '@/lib/api/errors'
-import { todayISO, qty, currency, fmtDateTime } from '@/lib/format'
+import { qty, currency, fmtDateTime } from '@/lib/format'
 import { Field, Input, Select, Textarea } from '@/components/ui/primitives'
+import { DateInput } from '@/components/ui/DateInput'
 import { Modal } from '@/components/ui/Modal'
 import { useToast } from '@/components/ui/Toast'
 import { PAYMENT_METHODS } from '@/constants/domain'
@@ -184,7 +185,7 @@ export function ReceiptForm({ onClose }: { onClose: () => void }) {
   const { data: allCompanies = [] } = useCompanies()
   const companies = allCompanies.filter((c) => c.active)
   const [form, setForm] = useState({
-    date: todayISO(),
+    date: '',
     materialId: materials[0]?.id ?? '',
     ownerType: 'Shop' as MaterialOwnerType,
     companyId: companies[0]?.id ?? '',
@@ -241,7 +242,7 @@ export function ReceiptForm({ onClose }: { onClose: () => void }) {
     >
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <Field label="Date" required>
-          <Input type="date" value={form.date} onChange={(e) => set('date', e.target.value)} />
+          <DateInput value={form.date} onChange={(v) => set('date', v)} />
         </Field>
         <Field label="Material" required>
           <Select value={form.materialId} onChange={(e) => set('materialId', e.target.value)}>
@@ -324,7 +325,7 @@ export function IssueForm({ onClose }: { onClose: () => void }) {
   const { data: allJobs = [] } = useJobs()
   const jobs = allJobs.filter((j) => !['Cancelled', 'Delivered'].includes(j.status))
   const [form, setForm] = useState({
-    date: todayISO(),
+    date: '',
     materialId: materials[0]?.id ?? '',
     jobId: jobs[0]?.id ?? '',
     quantity: '',
@@ -378,7 +379,7 @@ export function IssueForm({ onClose }: { onClose: () => void }) {
     >
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <Field label="Date" required>
-          <Input type="date" value={form.date} onChange={(e) => set('date', e.target.value)} />
+          <DateInput value={form.date} onChange={(v) => set('date', v)} />
         </Field>
         <Field label="Job Order" required>
           <Select value={form.jobId} onChange={(e) => set('jobId', e.target.value)}>
@@ -440,7 +441,7 @@ export function AdjustmentForm({ onClose }: { onClose: () => void }) {
   const materials = allMaterials.filter((m) => m.active)
   const { data: companies = [] } = useCompanies()
   const [form, setForm] = useState({
-    date: todayISO(),
+    date: '',
     materialId: materials[0]?.id ?? '',
     companyId: '',
     direction: 'increase' as 'increase' | 'decrease',
@@ -490,7 +491,7 @@ export function AdjustmentForm({ onClose }: { onClose: () => void }) {
     >
       <div className="space-y-3">
         <Field label="Date" required>
-          <Input type="date" value={form.date} onChange={(e) => set('date', e.target.value)} />
+          <DateInput value={form.date} onChange={(v) => set('date', v)} />
         </Field>
         <Field label="Material" required>
           <Select value={form.materialId} onChange={(e) => set('materialId', e.target.value)}>
@@ -565,7 +566,7 @@ export function AddMaterialForm({
   const [form, setForm] = useState({
     companyId: receipt?.companyId ?? companies[0]?.id ?? '',
     supplier: receipt?.supplier ?? '',
-    date: receipt?.date ?? todayISO(),
+    date: receipt?.date ?? '',
     materialId: receipt?.materialId ?? '',
     quantity: receipt ? String(receipt.quantity) : '',
     challanNo: receipt?.reference ?? '',
@@ -716,7 +717,7 @@ export function AddMaterialForm({
           <Input value={form.supplier} onChange={(e) => set('supplier', e.target.value)} />
         </Field>
         <Field label={kind === 'customer' ? 'From Date' : 'Date of Purchase'} required>
-          <Input type="date" value={form.date} onChange={(e) => set('date', e.target.value)} />
+          <DateInput value={form.date} onChange={(v) => set('date', v)} />
         </Field>
         <Field label="Material" required>
           <div className="flex gap-1.5">

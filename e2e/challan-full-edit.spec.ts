@@ -36,9 +36,9 @@ test('Open challan: full edit affordances + history are shown', async ({ page, v
   await expect(dialog).toBeVisible()
   // Full-edit banner only renders for an Open challan (canFullEdit).
   await expect(dialog.getByText('you can change every field')).toBeVisible()
-  // The material multi-select is available in edit (anchor on its persistent hint;
-  // the summary reads "N selected" once materials are mapped).
-  await expect(dialog.getByText('Pick one or more materials')).toBeVisible()
+  // The per-source dispatch picker is available in edit (anchor on its persistent
+  // hint; the summary reads "N selected" once sources are mapped).
+  await expect(dialog.getByText('Each option is one received stock')).toBeVisible()
   // Company + Date are editable (not locked) on an Open challan.
   await expect(dialog.getByRole('combobox').first()).toBeEnabled()
   // Created / last-updated history is displayed clearly.

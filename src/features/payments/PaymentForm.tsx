@@ -6,8 +6,9 @@ import { useInvoices } from '@/features/invoices/hooks/useInvoices'
 import { usePreviewNo } from '@/features/shared/usePreviewNo'
 import { toUserMessage } from '@/lib/api/errors'
 import { computeInvoice } from '@/data/computations'
-import { currency, todayISO, fmtDateTime } from '@/lib/format'
+import { currency, fmtDateTime } from '@/lib/format'
 import { Field, Input, Select, Textarea } from '@/components/ui/primitives'
+import { DateInput } from '@/components/ui/DateInput'
 import { Modal } from '@/components/ui/Modal'
 import { useToast } from '@/components/ui/Toast'
 import { PAYMENT_METHODS as METHODS } from '@/constants/domain'
@@ -36,7 +37,7 @@ export function PaymentForm({
     payment?.companyId ?? invoice?.companyId ?? companies[0]?.id ?? '',
   )
   const [invoiceId, setInvoiceId] = useState(payment?.invoiceId ?? invoice?.id ?? '')
-  const [date, setDate] = useState(payment?.date ?? todayISO())
+  const [date, setDate] = useState(payment?.date ?? '')
   const [amount, setAmount] = useState(payment ? String(payment.amount) : '')
   const [method, setMethod] = useState<PaymentMethod>(payment?.method ?? 'Bank Transfer')
   const [reference, setReference] = useState(payment?.reference ?? '')
@@ -138,7 +139,7 @@ export function PaymentForm({
           </Select>
         </Field>
         <Field label="Payment Date" required>
-          <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+          <DateInput value={date} onChange={setDate} />
         </Field>
         <Field
           label="Allocate to Invoice"

@@ -4,9 +4,10 @@ import type { Payment } from '@/types'
 import { usePayments, useDeletePayment } from './hooks/usePayments'
 import { useInvoices } from '@/features/invoices/hooks/useInvoices'
 import { toUserMessage } from '@/lib/api/errors'
-import { currency, fmtDate, inRange, monthEndISO, monthStartISO } from '@/lib/format'
+import { currency, fmtDate, inRange } from '@/lib/format'
 import { downloadXlsx } from '@/lib/xlsx'
 import { PageHeader, ResponsiveTable } from '@/components/common/PageHeader'
+import { TableSkeleton } from '@/components/common/Skeleton'
 import { StatTile } from '@/components/common/StatTile'
 import { Badge, Card, EmptyState } from '@/components/ui/primitives'
 import { CompanyFilter, DateRangeFilter, FilterBar, SearchBox } from '@/components/common/Filters'
@@ -28,8 +29,8 @@ export function PaymentsPage() {
   const [editing, setEditing] = useState<Payment | null>(null)
   const [search, setSearch] = useState('')
   const [company, setCompany] = useState('')
-  const [from, setFrom] = useState(monthStartISO())
-  const [to, setTo] = useState(monthEndISO())
+  const [from, setFrom] = useState('')
+  const [to, setTo] = useState('')
 
   const invoiceNo = (id?: string) => invoices.find((i) => i.id === id)?.invoiceNo ?? '—'
 
@@ -147,7 +148,7 @@ export function PaymentsPage() {
 
       <Card>
         {isLoading ? (
-          <div className="p-8 text-center text-sm text-slate-500">Loading payments…</div>
+          <TableSkeleton rows={8} cols={7} />
         ) : rows.length === 0 ? (
           <EmptyState icon={<Wallet size={40} />} title="No payments recorded" />
         ) : (

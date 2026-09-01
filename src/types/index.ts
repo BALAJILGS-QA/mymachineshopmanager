@@ -123,6 +123,9 @@ export interface MaterialIssue extends AuditFields {
   quantity: number
   unit: string
   note?: string
+  // The specific received stock (material_receipts row) this issue draws from.
+  // Set for source-allocated dispatches; unset for legacy/aggregate movements.
+  sourceReceiptId?: ID
 }
 
 export interface StockAdjustment extends AuditFields {
@@ -134,6 +137,9 @@ export interface StockAdjustment extends AuditFields {
   quantity: number // signed: positive = increase, negative = decrease
   unit: string
   reason: string
+  // When set, the adjustment applies to a specific received stock (e.g. a
+  // dispatch reversal restoring that source's available quantity).
+  sourceReceiptId?: ID
 }
 
 export interface InvoiceLine {
@@ -149,6 +155,9 @@ export interface InvoiceLine {
   // challan leave these unset — the challan already deducted, so no double count.
   materialId?: ID
   ownerType?: MaterialOwnerType
+  // The specific received stock (material_receipts row) this line dispatches
+  // from. Mandatory for customer stock so the deduction is fully traceable.
+  sourceReceiptId?: ID
   unit?: string
 }
 
@@ -159,6 +168,9 @@ export interface DcLine {
   jobId?: ID
   materialId?: ID // the inventory material this line dispatches
   ownerType?: MaterialOwnerType // 'Company' = customer's stock, 'Shop' = own stock
+  // The specific received stock (material_receipts row) this line consumes.
+  // Mandatory for customer stock; each source is dispatched independently.
+  sourceReceiptId?: ID
   description: string
   quantity: number
   unit: string
@@ -257,6 +269,30 @@ export interface InventoryLedgerRow {
   referenceId?: ID
   note?: string
   createdAt: ISODateTime
+}
+
+// One row of the per-source stock view (material_receipt_stock): a single
+// received stock with its dispatch split. Available = received − totalDispatched
+// (+ adjustments). This is the source of truth for per-source available stock.
+export interface MaterialReceiptStock {
+  receiptId: ID
+  receiptNo: string
+  date: ISODate
+  materialId: ID
+  companyId?: ID // null = own/shop stock
+  ownerType: MaterialOwnerType
+  ownership: 'Shop' | 'Company'
+  sourceDocNo?: string // the received challan/invoice number (receipt.reference)
+  supplier?: string
+  unit: string
+  received: number
+  dcQty: number
+  invoiceQty: number
+  otherOut: number
+  totalDispatched: number
+  adjusted: number
+  available: number
+  status: 'Available' | 'Fully Dispatched'
 }
 
 export interface AuditLog {

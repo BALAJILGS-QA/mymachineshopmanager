@@ -1,4 +1,4 @@
-import { useMemo, useState, type ReactNode } from 'react'
+import { useMemo, useState } from 'react'
 import { clsx } from 'clsx'
 import {
   Boxes,
@@ -9,29 +9,32 @@ import {
   Pencil,
   Plus,
   Search,
+  Send,
   Settings2,
   Sliders,
   Trash2,
   Warehouse,
 } from 'lucide-react'
-import type { Material, MaterialReceipt } from '@/types'
+import type { Material, MaterialReceipt, MaterialReceiptStock } from '@/types'
 import {
   useMaterials,
   useReceipts,
-  useIssues,
   useAdjustments,
   useOwnPurchases,
-  useLedger,
+  useSourceStock,
   useDeleteMaterial,
   useRemoveReceipt,
 } from './hooks/useMaterials'
+import { useChallans } from '@/features/deliveries/hooks/useDeliveries'
+import { useInvoices } from '@/features/invoices/hooks/useInvoices'
 import { useCompanies } from '@/features/companies/hooks/useCompanies'
 import { useCompanyName, useMaterialName } from '@/features/shared/lookups'
-import { materialStock, SHOP_SCOPE, type StockDb } from '@/data/computations'
+import { roundMoney } from '@/data/computations'
 import { toUserMessage } from '@/lib/api/errors'
 import { currency, fmtDate, inRange, qty } from '@/lib/format'
 import { downloadXlsx } from '@/lib/xlsx'
 import { PageHeader, ResponsiveTable } from '@/components/common/PageHeader'
+import { StatTile } from '@/components/common/StatTile'
 import { Badge, Card, EmptyState } from '@/components/ui/primitives'
 import { Modal } from '@/components/ui/Modal'
 import { Pagination, usePagination } from '@/components/common/Pagination'
@@ -43,41 +46,25 @@ import { AddMaterialForm, AdjustmentForm, MaterialForm } from './MaterialForms'
 type View = 'customer' | 'own'
 type Dialog = 'add' | 'adjust' | 'materials' | null
 
-// One customer-material intake (receipt) plus its material's overall stock.
-interface CustomerRow {
-  receiptId: string
-  receipt: MaterialReceipt
-  companyId: string
-  materialId: string
-  material: Material
-  from: string
-  challan: string
-  date: string
-  quantity: number
-  unit: string
-  s: ReturnType<typeof materialStock>
+// One received stock (source) with its per-source dispatch position, joined to
+// the material master and the underlying receipt (for edit/delete actions).
+interface SourceRow {
+  rs: MaterialReceiptStock
+  material?: Material
+  receipt?: MaterialReceipt
 }
 
-function stockStatus(balance: number, reorder?: number): { label: string; tone: string } {
-  if (balance <= 0) return { label: 'Out of Stock', tone: 'red' }
-  if (reorder != null && balance <= reorder) return { label: 'Low Stock', tone: 'amber' }
-  return { label: 'In Stock', tone: 'green' }
-}
-
-// Assemble the collections the stock derivations read, from Supabase queries.
+// Master + receipt collections the per-source grid derives from.
 function useStockData() {
   const { data: materials = [] } = useMaterials()
   const { data: receipts = [] } = useReceipts()
-  const { data: issues = [] } = useIssues()
-  const { data: adjustments = [] } = useAdjustments()
-  const db: StockDb = { materials, receipts, issues, adjustments }
-  return { materials, receipts, issues, adjustments, db }
+  return { materials, receipts }
 }
 
 export function MaterialsPage() {
   const [view, setView] = useState<View>('customer')
   const [dialog, setDialog] = useState<Dialog>(null)
-  const [historyFor, setHistoryFor] = useState<{ materialId: string; scope?: string } | null>(null)
+  const [historyFor, setHistoryFor] = useState<MaterialReceiptStock | null>(null)
   const [editReceipt, setEditReceipt] = useState<MaterialReceipt | null>(null)
   const [fCompany, setFCompany] = useState('')
   const [fMaterial, setFMaterial] = useState('')
@@ -88,95 +75,69 @@ export function MaterialsPage() {
   const toast = useToast()
   const confirm = useConfirm()
   const removeReceipt = useRemoveReceipt()
-  const { materials, receipts, issues, adjustments, db } = useStockData()
+  const { materials, receipts } = useStockData()
+  // Per-source stock — the source of truth for Received / DC / Invoice / Available.
+  // Derived client-side so it renders with or without the DB view (migration 0015).
+  const receiptStockRows = useSourceStock()
   const { data: companies = [] } = useCompanies()
   const { data: ownPurchases = [] } = useOwnPurchases()
   const companyName = useCompanyName()
-  const stamp = receipts.length + issues.length + adjustments.length
 
-  // Aggregate stock per (company, material) — feeds the summary cards and the
-  // Received / Issued / Current position shown on each intake row.
-  const customerAgg = useMemo(() => {
-    const keys = new Set<string>()
-    for (const r of receipts) if (r.companyId) keys.add(`${r.companyId}|${r.materialId}`)
-    for (const i of issues) if (i.companyId) keys.add(`${i.companyId}|${i.materialId}`)
-    for (const a of adjustments) if (a.companyId) keys.add(`${a.companyId}|${a.materialId}`)
-    const map = new Map<string, { material: Material; s: ReturnType<typeof materialStock> }>()
-    for (const k of keys) {
-      const [companyId, materialId] = k.split('|')
-      const m = materials.find((x) => x.id === materialId)
-      if (!m) continue
-      map.set(k, { material: m, s: materialStock(db, materialId, companyId) })
-    }
-    return map
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [materials, stamp])
+  const materialById = useMemo(() => new Map(materials.map((m) => [m.id, m])), [materials])
+  const receiptById = useMemo(() => new Map(receipts.map((r) => [r.id, r])), [receipts])
 
-  // Customer stock: one row per intake (receipt) — where from, challan, date and
-  // received quantity, alongside the material's overall stock position.
-  const customerRows = useMemo(() => {
-    const rows: CustomerRow[] = []
-    for (const r of receipts) {
-      if (!r.companyId) continue
-      const key = `${r.companyId}|${r.materialId}`
-      const agg = customerAgg.get(key)
-      const material = agg?.material ?? materials.find((x) => x.id === r.materialId)
-      if (!material) continue
-      rows.push({
-        receiptId: r.id,
-        receipt: r,
-        companyId: r.companyId,
-        materialId: r.materialId,
-        material,
-        from: r.supplier ?? '',
-        challan: r.reference ?? '',
-        date: r.date,
-        quantity: r.quantity,
-        unit: r.unit || material.unit,
-        s: agg?.s ?? materialStock(db, r.materialId, r.companyId),
-      })
-    }
-    return rows.sort((a, b) => (a.date < b.date ? 1 : -1))
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [materials, stamp, customerAgg])
+  // Customer stock: one row per received stock (source), each tracked + reduced
+  // independently — MC-ESVA-001 and MC-ESVA-002 never merge.
+  const customerRows = useMemo<SourceRow[]>(() => {
+    return receiptStockRows
+      .filter((r) => r.ownership === 'Company')
+      .map((rs) => ({
+        rs,
+        material: materialById.get(rs.materialId),
+        receipt: receiptById.get(rs.receiptId),
+      }))
+      .sort((a, b) => (a.rs.date < b.rs.date ? 1 : -1))
+  }, [receiptStockRows, materialById, receiptById])
 
   const customerFiltered = useMemo(() => {
     const s = search.toLowerCase()
-    return customerRows.filter((r) => {
-      if (fCompany && r.companyId !== fCompany) return false
-      if (fMaterial && r.materialId !== fMaterial) return false
-      if (!inRange(r.date, from, to)) return false
+    return customerRows.filter(({ rs, material }) => {
+      if (fCompany && rs.companyId !== fCompany) return false
+      if (fMaterial && rs.materialId !== fMaterial) return false
+      if (!inRange(rs.date, from, to)) return false
       if (s) {
         const hay =
-          `${r.material.name} ${companyName(r.companyId)} ${r.from} ${r.challan}`.toLowerCase()
+          `${material?.name ?? ''} ${companyName(rs.companyId ?? '')} ${rs.supplier ?? ''} ${rs.sourceDocNo ?? ''}`.toLowerCase()
         if (!hay.includes(s)) return false
       }
       return true
     })
   }, [customerRows, fCompany, fMaterial, from, to, search, companyName])
 
-  // Own stock: one row per material (shop scope).
+  // Own stock: one row per purchase receipt (source), with its landed cost.
   const ownRows = useMemo(() => {
-    return materials
-      .map((m) => {
-        const s = materialStock(db, m.id, SHOP_SCOPE)
-        const buys = ownPurchases.filter((p) => p.materialId === m.id)
-        const cost = buys.reduce((sum, p) => sum + p.totalCost, 0)
-        const gst = buys.reduce((sum, p) => sum + p.totalGst, 0)
-        const last = buys.sort((a, b) => (a.purchaseDate < b.purchaseDate ? 1 : -1))[0]
-        return { material: m, s, cost, gst, last }
+    return receiptStockRows
+      .filter((r) => r.ownership === 'Shop')
+      .map((rs) => {
+        const purchase = ownPurchases.find((p) => p.receiptId === rs.receiptId)
+        return {
+          rs,
+          material: materialById.get(rs.materialId),
+          receipt: receiptById.get(rs.receiptId),
+          cost: purchase?.totalCost ?? 0,
+          gst: purchase?.totalGst ?? 0,
+          supplier: purchase?.supplier ?? rs.supplier,
+        }
       })
-      .filter((r) => r.s.received !== 0 || r.s.balance !== 0 || r.cost > 0)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [materials, ownPurchases, stamp])
+      .sort((a, b) => (a.rs.date < b.rs.date ? 1 : -1))
+  }, [receiptStockRows, ownPurchases, materialById, receiptById])
 
   const ownFiltered = useMemo(() => {
     const s = search.toLowerCase()
-    return ownRows.filter((r) => {
-      if (fMaterial && r.material.id !== fMaterial) return false
-      // Date range applies to the material's last purchase date, when set.
-      if ((from || to) && !(r.last && inRange(r.last.purchaseDate, from, to))) return false
-      if (s && !r.material.name.toLowerCase().includes(s)) return false
+    return ownRows.filter(({ rs, material }) => {
+      if (fMaterial && rs.materialId !== fMaterial) return false
+      if (!inRange(rs.date, from, to)) return false
+      if (s && !(material?.name ?? '').toLowerCase().includes(s)) return false
       return true
     })
   }, [ownRows, fMaterial, from, to, search])
@@ -184,26 +145,19 @@ export function MaterialsPage() {
   const custPg = usePagination(customerFiltered)
   const ownPg = usePagination(ownFiltered)
 
-  // Overall on-hand balance per material (own + all customers) — shown as a quick
-  // "Material name — Qty unit" summary. Materials with any activity are listed,
-  // narrowed by the material filter/search so it tracks the current view.
-  const stockSummary = useMemo(() => {
-    const s = search.toLowerCase()
-    return materials
-      .map((m) => ({ material: m, s: materialStock(db, m.id) }))
-      .filter((r) => r.s.received !== 0 || r.s.balance !== 0)
-      .filter((r) => (fMaterial ? r.material.id === fMaterial : true))
-      .filter((r) => (s ? r.material.name.toLowerCase().includes(s) : true))
-      .sort((a, b) => a.material.name.localeCompare(b.material.name))
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [materials, stamp, fMaterial, search])
-
-  // Summary metrics. Low count is per (company, material) line, not per intake.
-  const lowCount =
-    [...customerAgg.values()].filter(
-      (r) => stockStatus(r.s.balance, r.material.reorderLevel).tone !== 'green',
-    ).length +
-    ownRows.filter((r) => stockStatus(r.s.balance, r.material.reorderLevel).tone !== 'green').length
+  // Headline totals for the active view + filters: total on-hand stock vs total
+  // dispatched (Nos). Reflects the company / material / date-range / search
+  // filters because it sums the already-filtered rows.
+  const totals = useMemo(() => {
+    const rows = view === 'customer' ? customerFiltered : ownFiltered
+    let stock = 0
+    let dispatched = 0
+    for (const { rs } of rows) {
+      stock += rs.available
+      dispatched += rs.totalDispatched
+    }
+    return { stock: roundMoney(stock), dispatched: roundMoney(dispatched) }
+  }, [view, customerFiltered, ownFiltered])
 
   async function onDeleteReceipt(rc: MaterialReceipt) {
     const ok = await confirm({
@@ -228,21 +182,18 @@ export function MaterialsPage() {
         'materials-stock-report',
         customerFiltered,
         [
-          { header: 'Company', value: (r) => companyName(r.companyId), width: 24 },
-          { header: 'Material', value: (r) => r.material.name, width: 24 },
-          { header: 'Material From', value: (r) => r.from || '—', width: 20 },
-          { header: 'Challan / Invoice No', value: (r) => r.challan || '—', width: 20 },
-          { header: 'From Date', value: (r) => fmtDate(r.date), width: 14 },
-          { header: 'Quantity', value: (r) => r.quantity, width: 12 },
-          { header: 'Unit', value: (r) => r.unit, width: 10 },
-          { header: 'Received', value: (r) => r.s.received, width: 12 },
-          { header: 'Issued', value: (r) => r.s.issued, width: 12 },
-          { header: 'Current Stock', value: (r) => r.s.balance, width: 14 },
-          {
-            header: 'Status',
-            value: (r) => stockStatus(r.s.balance, r.material.reorderLevel).label,
-            width: 14,
-          },
+          { header: 'Company', value: ({ rs }) => companyName(rs.companyId ?? ''), width: 24 },
+          { header: 'Material', value: ({ material }) => material?.name ?? '—', width: 24 },
+          { header: 'Material From', value: ({ rs }) => rs.supplier || '—', width: 20 },
+          { header: 'Source Doc No', value: ({ rs }) => rs.sourceDocNo || rs.receiptNo, width: 20 },
+          { header: 'From Date', value: ({ rs }) => fmtDate(rs.date), width: 14 },
+          { header: 'Received', value: ({ rs }) => rs.received, width: 12 },
+          { header: 'Unit', value: ({ rs }) => rs.unit, width: 10 },
+          { header: 'DC Qty', value: ({ rs }) => rs.dcQty, width: 12 },
+          { header: 'Invoice Qty', value: ({ rs }) => rs.invoiceQty, width: 12 },
+          { header: 'Total Dispatched', value: ({ rs }) => rs.totalDispatched, width: 16 },
+          { header: 'Available', value: ({ rs }) => rs.available, width: 12 },
+          { header: 'Status', value: ({ rs }) => rs.status, width: 16 },
         ],
         'Customer Stock',
       )
@@ -252,25 +203,19 @@ export function MaterialsPage() {
         'materials-own-stock-report',
         ownFiltered,
         [
-          { header: 'Material', value: (r) => r.material.name, width: 24 },
-          { header: 'Code', value: (r) => r.material.code, width: 14 },
-          { header: 'Unit', value: (r) => r.material.unit, width: 10 },
-          { header: 'Purchased', value: (r) => r.s.received, width: 12 },
-          { header: 'Used', value: (r) => r.s.issued, width: 12 },
-          { header: 'Current Stock', value: (r) => r.s.balance, width: 14 },
+          { header: 'Material', value: ({ material }) => material?.name ?? '—', width: 24 },
+          { header: 'Source Doc No', value: ({ rs }) => rs.sourceDocNo || rs.receiptNo, width: 20 },
+          { header: 'Date', value: ({ rs }) => fmtDate(rs.date), width: 14 },
+          { header: 'Unit', value: ({ rs }) => rs.unit, width: 10 },
+          { header: 'Purchased', value: ({ rs }) => rs.received, width: 12 },
+          { header: 'DC Qty', value: ({ rs }) => rs.dcQty, width: 12 },
+          { header: 'Invoice Qty', value: ({ rs }) => rs.invoiceQty, width: 12 },
+          { header: 'Total Dispatched', value: ({ rs }) => rs.totalDispatched, width: 16 },
+          { header: 'Available', value: ({ rs }) => rs.available, width: 12 },
           { header: 'Cost', value: (r) => r.cost, width: 14 },
           { header: 'GST', value: (r) => r.gst, width: 14 },
-          {
-            header: 'Last Purchase',
-            value: (r) => (r.last ? fmtDate(r.last.purchaseDate) : '—'),
-            width: 16,
-          },
-          { header: 'Supplier', value: (r) => r.last?.supplier ?? '—', width: 20 },
-          {
-            header: 'Status',
-            value: (r) => stockStatus(r.s.balance, r.material.reorderLevel).label,
-            width: 14,
-          },
+          { header: 'Supplier', value: (r) => r.supplier ?? '—', width: 20 },
+          { header: 'Status', value: ({ rs }) => rs.status, width: 16 },
         ],
         'Own Stock',
       )
@@ -300,64 +245,20 @@ export function MaterialsPage() {
         }
       />
 
-      {/* Summary cards */}
-      <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <SummaryCard
-          icon={<Building2 size={18} />}
-          label="Customer stock lines"
-          value={customerAgg.size}
-        />
-        <SummaryCard
-          icon={<Warehouse size={18} />}
-          label="Own materials in stock"
-          value={ownRows.length}
-        />
-        <SummaryCard
+      {/* Summary — total on-hand stock vs total dispatched for the current
+          view + company + date-range filters (updates dynamically). */}
+      <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <StatTile
           icon={<Boxes size={18} />}
-          label="Materials (master)"
-          value={materials.length}
+          label={`Total material stock${view === 'customer' && fCompany ? ` — ${companyName(fCompany)}` : ''}`}
+          value={`${qty(totals.stock)} Nos`}
         />
-        <SummaryCard
-          icon={<Sliders size={18} />}
-          label="Low / out of stock"
-          value={lowCount}
-          tone={lowCount > 0 ? 'amber' : undefined}
+        <StatTile
+          icon={<Send size={18} />}
+          label="Total materials dispatched"
+          value={`${qty(totals.dispatched)} Nos`}
+          tone="blue"
         />
-      </div>
-
-      {/* Material stock summary — current balance per material as "Name — Qty unit". */}
-      <div className="mb-4 rounded-xl border border-slate-200 bg-white p-3">
-        <p className="mb-2 text-2xs font-semibold uppercase tracking-wide text-slate-500">
-          Material stock summary
-        </p>
-        {stockSummary.length === 0 ? (
-          <p className="text-sm text-slate-500">No stock on hand for the current filters.</p>
-        ) : (
-          <div className="flex flex-wrap gap-2">
-            {stockSummary.map(({ material, s }) => {
-              const st = stockStatus(s.balance, material.reorderLevel)
-              return (
-                <span
-                  key={material.id}
-                  className={clsx(
-                    'inline-flex items-baseline gap-1.5 rounded-lg border px-3 py-1.5 text-sm',
-                    st.tone === 'red'
-                      ? 'border-red-200 bg-red-50'
-                      : st.tone === 'amber'
-                        ? 'border-amber-200 bg-amber-50'
-                        : 'border-slate-200 bg-slate-50',
-                  )}
-                  title={`${st.label} — received ${qty(s.received)}, issued ${qty(s.issued)}`}
-                >
-                  <span className="font-medium text-slate-800">{material.name}</span>
-                  <span className="text-slate-400">—</span>
-                  <span className="font-semibold text-brand-700">{qty(s.balance)}</span>
-                  <span className="text-2xs text-slate-500">{material.unit}</span>
-                </span>
-              )
-            })}
-          </div>
-        )}
       </div>
 
       {/* Filters */}
@@ -448,81 +349,88 @@ export function MaterialsPage() {
               description="Use “Add Material” (Customer material) to receive customer-supplied material into stock."
             />
           ) : (
-            <ResponsiveTable className="min-w-[72rem]">
+            <ResponsiveTable className="min-w-[80rem]">
               <thead>
                 <tr className="border-b border-slate-100">
                   <th className="th">Company</th>
-                  <th className="th">Material</th>
-                  <th className="th">Material From</th>
-                  <th className="th">Challan / Invoice No</th>
+                  <th className="th">Item</th>
+                  <th className="th">Challan/Inv No</th>
                   <th className="th">From Date</th>
-                  <th className="th text-right">Quantity</th>
                   <th className="th text-right">Received</th>
-                  <th className="th text-right">Issued</th>
-                  <th className="th text-right">Current Stock</th>
+                  <th className="th text-right">DC Qty</th>
+                  <th className="th text-right">Invoice Qty</th>
+                  <th className="th text-right">Total Dispatched</th>
+                  <th className="th text-right">Available</th>
                   <th className="th">Status</th>
                   <th className="th text-right">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-50">
-                {custPg.pageItems.map((r) => {
-                  const st = stockStatus(r.s.balance, r.material.reorderLevel)
+                {custPg.pageItems.map(({ rs, material, receipt }) => {
+                  const fullyOut = rs.available <= 0
                   return (
-                    <tr key={r.receiptId} className="hover:bg-slate-50/60">
-                      <td className="td font-medium text-slate-800">{companyName(r.companyId)}</td>
-                      <td className="td">{r.material.name}</td>
-                      <td className="td text-slate-600">{r.from || '—'}</td>
-                      <td className="td font-mono text-2xs text-slate-500">{r.challan || '—'}</td>
-                      <td className="td text-slate-600">{fmtDate(r.date)}</td>
-                      <td className="td text-right">
-                        {qty(r.quantity)}
-                        <span className="ml-1 text-2xs text-slate-500">{r.unit}</span>
+                    <tr key={rs.receiptId} className="hover:bg-slate-50/60">
+                      <td className="td font-medium text-slate-800">
+                        {companyName(rs.companyId ?? '')}
                       </td>
-                      <td className="td text-right">{qty(r.s.received)}</td>
-                      <td className="td text-right">{qty(r.s.issued)}</td>
+                      <td className="td">{material?.name ?? rs.materialId}</td>
+                      <td className="td">
+                        <div className="font-mono text-2xs text-slate-600">
+                          {rs.sourceDocNo || rs.receiptNo}
+                        </div>
+                        {rs.supplier && (
+                          <div className="text-2xs text-slate-400">{rs.supplier}</div>
+                        )}
+                      </td>
+                      <td className="td text-slate-600">{fmtDate(rs.date)}</td>
+                      <td className="td text-right">
+                        {qty(rs.received)}
+                        <span className="ml-1 text-2xs text-slate-500">{rs.unit}</span>
+                      </td>
+                      <td className="td text-right text-slate-600">{qty(rs.dcQty)}</td>
+                      <td className="td text-right text-slate-600">{qty(rs.invoiceQty)}</td>
+                      <td className="td text-right text-slate-600">{qty(rs.totalDispatched)}</td>
                       <td className="td text-right">
                         <span
                           className={clsx(
                             'font-semibold',
-                            st.tone === 'red'
-                              ? 'text-red-600'
-                              : st.tone === 'amber'
-                                ? 'text-amber-600'
-                                : 'text-slate-900',
+                            fullyOut ? 'text-red-600' : 'text-slate-900',
                           )}
                         >
-                          {qty(r.s.balance)}
+                          {qty(rs.available)}
                         </span>
-                        <span className="ml-1 text-2xs text-slate-500">{r.unit}</span>
+                        <span className="ml-1 text-2xs text-slate-500">{rs.unit}</span>
                       </td>
                       <td className="td">
-                        <Badge tone={st.tone}>{st.label}</Badge>
+                        <Badge tone={fullyOut ? 'red' : 'green'}>{rs.status}</Badge>
                       </td>
                       <td className="td">
                         <div className="flex justify-end gap-1">
                           <button
                             className="btn-ghost btn-sm"
-                            title="View history"
-                            onClick={() =>
-                              setHistoryFor({ materialId: r.materialId, scope: r.companyId })
-                            }
+                            title="View source history"
+                            onClick={() => setHistoryFor(rs)}
                           >
                             <Eye size={15} />
                           </button>
-                          <button
-                            className="btn-ghost btn-sm"
-                            title="Edit intake"
-                            onClick={() => setEditReceipt(r.receipt)}
-                          >
-                            <Pencil size={15} />
-                          </button>
-                          <button
-                            className="btn-ghost btn-sm text-red-500"
-                            title="Delete intake"
-                            onClick={() => onDeleteReceipt(r.receipt)}
-                          >
-                            <Trash2 size={15} />
-                          </button>
+                          {receipt && (
+                            <>
+                              <button
+                                className="btn-ghost btn-sm"
+                                title="Edit intake"
+                                onClick={() => setEditReceipt(receipt)}
+                              >
+                                <Pencil size={15} />
+                              </button>
+                              <button
+                                className="btn-ghost btn-sm text-red-500"
+                                title="Delete intake"
+                                onClick={() => onDeleteReceipt(receipt)}
+                              >
+                                <Trash2 size={15} />
+                              </button>
+                            </>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -542,65 +450,66 @@ export function MaterialsPage() {
               description="Use “Add Material” (Own material) to record a purchase — it adds stock and an expense."
             />
           ) : (
-            <ResponsiveTable className="min-w-[60rem]">
+            <ResponsiveTable className="min-w-[72rem]">
               <thead>
                 <tr className="border-b border-slate-100">
-                  <th className="th">Material</th>
+                  <th className="th">Item</th>
+                  <th className="th">Challan/Inv No</th>
                   <th className="th text-right">Purchased</th>
-                  <th className="th text-right">Used</th>
-                  <th className="th text-right">Current Stock</th>
+                  <th className="th text-right">DC Qty</th>
+                  <th className="th text-right">Invoice Qty</th>
+                  <th className="th text-right">Total Dispatched</th>
+                  <th className="th text-right">Available</th>
                   <th className="th text-right">Cost</th>
                   <th className="th text-right">GST</th>
-                  <th className="th">Last Purchase</th>
                   <th className="th">Status</th>
                   <th className="th text-right">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-50">
-                {ownPg.pageItems.map((r) => {
-                  const st = stockStatus(r.s.balance, r.material.reorderLevel)
+                {ownPg.pageItems.map(({ rs, material, cost, gst, supplier }) => {
+                  const fullyOut = rs.available <= 0
                   return (
-                    <tr key={r.material.id} className="hover:bg-slate-50/60">
+                    <tr key={rs.receiptId} className="hover:bg-slate-50/60">
                       <td className="td">
-                        <div className="font-semibold text-slate-800">{r.material.name}</div>
+                        <div className="font-semibold text-slate-800">
+                          {material?.name ?? rs.materialId}
+                        </div>
                         <div className="text-2xs text-slate-500">
-                          {r.material.code} · {r.material.unit}
+                          {material?.code} · {rs.unit}
                         </div>
                       </td>
-                      <td className="td text-right">{qty(r.s.received)}</td>
-                      <td className="td text-right">{qty(r.s.issued)}</td>
+                      <td className="td">
+                        <div className="font-mono text-2xs text-slate-600">
+                          {rs.sourceDocNo || rs.receiptNo}
+                        </div>
+                        <div className="text-2xs text-slate-400">
+                          {fmtDate(rs.date)}
+                          {supplier ? ` · ${supplier}` : ''}
+                        </div>
+                      </td>
+                      <td className="td text-right">{qty(rs.received)}</td>
+                      <td className="td text-right text-slate-600">{qty(rs.dcQty)}</td>
+                      <td className="td text-right text-slate-600">{qty(rs.invoiceQty)}</td>
+                      <td className="td text-right text-slate-600">{qty(rs.totalDispatched)}</td>
                       <td className="td text-right">
                         <span
                           className={clsx(
                             'font-semibold',
-                            st.tone === 'red'
-                              ? 'text-red-600'
-                              : st.tone === 'amber'
-                                ? 'text-amber-600'
-                                : 'text-slate-900',
+                            fullyOut ? 'text-red-600' : 'text-slate-900',
                           )}
                         >
-                          {qty(r.s.balance)}
+                          {qty(rs.available)}
                         </span>
-                        <span className="ml-1 text-2xs text-slate-500">{r.material.unit}</span>
+                        <span className="ml-1 text-2xs text-slate-500">{rs.unit}</span>
                       </td>
-                      <td className="td text-right">{currency(r.cost)}</td>
-                      <td className="td text-right text-slate-500">{currency(r.gst)}</td>
-                      <td className="td text-2xs text-slate-500">
-                        {r.last
-                          ? `${fmtDate(r.last.purchaseDate)} · ${r.last.supplier ?? '—'}`
-                          : '—'}
-                      </td>
+                      <td className="td text-right">{currency(cost)}</td>
+                      <td className="td text-right text-slate-500">{currency(gst)}</td>
                       <td className="td">
-                        <Badge tone={st.tone}>{st.label}</Badge>
+                        <Badge tone={fullyOut ? 'red' : 'green'}>{rs.status}</Badge>
                       </td>
                       <td className="td text-right">
-                        <button
-                          className="btn-ghost btn-sm"
-                          onClick={() =>
-                            setHistoryFor({ materialId: r.material.id, scope: SHOP_SCOPE })
-                          }
-                        >
+                        <button className="btn-ghost btn-sm" onClick={() => setHistoryFor(rs)}>
                           <History size={14} /> History
                         </button>
                       </td>
@@ -620,77 +529,121 @@ export function MaterialsPage() {
       )}
       {dialog === 'adjust' && <AdjustmentForm onClose={() => setDialog(null)} />}
       {dialog === 'materials' && <MaterialsManager onClose={() => setDialog(null)} />}
-      {historyFor && (
-        <HistoryModal
-          materialId={historyFor.materialId}
-          scope={historyFor.scope}
-          onClose={() => setHistoryFor(null)}
-        />
-      )}
+      {historyFor && <SourceHistoryModal row={historyFor} onClose={() => setHistoryFor(null)} />}
     </div>
   )
 }
 
-function SummaryCard({
-  icon,
-  label,
-  value,
-  tone,
-}: {
-  icon: ReactNode
-  label: string
-  value: number
-  tone?: string
-}) {
-  return (
-    <Card className="flex items-center gap-3 p-3">
-      <div
-        className={clsx(
-          'flex h-9 w-9 items-center justify-center rounded-lg',
-          tone === 'amber' ? 'bg-amber-100 text-amber-700' : 'bg-brand-100 text-brand-700',
-        )}
-      >
-        {icon}
-      </div>
-      <div>
-        <div className="text-lg font-bold leading-none text-slate-900">{value}</div>
-        <div className="text-2xs text-slate-500">{label}</div>
-      </div>
-    </Card>
-  )
+// History of ONE received stock (source): the intake, then every delivery
+// challan / invoice that consumed THIS specific source, plus any adjustment
+// booked against it — with a running balance. Derived from the documents' own
+// source tags (challan.lines / invoice.lines), so it is accurate per source.
+interface SourceMovement {
+  id: string
+  date: string
+  txnType: 'Receipt' | 'Delivery Challan' | 'Invoice' | 'Adjustment'
+  docNo: string
+  qtyIn: number
+  qtyOut: number
+  note?: string
 }
 
-// Per-material transaction history (unified ledger), scoped to own or a customer.
-function HistoryModal({
-  materialId,
-  scope,
-  onClose,
-}: {
-  materialId: string
-  scope?: string
-  onClose: () => void
-}) {
+function SourceHistoryModal({ row, onClose }: { row: MaterialReceiptStock; onClose: () => void }) {
   const materialName = useMaterialName()
   const companyName = useCompanyName()
-  const { data: rows = [], isLoading } = useLedger({ materialId, scope })
-  // Running balance oldest -> newest.
+  const { data: challans = [] } = useChallans()
+  const { data: invoices = [] } = useInvoices()
+  const { data: adjustments = [] } = useAdjustments()
+
   const withBalance = useMemo(() => {
-    const asc = [...rows].sort((a, b) => (a.createdAt < b.createdAt ? -1 : 1))
+    const moves: SourceMovement[] = []
+    // The intake itself.
+    moves.push({
+      id: `rcpt_${row.receiptId}`,
+      date: row.date,
+      txnType: 'Receipt',
+      docNo: row.sourceDocNo || row.receiptNo,
+      qtyIn: row.received,
+      qtyOut: 0,
+      note: row.supplier ? `Received from ${row.supplier}` : 'Received into stock',
+    })
+    // Delivery challans that dispatched this source (skip cancelled).
+    for (const c of challans) {
+      if (c.status === 'Cancelled') continue
+      for (const l of c.lines) {
+        if (l.sourceReceiptId === row.receiptId && l.quantity > 0)
+          moves.push({
+            id: `dc_${c.id}_${l.id}`,
+            date: c.date,
+            txnType: 'Delivery Challan',
+            docNo: c.dcNo,
+            qtyIn: 0,
+            qtyOut: l.quantity,
+            note: `Dispatched via challan ${c.dcNo}`,
+          })
+      }
+    }
+    // Invoices that billed this source directly (skip cancelled).
+    for (const iv of invoices) {
+      if (iv.status === 'Cancelled') continue
+      for (const l of iv.lines) {
+        if (l.sourceReceiptId === row.receiptId && l.quantity > 0)
+          moves.push({
+            id: `inv_${iv.id}_${l.id}`,
+            date: iv.date,
+            txnType: 'Invoice',
+            docNo: iv.invoiceNo,
+            qtyIn: 0,
+            qtyOut: l.quantity,
+            note: `Billed via invoice ${iv.invoiceNo}`,
+          })
+      }
+    }
+    // Adjustments booked against this source (e.g. dispatch reversals).
+    for (const a of adjustments) {
+      if (a.sourceReceiptId === row.receiptId)
+        moves.push({
+          id: `adj_${a.id}`,
+          date: a.date,
+          txnType: 'Adjustment',
+          docNo: a.adjNo,
+          qtyIn: a.quantity > 0 ? a.quantity : 0,
+          qtyOut: a.quantity < 0 ? -a.quantity : 0,
+          note: a.reason,
+        })
+    }
+    // Oldest → newest for the running balance, then show newest first.
+    const asc = moves.sort((x, y) => (x.date < y.date ? -1 : x.date > y.date ? 1 : 0))
     let bal = 0
     const out = asc.map((r) => {
       bal += r.qtyIn - r.qtyOut
       return { ...r, balance: bal }
     })
     return out.reverse()
-  }, [rows])
+  }, [row, challans, invoices, adjustments])
 
-  const scopeLabel = !scope ? 'All' : scope === SHOP_SCOPE ? 'Own (shop)' : companyName(scope)
+  const scopeLabel = row.ownership === 'Shop' ? 'Own (shop)' : companyName(row.companyId ?? '')
+  const source = row.sourceDocNo || row.receiptNo
 
   return (
-    <Modal open onClose={onClose} size="lg" title={`${materialName(materialId)} — ${scopeLabel}`}>
-      {isLoading ? (
-        <div className="p-8 text-center text-sm text-slate-500">Loading history…</div>
-      ) : withBalance.length === 0 ? (
+    <Modal
+      open
+      onClose={onClose}
+      size="lg"
+      title={`${materialName(row.materialId)} — ${source} · ${scopeLabel}`}
+    >
+      <div className="mb-3 flex flex-wrap gap-4 rounded-lg bg-slate-50 px-3 py-2 text-2xs text-slate-600">
+        <span>
+          Received <b className="tnum text-slate-900">{qty(row.received)}</b> {row.unit}
+        </span>
+        <span>
+          Dispatched <b className="tnum text-slate-900">{qty(row.totalDispatched)}</b> {row.unit}
+        </span>
+        <span>
+          Available <b className="tnum text-slate-900">{qty(row.available)}</b> {row.unit}
+        </span>
+      </div>
+      {withBalance.length === 0 ? (
         <p className="py-8 text-center text-sm text-slate-500">No transactions yet.</p>
       ) : (
         <div className="overflow-x-auto">
@@ -713,7 +666,11 @@ function HistoryModal({
                   <td className="px-2 py-1.5">
                     <Badge
                       tone={
-                        r.txnType === 'Receipt' ? 'green' : r.txnType === 'Issue' ? 'blue' : 'amber'
+                        r.txnType === 'Receipt'
+                          ? 'green'
+                          : r.txnType === 'Adjustment'
+                            ? 'amber'
+                            : 'blue'
                       }
                     >
                       {r.txnType}
