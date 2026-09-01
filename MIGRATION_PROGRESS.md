@@ -102,10 +102,26 @@ Verification (all green): `next build` ✓ (11 pages, 5 blog posts SSG'd) · run
 
 URL parity preserved; `blogData.ts` remains the single source of blog content.
 
-### Increment 3.2 — landing `/` + auth — NEXT
+### Increment 3.2 — landing `/` + authentication (DONE)
 
-Bigger: the landing embeds the Sign In/Sign Up form (`AuthForm` → `useAuth` → Supabase). Requires porting `AuthProvider` + `LandingPage` under Next and wiring `src/data/supabase.ts` to the `env-public.ts` shim (so `NEXT_PUBLIC_*` works). Replaces the Phase-2 placeholder at `/`.
+Migrated the landing and wired Supabase auth under Next.
 
-### Remaining
+| Route | Next file      | Notes                                                                                                     |
+| ----- | -------------- | --------------------------------------------------------------------------------------------------------- |
+| `/`   | `app/page.tsx` | Server Component; SSR marketing + Metadata API + `SoftwareApplication` JSON-LD; replaces the placeholder. |
 
-Authenticated portal shell (`/app`) + all portal module routes + hub redirects — see `ROUTE_MIGRATION_MAP.md`.
+Auth wiring:
+
+- `src/data/supabase.ts` now reads env via `src/lib/env-public.ts` (the shim). **Fix:** the shim uses **static** `import.meta.env.VITE_*` / `process.env.NEXT_PUBLIC_*` reads — bundlers only inline static references, so the earlier dynamic keys left the Next **client** in local mode (caught in-browser: the superadmin hint showed). Static reads put both Vite and Next clients in Supabase mode.
+- `.env`: added `NEXT_PUBLIC_SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_ANON_KEY` (same values as `VITE_*`).
+- `AuthForm` is now **router-agnostic**: the two `navigate({to:'/app'})` calls became an injected `onAuthenticated` callback. Vite `LandingPage` passes `() => navigate({to:'/app'})`; Next passes `() => router.push('/app')` via `app/_site/landing-auth.tsx` (client island).
+- `app/providers.tsx`: added `AuthProvider` + `ToastProvider` (SSR-safe with Supabase configured).
+- `app/page.tsx` imports `@/index.css` for the `.input`/`.btn-primary` classes `AuthForm` needs.
+
+Verification: `next build` ✓; Supabase URL inlined in the **client** bundle (Supabase mode confirmed in-browser — Email field, no superadmin hint); Next landing pixel-parity with Vite. **Vite app re-verified in browser: login/session/dashboard all work.** Vite `tsc` ✓, Vitest 26/26 ✓, Vite SPA build ✓ (GoTrue configured), lint 0 errors.
+
+**Known interim gap:** the Next landing's `onAuthenticated` pushes to `/app`, not yet migrated to Next → 404 on the Next app until increment 3.3. The **live Vite app is unaffected** and fully works.
+
+### Increment 3.3 — authenticated portal shell (`/app`) — NEXT
+
+Port `AppShell` + the `/app` client route guard so login completes end-to-end in Next, then migrate portal module routes + hub redirects — see `ROUTE_MIGRATION_MAP.md`.

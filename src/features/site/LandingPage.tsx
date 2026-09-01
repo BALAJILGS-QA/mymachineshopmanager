@@ -1,10 +1,12 @@
 import { Boxes, Gauge, ShieldCheck } from 'lucide-react'
+import { useNavigate } from '@tanstack/react-router'
 import { SiteLayout } from './SiteLayout'
 import { AuthForm } from '@/features/auth/AuthForm'
 import { useSeo, SITE } from '@/lib/seo'
 import { BRAND } from '@/lib/brand'
 
 export function LandingPage() {
+  const navigate = useNavigate()
   useSeo({
     path: '/',
     title: `${BRAND.product} — Job Orders, Invoices & Delivery Challans`,
@@ -45,7 +47,10 @@ export function LandingPage() {
                 { icon: ShieldCheck, t: 'Documented QC' },
                 { icon: Boxes, t: 'Batch traceability' },
               ].map((f) => (
-                <span key={f.t} className="flex items-center gap-2 text-sm font-medium text-[var(--ink-dim)]">
+                <span
+                  key={f.t}
+                  className="flex items-center gap-2 text-sm font-medium text-[var(--ink-dim)]"
+                >
                   <f.icon size={16} className="text-[var(--amber)]" /> {f.t}
                 </span>
               ))}
@@ -54,7 +59,7 @@ export function LandingPage() {
 
           {/* Auth (merged login/sign-up) */}
           <div className="rise d3 mx-auto w-full max-w-md">
-            <AuthForm />
+            <AuthForm onAuthenticated={() => navigate({ to: '/app' })} />
           </div>
         </div>
       </section>

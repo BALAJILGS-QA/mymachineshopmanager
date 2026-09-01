@@ -1,6 +1,5 @@
 import { cloneElement, isValidElement, useEffect, useId, useState } from 'react'
 import type { ReactElement } from 'react'
-import { useNavigate } from '@tanstack/react-router'
 import {
   ArrowRight,
   Building2,
@@ -24,10 +23,12 @@ type Mode = 'signin' | 'signup'
 // Self-contained auth card embedded in the landing page. Sign-up collects the
 // applicant's details and submits a registration for super-admin approval — it
 // does NOT sign the user in. Sign-in only succeeds for approved accounts.
-export function AuthForm() {
+//
+// Router-agnostic: navigation to the portal is injected via `onAuthenticated`
+// so the same component works under both TanStack Router (Vite) and Next.js.
+export function AuthForm({ onAuthenticated }: { onAuthenticated: () => void }) {
   const { login, register, session, supabaseMode } = useAuth()
   const toast = useToast()
-  const navigate = useNavigate()
   const [mode, setMode] = useState<Mode>('signin')
   const [busy, setBusy] = useState(false)
   const [submitted, setSubmitted] = useState(false)
@@ -48,8 +49,8 @@ export function AuthForm() {
   const idLabel = supabaseMode ? 'Email' : 'Username or Email'
 
   useEffect(() => {
-    if (session) navigate({ to: '/app' })
-  }, [session, navigate])
+    if (session) onAuthenticated()
+  }, [session, onAuthenticated])
 
   function switchMode(m: Mode) {
     setMode(m)
@@ -102,7 +103,7 @@ export function AuthForm() {
         <Logo size={48} className="mx-auto mb-3 rounded-[28%] shadow-sm" />
         <p className="text-sm text-slate-500">Signed in as</p>
         <p className="font-semibold text-slate-800">{session.username}</p>
-        <button className="btn-primary mt-4 w-full py-2.5" onClick={() => navigate({ to: '/app' })}>
+        <button className="btn-primary mt-4 w-full py-2.5" onClick={onAuthenticated}>
           Enter Portal <ArrowRight size={16} />
         </button>
       </div>

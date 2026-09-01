@@ -12,7 +12,7 @@ Legend — **Type:** SSR (public, server-rendered) · CSR (client-only, `/app` `
 | Existing route (file)       | URL                                    | Next.js target                                                         | Type   | Auth   | Status       | Verified |
 | --------------------------- | -------------------------------------- | ---------------------------------------------------------------------- | ------ | ------ | ------------ | -------- |
 | `src/routes/__root.tsx`     | (root layout, head/SEO, catch-all→`/`) | `app/layout.tsx` (+ `not-found.tsx`)                                   | Layout | Public | Pending      | ☐        |
-| `src/routes/index.tsx`      | `/`                                    | `app/page.tsx` (Landing + login/signup UI merged in)                   | SSR    | Public | Pending      | ☐        |
+| `src/routes/index.tsx`      | `/`                                    | `app/page.tsx` (Landing + login/signup UI merged in)                   | SSR    | Public | **Migrated** | ☑ P3     |
 | `src/routes/blog/index.tsx` | `/blog`                                | `app/blog/page.tsx`                                                    | SSR    | Public | **Migrated** | ☑ P3     |
 | `src/routes/blog/$slug.tsx` | `/blog/:slug`                          | `app/blog/[slug]/page.tsx` (`generateStaticParams` from `blogData.ts`) | SSG    | Public | **Migrated** | ☑ P3     |
 
