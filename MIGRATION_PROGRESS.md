@@ -213,9 +213,25 @@ Verification: Vite `tsc` ✓ · Vite build ✓ · `next build` ✓ (30 pages) ·
 
 Verified: tsc ✓, next build ✓, Vite build ✓, lint 0 errors.
 
+### Increment 5.3 — overlay layer on Radix (DONE)
+
+APIs preserved 100% — zero call-site churn across the ~11 pages using overlays:
+
+| Component       | New internals                                                               | API kept                         | Gains                                                                             |
+| --------------- | --------------------------------------------------------------------------- | -------------------------------- | --------------------------------------------------------------------------------- |
+| `Modal`         | Radix Dialog primitives (exact previous markup, incl. mobile bottom-sheet)  | `open/onClose/title/size/footer` | real focus trap (first field auto-focused), aria-modal, scroll lock, Escape       |
+| `ConfirmDialog` | Radix AlertDialog                                                           | `useConfirm(): Promise<boolean>` | `role=alertdialog`, Cancel focused by default (safe destructive UX), focus return |
+| `Toast`         | Sonner (via shadcn wrapper, simplified — `next-themes` removed; light-only) | `useToast().success/error/info`  | stacking, swipe-dismiss, accessible live region; bottom-centre position preserved |
+
+Deps: `@radix-ui/react-dialog`, `@radix-ui/react-alert-dialog`, `sonner`.
+
+Live verification (authenticated Playwright on Next): Companies → Add Company opens Radix `dialog` with focus on first input → Escape/action closes · Delete → `alertdialog` with Cancel default-focused → confirm deletes row · short-password login fires Sonner error toast ("Password must be at least 6 characters") · logout → login → dashboard full loop works. tsc ✓ · next build ✓ · Vite build ✓ · Vitest 26/26 ✓ · lint 0 errors.
+
+Note: an incidental empty-name company created during testing was deleted via the new confirm flow (pre-existing gap: the Companies form has no client-side name validation — flagged for the Phase 6 forms pass, not fixed here per §14).
+
 ### Remaining Phase 5 increments (per UI_MIGRATION_MAP.md)
 
-- 5.3 overlays: Dialog (Modal), AlertDialog (ConfirmDialog, keep `useConfirm`), Sonner (keep `useToast`), Popover+Calendar (DateInput), Command multi-select.
+- (deferred from 5.3, High risk → forms phase) Popover+Calendar (DateInput), Command multi-select (MultiSelectDropdown).
 - 5.4 shared DataTable + ERP components (PageHeader/FilterBar/StatusBadge/SummaryCard…), module-by-module rollout.
 - 5.5 accessibility + polish pass.
 
