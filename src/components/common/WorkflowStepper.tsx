@@ -1,13 +1,13 @@
-import { Link, type LinkProps } from '@tanstack/react-router'
 import { ChevronRight, type LucideIcon } from 'lucide-react'
 import { clsx } from 'clsx'
 import { Card } from '@/components/ui/primitives'
+import { AppLink } from '@/components/nav/app-link'
 
 export interface WorkflowStage {
   label: string
   count: number | string
   icon: LucideIcon
-  to: LinkProps['to']
+  to: string
   tone?: 'brand' | 'blue' | 'amber' | 'green' | 'slate'
 }
 
@@ -28,7 +28,7 @@ export function WorkflowStepper({ stages }: { stages: WorkflowStage[] }) {
       <div className="flex min-w-max items-stretch gap-1">
         {stages.map((s, i) => (
           <div key={s.label} className="flex items-center">
-            <Link
+            <AppLink
               to={s.to}
               className="group flex min-w-[9.5rem] items-center gap-3 rounded-lg px-3 py-2 transition-colors hover:bg-slate-50"
             >
@@ -48,7 +48,7 @@ export function WorkflowStepper({ stages }: { stages: WorkflowStage[] }) {
                   {s.count}
                 </span>
               </span>
-            </Link>
+            </AppLink>
             {i < stages.length - 1 && (
               <ChevronRight size={18} className="mx-0.5 shrink-0 text-slate-300" aria-hidden />
             )}
