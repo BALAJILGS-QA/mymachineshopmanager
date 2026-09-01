@@ -1,0 +1,11 @@
+/*
+ * Next.js App Router global stylesheet.
+ *
+ * Phase 2 (foundation): Tailwind directives only, so the Next build proves the
+ * same Tailwind 3 + PostCSS pipeline the Vite app uses. The full design tokens
+ * currently in `src/index.css` are ported during the design-system phase; this
+ * file intentionally stays minimal until then.
+ */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;

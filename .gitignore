@@ -4,6 +4,9 @@ dist-ssr
 # TanStack Start / Nitro build output
 .output
 .nitro
+# Next.js build output
+.next
+next-env.d.ts
 .tanstack
 .tanstack-start
 *.local

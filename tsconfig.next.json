@@ -1,0 +1,13 @@
+{
+  "//": "Next.js-only TypeScript config. Extends the root tsconfig (which Vite, tsc and Vitest use, unchanged) and overrides only what Next requires: jsx=preserve and the next plugin. Kept separate so the existing green baseline (npm run typecheck / test / build) is untouched. Referenced from next.config.mjs via typescript.tsconfigPath.",
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "jsx": "preserve",
+    "allowJs": true,
+    "esModuleInterop": true,
+    "incremental": true,
+    "plugins": [{ "name": "next" }]
+  },
+  "include": ["app", "next-env.d.ts", ".next/types/**/*.ts"],
+  "exclude": ["node_modules", "dist", ".next"]
+}

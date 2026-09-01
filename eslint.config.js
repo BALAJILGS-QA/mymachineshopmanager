@@ -23,6 +23,11 @@ export default tseslint.config(
       // `tsc -b` composite build artifacts (already gitignored)
       'vite.config.js',
       'vite.config.d.ts',
+      // Generated build output (all gitignored) — never lint these.
+      '.next',
+      'next-env.d.ts',
+      '.output',
+      '.tanstack',
     ],
   },
   js.configs.recommended,
