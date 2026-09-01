@@ -9,19 +9,19 @@ Legend — **Type:** SSR (public, server-rendered) · CSR (client-only, `/app` `
 
 ## Public / marketing (server-rendered — migrate first)
 
-| Existing route (file)       | URL                                    | Next.js target                                                         | Type   | Auth   | Status  | Verified |
-| --------------------------- | -------------------------------------- | ---------------------------------------------------------------------- | ------ | ------ | ------- | -------- |
-| `src/routes/__root.tsx`     | (root layout, head/SEO, catch-all→`/`) | `app/layout.tsx` (+ `not-found.tsx`)                                   | Layout | Public | Pending | ☐        |
-| `src/routes/index.tsx`      | `/`                                    | `app/page.tsx` (Landing + login/signup UI merged in)                   | SSR    | Public | Pending | ☐        |
-| `src/routes/blog/index.tsx` | `/blog`                                | `app/blog/page.tsx`                                                    | SSR    | Public | Pending | ☐        |
-| `src/routes/blog/$slug.tsx` | `/blog/:slug`                          | `app/blog/[slug]/page.tsx` (`generateStaticParams` from `blogData.ts`) | SSR    | Public | Pending | ☐        |
+| Existing route (file)       | URL                                    | Next.js target                                                         | Type   | Auth   | Status       | Verified |
+| --------------------------- | -------------------------------------- | ---------------------------------------------------------------------- | ------ | ------ | ------------ | -------- |
+| `src/routes/__root.tsx`     | (root layout, head/SEO, catch-all→`/`) | `app/layout.tsx` (+ `not-found.tsx`)                                   | Layout | Public | Pending      | ☐        |
+| `src/routes/index.tsx`      | `/`                                    | `app/page.tsx` (Landing + login/signup UI merged in)                   | SSR    | Public | Pending      | ☐        |
+| `src/routes/blog/index.tsx` | `/blog`                                | `app/blog/page.tsx`                                                    | SSR    | Public | **Migrated** | ☑ P3     |
+| `src/routes/blog/$slug.tsx` | `/blog/:slug`                          | `app/blog/[slug]/page.tsx` (`generateStaticParams` from `blogData.ts`) | SSG    | Public | **Migrated** | ☑ P3     |
 
 ## Compatibility redirects (preserve old URLs)
 
-| Existing route          | URL       | Behaviour                | Next.js target                                                      | Type     | Status  | Verified |
-| ----------------------- | --------- | ------------------------ | ------------------------------------------------------------------- | -------- | ------- | -------- |
-| `src/routes/login.tsx`  | `/login`  | `redirect('/', replace)` | `app/login/page.tsx` → `redirect('/')` (or `next.config` redirect)  | Redirect | Pending | ☐        |
-| `src/routes/signup.tsx` | `/signup` | `redirect('/', replace)` | `app/signup/page.tsx` → `redirect('/')` (or `next.config` redirect) | Redirect | Pending | ☐        |
+| Existing route          | URL       | Behaviour                | Next.js target                                | Type     | Status       | Verified |
+| ----------------------- | --------- | ------------------------ | --------------------------------------------- | -------- | ------------ | -------- |
+| `src/routes/login.tsx`  | `/login`  | `redirect('/', replace)` | `app/login/page.tsx` → `redirect('/')` (307)  | Redirect | **Migrated** | ☑ P3     |
+| `src/routes/signup.tsx` | `/signup` | `redirect('/', replace)` | `app/signup/page.tsx` → `redirect('/')` (307) | Redirect | **Migrated** | ☑ P3     |
 
 ## Authenticated portal shell (client-only)
 

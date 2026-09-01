@@ -1,8 +1,5 @@
 import { useEffect } from 'react'
-
-const SITE_NAME = 'Machine Shop Management'
-const BASE_URL = 'https://sreebalajiindustries.netlify.app'
-const DEFAULT_IMAGE = `${BASE_URL}/og-image.svg`
+import { SITE_NAME, BASE_URL, DEFAULT_IMAGE } from './site-meta'
 
 export interface SeoInput {
   title: string
@@ -101,7 +98,7 @@ export function useSeo(input: SeoInput): void {
   }, [title, description, path, keywords, image, type, noindex, JSON.stringify(jsonLd)])
 }
 
-export const SITE = { SITE_NAME, BASE_URL, DEFAULT_IMAGE }
+export { SITE } from './site-meta'
 
 // Applies SEO/meta globally for the authenticated app using the configured shop
 // profile. Called on every route so the shop name, description and keywords set

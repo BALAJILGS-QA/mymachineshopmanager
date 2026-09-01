@@ -1,11 +1,14 @@
 /*
  * Next.js App Router global stylesheet.
  *
- * Phase 2 (foundation): Tailwind directives only, so the Next build proves the
- * same Tailwind 3 + PostCSS pipeline the Vite app uses. The full design tokens
- * currently in `src/index.css` are ported during the design-system phase; this
- * file intentionally stays minimal until then.
+ * Tailwind directives + the marketing/blog webfonts (Saira / IBM Plex / Inter),
+ * matching the Vite app's <head> font links so migrated public pages keep the
+ * same typography. `@import` must precede the @tailwind rules per CSS spec.
+ * The full app design tokens in `src/index.css` are ported in the design-system
+ * phase; this file stays minimal until then.
  */
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=Saira:wght@500;600;700;800&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;

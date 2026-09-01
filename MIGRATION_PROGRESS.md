@@ -74,9 +74,38 @@ Phase 2 is fully additive. To revert: delete `app/`, `next.config.mjs`,
 
 ---
 
-## ⏭️ Next — Phase 3 (routing migration) — NOT STARTED
+## 🚧 Phase 3 — routing migration (IN PROGRESS)
 
-Awaiting go-ahead. First candidates (lowest risk, already SSR-friendly): public
-routes `/`, `/blog`, `/blog/[slug]`, and the `/login`,`/signup` → `/` redirects,
-per `ROUTE_MIGRATION_MAP.md`. Phase 3 also wires `src/data/supabase.ts` to the
-`env-public.ts` shim.
+Migrating routes onto Next.js one increment at a time, public → auth shell →
+portal, per `ROUTE_MIGRATION_MAP.md`. The Vite/TanStack routes stay live until
+each Next equivalent is verified.
+
+### Increment 3.1 — public content routes + compat redirects (DONE)
+
+Migrated (Next now serves these; Vite still serves its copies in parallel):
+
+| Route          | Next file                  | Notes                                                                                                                                                                     |
+| -------------- | -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `/blog`        | `app/blog/page.tsx`        | Server Component; SSR content; SEO via Metadata API; JSON-LD (`Blog`).                                                                                                    |
+| `/blog/[slug]` | `app/blog/[slug]/page.tsx` | **SSG** via `generateStaticParams` (all 5 posts); per-post `generateMetadata`; JSON-LD (`BlogPosting`); unknown slug → `redirect('/blog')` (preserves Vite `<Navigate>`). |
+| `/login`       | `app/login/page.tsx`       | `redirect('/')` (307) — preserves compat URL.                                                                                                                             |
+| `/signup`      | `app/signup/page.tsx`      | `redirect('/')` (307) — preserves compat URL.                                                                                                                             |
+
+Supporting (no logic duplicated — pure modules reused from `src`):
+
+- `app/_site/site-chrome.tsx` — Next port of `SiteLayout` (client); markup 1:1, only `Link to` → `next/link href`. Reuses `Logo`, `BRAND`, `site.css`, `useReveal`.
+- `app/_site/json-ld.tsx` — XSS-safe JSON-LD (escaped text children, no raw-HTML API).
+- `src/lib/site-meta.ts` — **new pure module** holding `SITE_NAME/BASE_URL/DEFAULT_IMAGE/SITE`; `src/lib/seo.ts` now re-exports `SITE` from it. Needed because `seo.ts` imports `useEffect` (client-only) and can't be pulled into a Server Component. Vite behaviour unchanged.
+- `app/globals.css` — added Google Fonts (`Saira`/`IBM Plex`/`Inter`) to match the Vite site typography.
+
+Verification (all green): `next build` ✓ (11 pages, 5 blog posts SSG'd) · runtime `next start` → `/blog` 200, `/blog/:slug` 200, `/login` 307→`/`, unknown slug 307→`/blog` · Vite `tsc` ✓ · Vitest 26/26 ✓ · Vite SPA build ✓ · lint 0 errors.
+
+URL parity preserved; `blogData.ts` remains the single source of blog content.
+
+### Increment 3.2 — landing `/` + auth — NEXT
+
+Bigger: the landing embeds the Sign In/Sign Up form (`AuthForm` → `useAuth` → Supabase). Requires porting `AuthProvider` + `LandingPage` under Next and wiring `src/data/supabase.ts` to the `env-public.ts` shim (so `NEXT_PUBLIC_*` works). Replaces the Phase-2 placeholder at `/`.
+
+### Remaining
+
+Authenticated portal shell (`/app`) + all portal module routes + hub redirects — see `ROUTE_MIGRATION_MAP.md`.
