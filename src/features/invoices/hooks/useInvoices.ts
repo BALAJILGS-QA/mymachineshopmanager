@@ -11,7 +11,11 @@ export function useCreateInvoice() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: (input: api.InvoiceCreateInput) => api.createInvoice(input),
-    onSuccess: () => qc.invalidateQueries({ queryKey: qk.invoices.all }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: qk.invoices.all })
+      // A direct invoice with material lines deducts stock — refresh balances.
+      qc.invalidateQueries({ queryKey: qk.stock.all })
+    },
   })
 }
 
@@ -31,8 +35,10 @@ export function useSetInvoiceStatus() {
       api.setInvoiceStatus(id, status),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: qk.invoices.all })
-      // Cancelling frees linked delivery challans.
+      // Cancelling frees linked delivery challans and restores any stock the
+      // invoice itself deducted.
       qc.invalidateQueries({ queryKey: qk.deliveries.all })
+      qc.invalidateQueries({ queryKey: qk.stock.all })
     },
   })
 }

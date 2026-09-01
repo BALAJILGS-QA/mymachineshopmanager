@@ -20,6 +20,7 @@ import {
   useChallans,
   useCreateChallan,
   useUpdateChallan,
+  useUpdateChallanQuantities,
   useDeleteChallan,
   useSetChallanStatus,
   useReopenChallan,
@@ -33,6 +34,7 @@ import { usePreviewNo } from '@/features/shared/usePreviewNo'
 import { toUserMessage } from '@/lib/api/errors'
 import {
   fmtDate,
+  fmtDateTime,
   inRange,
   monthEndISO,
   monthStartISO,
@@ -448,7 +450,8 @@ function DcForm({ dc, onClose }: { dc: DeliveryChallan | null; onClose: () => vo
   const toast = useToast()
   const createChallan = useCreateChallan()
   const updateChallan = useUpdateChallan()
-  const saving = createChallan.isPending || updateChallan.isPending
+  const updateChallanQty = useUpdateChallanQuantities()
+  const saving = createChallan.isPending || updateChallan.isPending || updateChallanQty.isPending
   const { data: allCompanies = [] } = useCompanies()
   const companies = allCompanies.filter((c) => c.active || c.id === dc?.companyId)
   const { data: jobs = [] } = useJobs()
@@ -456,7 +459,10 @@ function DcForm({ dc, onClose }: { dc: DeliveryChallan | null; onClose: () => vo
   const materials = allMaterials.filter((m) => m.active)
   const { data: existingChallans = [] } = useChallans()
   const dcNoPreview = usePreviewNo('dc')
-  const isEdit = !!dc // existing challan already dispatched -> lines are locked
+  const isEdit = !!dc // existing challan already dispatched -> materials are locked
+  // Quantities can be corrected while the challan is still Open (un-invoiced);
+  // the stock deducted at dispatch is re-synced on save. Materials stay fixed.
+  const canEditQty = isEdit && dc.status === 'Open'
 
   const [companyId, setCompanyId] = useState(dc?.companyId ?? companies[0]?.id ?? '')
   const [date, setDate] = useState(dc?.date ?? todayISO())
@@ -464,14 +470,6 @@ function DcForm({ dc, onClose }: { dc: DeliveryChallan | null; onClose: () => vo
   const [reference, setReference] = useState(dc?.reference ?? '')
   const [vehicleNo, setVehicleNo] = useState(dc?.vehicleNo ?? '')
   const [notes, setNotes] = useState(dc?.notes ?? '')
-
-  // Filter jobs by selected company to prevent cross-customer job linkage
-  const companyJobs = useMemo(() => {
-    return jobs.filter(
-      (j) => (companyId ? j.companyId === companyId : true) || (isEdit && j.id === dc?.jobId),
-    )
-  }, [jobs, companyId, isEdit, dc?.jobId])
-
   // Challan number: auto (server sequential counter) by default, or a manual
   // override the user types in. Auto mode never consumes the counter early.
   const [autoNumber, setAutoNumber] = useState(true)
@@ -485,16 +483,6 @@ function DcForm({ dc, onClose }: { dc: DeliveryChallan | null; onClose: () => vo
     unit: 'Nos',
   })
   const [lines, setLines] = useState<DcLine[]>(dc?.lines ?? [emptyLine()])
-
-  function handleJobChange(newJobId: string) {
-    setJobId(newJobId)
-    if (!isEdit && newJobId && !reference) {
-      const selectedJob = jobs.find((j) => j.id === newJobId)
-      if (selectedJob?.customerPo) {
-        setReference(selectedJob.customerPo)
-      }
-    }
-  }
 
   function updateLine(id: string, patch: Partial<DcLine>) {
     setLines((ls) => ls.map((l) => (l.id === id ? { ...l, ...patch } : l)))
@@ -516,33 +504,49 @@ function DcForm({ dc, onClose }: { dc: DeliveryChallan | null; onClose: () => vo
 
   async function submit() {
     try {
-      if (!date) {
-        toast.error('Date is required')
-        return
-      }
-
       if (isEdit) {
-        // Lines are immutable after dispatch; metadata is editable.
+        if (canEditQty) {
+          // Open challan: quantities are editable and the dispatched stock is
+          // re-synced. Materials are unchanged (add/remove needs cancel+recreate).
+          const cleaned = lines.filter((l) => l.materialId && Number(l.quantity) > 0)
+          if (!cleaned.length) {
+            toast.error('Every item needs a quantity greater than zero')
+            return
+          }
+          await updateChallanQty.mutateAsync({
+            id: dc.id,
+            patch: {
+              reference: reference || undefined,
+              vehicleNo: vehicleNo || undefined,
+              notes: notes || undefined,
+              lines: cleaned.map((l) => ({
+                id: l.id,
+                materialId: l.materialId,
+                ownerType: l.ownerType,
+                description: l.description,
+                quantity: Number(l.quantity),
+                unit: l.unit,
+                jobId: l.jobId,
+              })),
+            },
+          })
+          toast.success('Challan updated — stock re-synced')
+          onClose()
+          return
+        }
+        // Cancelled/invoiced challan: only metadata is editable.
         await updateChallan.mutateAsync({
           id: dc.id,
           patch: {
-            date,
-            jobId: jobId || undefined,
-            reference: reference.trim() || undefined,
-            vehicleNo: vehicleNo.trim() || undefined,
-            notes: notes.trim() || undefined,
+            reference: reference || undefined,
+            vehicleNo: vehicleNo || undefined,
+            notes: notes || undefined,
           },
         })
         toast.success('Challan updated')
         onClose()
         return
       }
-
-      if (!companyId) {
-        toast.error('Please select a company')
-        return
-      }
-
       const cleaned = lines.filter((l) => l.materialId && Number(l.quantity) > 0)
       if (!cleaned.length) {
         toast.error('Add at least one item with a material and quantity')
@@ -568,9 +572,9 @@ function DcForm({ dc, onClose }: { dc: DeliveryChallan | null; onClose: () => vo
         date,
         companyId,
         jobId: jobId || undefined,
-        reference: reference.trim() || undefined,
-        vehicleNo: vehicleNo.trim() || undefined,
-        notes: notes.trim() || undefined,
+        reference: reference || undefined,
+        vehicleNo: vehicleNo || undefined,
+        notes: notes || undefined,
         status: 'Open',
         lines: cleaned.map((l) => ({
           id: l.id,
@@ -594,7 +598,7 @@ function DcForm({ dc, onClose }: { dc: DeliveryChallan | null; onClose: () => vo
       open
       onClose={onClose}
       size="lg"
-      title={dc ? `Edit Delivery Challan (${dc.dcNo})` : 'New Delivery Challan'}
+      title={dc ? `Edit ${dc.dcNo}` : 'New Delivery Challan'}
       footer={
         <>
           <button className="btn-secondary" onClick={onClose}>
@@ -610,10 +614,20 @@ function DcForm({ dc, onClose }: { dc: DeliveryChallan | null; onClose: () => vo
         <p className="mb-3 rounded-lg bg-brand-50 px-3 py-2 text-xs text-brand-700">
           Creating this challan dispatches the items and reduces stock.
         </p>
+      ) : canEditQty ? (
+        <p className="mb-3 rounded-lg bg-brand-50 px-3 py-2 text-xs text-brand-700">
+          You can adjust quantities — stock is re-synced on save. To add or remove a material,
+          cancel this challan (which restores stock) and create a new one.
+        </p>
       ) : (
         <p className="mb-3 rounded-lg bg-slate-100 px-3 py-2 text-xs text-slate-600">
-          Dispatched items and company are locked to preserve stock integrity. To modify items or
-          quantities, cancel this challan (which restores stock) and create a new one.
+          This challan is {dc.status.toLowerCase()}, so its items are locked. Only reference,
+          vehicle and notes can be changed.
+        </p>
+      )}
+      {dc && (
+        <p className="mb-3 text-right text-2xs text-slate-500">
+          Last updated {fmtDateTime(dc.updatedAt)}
         </p>
       )}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
@@ -678,12 +692,17 @@ function DcForm({ dc, onClose }: { dc: DeliveryChallan | null; onClose: () => vo
           </Select>
         </Field>
         <Field label="Date" required>
-          <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+          <Input
+            type="date"
+            value={date}
+            onChange={(e) => setDate(e.target.value)}
+            disabled={isEdit}
+          />
         </Field>
         <Field label="Job (optional)">
-          <Select value={jobId} onChange={(e) => handleJobChange(e.target.value)}>
+          <Select value={jobId} onChange={(e) => setJobId(e.target.value)} disabled={isEdit}>
             <option value="">—</option>
-            {companyJobs.map((j) => (
+            {jobs.map((j) => (
               <option key={j.id} value={j.id}>
                 {j.jobNo} — {j.partName}
               </option>
@@ -691,26 +710,16 @@ function DcForm({ dc, onClose }: { dc: DeliveryChallan | null; onClose: () => vo
           </Select>
         </Field>
         <Field label="Reference / PO">
-          <Input
-            value={reference}
-            onChange={(e) => setReference(e.target.value)}
-            placeholder="e.g. PO-1234, Job card ref"
-          />
+          <Input value={reference} onChange={(e) => setReference(e.target.value)} />
         </Field>
         <Field label="Vehicle No.">
-          <Input
-            value={vehicleNo}
-            onChange={(e) => setVehicleNo(e.target.value)}
-            placeholder="e.g. MH 12 AB 1234"
-          />
+          <Input value={vehicleNo} onChange={(e) => setVehicleNo(e.target.value)} />
         </Field>
       </div>
 
       <div className="mt-4">
         <div className="mb-1 flex items-center justify-between gap-2">
-          <label className="label mb-0">
-            {isEdit ? 'Dispatched Items' : 'Items (dispatched from stock)'}
-          </label>
+          <label className="label mb-0">Items (dispatched from stock)</label>
           {!isEdit && (
             <button className="btn-ghost btn-sm text-brand-600" onClick={addLine}>
               <Plus size={14} /> Add item
@@ -720,22 +729,20 @@ function DcForm({ dc, onClose }: { dc: DeliveryChallan | null; onClose: () => vo
         <div className="overflow-x-auto rounded-lg border border-slate-200">
           <table className="w-full min-w-[34rem]">
             <thead>
-              <tr className="bg-slate-50 border-b border-slate-200">
-                <th className="th">Material / Item</th>
+              <tr className="bg-slate-50">
+                <th className="th">Material</th>
                 <th className="th w-36">From stock</th>
                 <th className="th w-24 text-right">Qty</th>
                 <th className="th w-16">Unit</th>
-                {!isEdit && <th className="th w-10"></th>}
+                <th className="th w-10"></th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {lines.map((l) => (
-                <tr key={l.id} className={isEdit ? 'bg-slate-50/40' : ''}>
+                <tr key={l.id}>
                   <td className="px-2 py-1.5">
                     {isEdit ? (
-                      <span className="text-sm font-medium text-slate-800">
-                        {l.description || '—'}
-                      </span>
+                      <span className="text-sm text-slate-700">{l.description || '—'}</span>
                     ) : (
                       <select
                         className="input"
@@ -753,9 +760,9 @@ function DcForm({ dc, onClose }: { dc: DeliveryChallan | null; onClose: () => vo
                   </td>
                   <td className="px-2 py-1.5">
                     {isEdit ? (
-                      <Badge tone={l.ownerType === 'Shop' ? 'blue' : 'brand'}>
+                      <span className="text-2xs text-slate-500">
                         {l.ownerType === 'Shop' ? 'Own (shop)' : 'Customer'}
-                      </Badge>
+                      </span>
                     ) : (
                       <select
                         className="input"
@@ -770,59 +777,36 @@ function DcForm({ dc, onClose }: { dc: DeliveryChallan | null; onClose: () => vo
                     )}
                   </td>
                   <td className="px-2 py-1.5">
-                    {isEdit ? (
-                      <div className="text-right font-mono font-semibold text-sm text-slate-800">
-                        {qty(l.quantity)}
-                      </div>
-                    ) : (
-                      <input
-                        type="number"
-                        step="0.001"
-                        min={0}
-                        className="input text-right"
-                        value={l.quantity}
-                        onChange={(e) => updateLine(l.id, { quantity: Number(e.target.value) })}
-                      />
-                    )}
+                    <input
+                      type="number"
+                      step="0.001"
+                      min={0}
+                      className="input text-right"
+                      value={l.quantity}
+                      disabled={isEdit && !canEditQty}
+                      onChange={(e) => updateLine(l.id, { quantity: Number(e.target.value) })}
+                    />
                   </td>
-                  <td className="px-2 py-1.5 text-xs text-slate-600">{l.unit}</td>
-                  {!isEdit && (
-                    <td className="px-2 py-1.5 text-right">
+                  <td className="px-2 py-1.5 text-slate-600">{l.unit}</td>
+                  <td className="px-2 py-1.5 text-right">
+                    {!isEdit && (
                       <button
                         className="btn-ghost btn-sm text-red-500"
                         onClick={() => removeLine(l.id)}
                       >
                         <Trash2 size={15} />
                       </button>
-                    </td>
-                  )}
+                    )}
+                  </td>
                 </tr>
               ))}
             </tbody>
-            {isEdit && lines.length > 0 && (
-              <tfoot>
-                <tr className="border-t border-slate-200 bg-slate-50 font-medium text-xs text-slate-700">
-                  <td colSpan={2} className="px-2 py-2 text-right font-semibold">
-                    Total Quantity:
-                  </td>
-                  <td className="px-2 py-2 text-right font-bold font-mono text-brand-700">
-                    {qty(lines.reduce((sum, l) => sum + (Number(l.quantity) || 0), 0))}
-                  </td>
-                  <td colSpan={1} className="px-2 py-2"></td>
-                </tr>
-              </tfoot>
-            )}
           </table>
         </div>
       </div>
 
       <Field label="Notes" className="mt-3">
-        <Textarea
-          rows={2}
-          value={notes}
-          onChange={(e) => setNotes(e.target.value)}
-          placeholder="Add any dispatch notes or remarks..."
-        />
+        <Textarea rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} />
       </Field>
     </Modal>
   )

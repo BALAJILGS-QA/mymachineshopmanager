@@ -9,10 +9,11 @@ import {
 } from './hooks/useExpenses'
 import { useCompanies } from '@/features/companies/hooks/useCompanies'
 import { useJobs } from '@/features/jobs/hooks/useJobs'
+import { useMaterials, useCreateOwnPurchase } from '@/features/materials/hooks/useMaterials'
 import { useSettings } from '@/features/settings/hooks/useSettings'
 import { usePreviewNo } from '@/features/shared/usePreviewNo'
 import { toUserMessage } from '@/lib/api/errors'
-import { currency, fmtDate, inRange, todayISO } from '@/lib/format'
+import { currency, fmtDate, fmtDateTime, inRange, todayISO } from '@/lib/format'
 import { downloadXlsx } from '@/lib/xlsx'
 import { PageHeader, ResponsiveTable } from '@/components/common/PageHeader'
 import { Card, EmptyState, Field, Input, Select, Textarea } from '@/components/ui/primitives'
@@ -88,14 +89,15 @@ export function ExpensesPage() {
   return (
     <div>
       <PageHeader
-        title="Shop-Floor Expenses"
+        title="Purchase Management"
+        subtitle="Record material purchases (added to own stock) and other shop-floor expenses"
         actions={
           <>
             <button className="btn-secondary" onClick={exportExcel}>
               <Download size={16} /> Excel
             </button>
             <button className="btn-primary" onClick={() => setEditing(null)}>
-              <Plus size={16} /> Add Expense
+              <Plus size={16} /> Add Purchase / Expense
             </button>
           </>
         }
@@ -183,11 +185,19 @@ function ExpenseForm({ expense, onClose }: { expense: Expense | null; onClose: (
   const categories = useSettings().data?.expenseCategories ?? []
   const { data: companies = [] } = useCompanies()
   const { data: jobs = [] } = useJobs()
+  const { data: allMaterials = [] } = useMaterials()
+  // A purchase feeds OWN (shop) stock, so only own/shared materials qualify.
+  const materials = allMaterials.filter((m) => m.active && !m.companyId)
   const expenseNoPreview = usePreviewNo('expense')
   const createExpense = useCreateExpense()
   const updateExpense = useUpdateExpense()
-  const saving = createExpense.isPending || updateExpense.isPending
+  const createPurchase = useCreateOwnPurchase()
+  const saving = createExpense.isPending || updateExpense.isPending || createPurchase.isPending
 
+  // New entries pick a mode; editing an existing row stays an expense edit.
+  const [mode, setMode] = useState<'purchase' | 'expense'>(expense ? 'expense' : 'purchase')
+
+  // Shared fields (both modes).
   const [form, setForm] = useState({
     date: expense?.date ?? todayISO(),
     category: expense?.category ?? categories[0] ?? '',
@@ -199,13 +209,42 @@ function ExpenseForm({ expense, onClose }: { expense: Expense | null; onClose: (
     jobId: expense?.jobId ?? '',
     notes: expense?.notes ?? '',
   })
+  // Purchase-only fields.
+  const [pur, setPur] = useState({ materialId: '', quantity: '', totalCost: '', totalGst: '' })
+  const purMaterial = materials.find((m) => m.id === pur.materialId)
+  const purTotal = (Number(pur.totalCost) || 0) + (Number(pur.totalGst) || 0)
 
   function set<K extends keyof typeof form>(k: K, v: (typeof form)[K]) {
     setForm((f) => ({ ...f, [k]: v }))
   }
+  function setP<K extends keyof typeof pur>(k: K, v: (typeof pur)[K]) {
+    setPur((p) => ({ ...p, [k]: v }))
+  }
 
   async function submit() {
     try {
+      // --- Material purchase: adds to own stock + records the expense (atomic). ---
+      if (!expense && mode === 'purchase') {
+        if (!pur.materialId) return toast.error('Select a material')
+        const q = Number(pur.quantity)
+        if (!(q > 0)) return toast.error('Quantity must be greater than zero')
+        await createPurchase.mutateAsync({
+          supplier: form.vendor || undefined,
+          materialId: pur.materialId,
+          purchaseDate: form.date,
+          quantity: q,
+          unit: purMaterial?.unit ?? 'Nos',
+          totalCost: Number(pur.totalCost) || 0,
+          totalGst: Number(pur.totalGst) || 0,
+          method: form.method,
+          notes: form.notes || undefined,
+        })
+        toast.success('Material purchased — added to own stock')
+        onClose()
+        return
+      }
+
+      // --- Other expense (or editing an existing expense). ---
       const payload = {
         date: form.date,
         category: form.category,
@@ -230,87 +269,192 @@ function ExpenseForm({ expense, onClose }: { expense: Expense | null; onClose: (
     }
   }
 
+  const isPurchase = !expense && mode === 'purchase'
+
   return (
     <Modal
       open
       onClose={onClose}
-      title={expense ? `Edit ${expense.expenseNo}` : 'Add Expense'}
+      title={expense ? `Edit ${expense.expenseNo}` : 'Add Purchase / Expense'}
       footer={
         <>
           <button className="btn-secondary" onClick={onClose}>
             Cancel
           </button>
           <button className="btn-primary" onClick={submit} disabled={saving}>
-            {saving ? 'Saving…' : expense ? 'Save changes' : 'Record expense'}
+            {saving
+              ? 'Saving…'
+              : expense
+                ? 'Save changes'
+                : isPurchase
+                  ? 'Record purchase'
+                  : 'Record expense'}
           </button>
         </>
       }
     >
-      {!expense && (
-        <p className="mb-3 rounded-lg bg-brand-50 px-3 py-2 text-xs text-brand-700">
-          Expense number will be <b>{expenseNoPreview}</b>
+      {expense && (
+        <p className="mb-3 text-right text-2xs text-slate-500">
+          Last updated {fmtDateTime(expense.updatedAt)}
         </p>
       )}
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <Field label="Date" required>
-          <Input type="date" value={form.date} onChange={(e) => set('date', e.target.value)} />
-        </Field>
-        <Field label="Category" required>
-          <Select value={form.category} onChange={(e) => set('category', e.target.value)}>
-            {categories.map((c) => (
-              <option key={c}>{c}</option>
+
+      {/* Mode toggle (new entries only). */}
+      {!expense && (
+        <div className="mb-3">
+          <div className="inline-flex rounded-lg bg-slate-200/60 p-1">
+            {(
+              [
+                { k: 'purchase', label: 'Material Purchase' },
+                { k: 'expense', label: 'Other Expense' },
+              ] as const
+            ).map((t) => (
+              <button
+                key={t.k}
+                type="button"
+                className={
+                  'rounded-md px-3 py-1 text-sm font-medium transition ' +
+                  (mode === t.k ? 'bg-white text-brand-700 shadow' : 'text-slate-600')
+                }
+                onClick={() => setMode(t.k)}
+              >
+                {t.label}
+              </button>
             ))}
-          </Select>
-        </Field>
-        <Field label="Amount" required>
-          <Input
-            type="number"
-            step="0.01"
-            min={0}
-            value={form.amount}
-            onChange={(e) => set('amount', e.target.value as never)}
-          />
-        </Field>
-        <Field label="Payment Method" required>
-          <Select
-            value={form.method}
-            onChange={(e) => set('method', e.target.value as PaymentMethod)}
-          >
-            {METHODS.map((m) => (
-              <option key={m}>{m}</option>
-            ))}
-          </Select>
-        </Field>
-        <Field label="Vendor / Payee">
-          <Input value={form.vendor} onChange={(e) => set('vendor', e.target.value)} />
-        </Field>
-        <Field label="Reference">
-          <Input value={form.reference} onChange={(e) => set('reference', e.target.value)} />
-        </Field>
-        <Field label="Company (optional)">
-          <Select value={form.companyId} onChange={(e) => set('companyId', e.target.value)}>
-            <option value="">—</option>
-            {companies.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-              </option>
-            ))}
-          </Select>
-        </Field>
-        <Field label="Job (optional)">
-          <Select value={form.jobId} onChange={(e) => set('jobId', e.target.value)}>
-            <option value="">—</option>
-            {jobs.map((j) => (
-              <option key={j.id} value={j.id}>
-                {j.jobNo} — {j.partName}
-              </option>
-            ))}
-          </Select>
-        </Field>
-        <Field label="Notes" className="sm:col-span-2">
-          <Textarea rows={2} value={form.notes} onChange={(e) => set('notes', e.target.value)} />
-        </Field>
-      </div>
+          </div>
+          <p className="mt-2 rounded-lg bg-brand-50 px-3 py-2 text-xs text-brand-700">
+            {isPurchase
+              ? 'Records a raw-material purchase — the quantity is added to Own stock (visible in Materials & Stock → Own) and logged as an expense.'
+              : `Expense number will be ${expenseNoPreview}`}
+          </p>
+        </div>
+      )}
+
+      {isPurchase ? (
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <Field label="Purchase Date" required>
+            <Input type="date" value={form.date} onChange={(e) => set('date', e.target.value)} />
+          </Field>
+          <Field label="Supplier / Vendor">
+            <Input value={form.vendor} onChange={(e) => set('vendor', e.target.value)} />
+          </Field>
+          <Field label="Material" required className="sm:col-span-2">
+            <Select value={pur.materialId} onChange={(e) => setP('materialId', e.target.value)}>
+              <option value="">Select material…</option>
+              {materials.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.name} ({m.unit})
+                </option>
+              ))}
+            </Select>
+          </Field>
+          <Field label={`Quantity ${purMaterial ? `(${purMaterial.unit})` : ''}`} required>
+            <Input
+              type="number"
+              step="0.001"
+              min={0}
+              value={pur.quantity}
+              onChange={(e) => setP('quantity', e.target.value)}
+            />
+          </Field>
+          <Field label="Payment Method" required>
+            <Select
+              value={form.method}
+              onChange={(e) => set('method', e.target.value as PaymentMethod)}
+            >
+              {METHODS.map((m) => (
+                <option key={m}>{m}</option>
+              ))}
+            </Select>
+          </Field>
+          <Field label="Material Cost (₹)" required>
+            <Input
+              type="number"
+              step="0.01"
+              min={0}
+              value={pur.totalCost}
+              onChange={(e) => setP('totalCost', e.target.value)}
+            />
+          </Field>
+          <Field label="GST (₹)">
+            <Input
+              type="number"
+              step="0.01"
+              min={0}
+              value={pur.totalGst}
+              onChange={(e) => setP('totalGst', e.target.value)}
+            />
+          </Field>
+          <div className="sm:col-span-2 flex items-center justify-between rounded-lg bg-slate-50 px-3 py-2 text-sm">
+            <span className="text-slate-600">Total (cost + GST)</span>
+            <span className="font-semibold text-slate-900">{currency(purTotal)}</span>
+          </div>
+          <Field label="Notes" className="sm:col-span-2">
+            <Textarea rows={2} value={form.notes} onChange={(e) => set('notes', e.target.value)} />
+          </Field>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <Field label="Date" required>
+            <Input type="date" value={form.date} onChange={(e) => set('date', e.target.value)} />
+          </Field>
+          <Field label="Category" required>
+            <Select value={form.category} onChange={(e) => set('category', e.target.value)}>
+              {categories.map((c) => (
+                <option key={c}>{c}</option>
+              ))}
+            </Select>
+          </Field>
+          <Field label="Amount" required>
+            <Input
+              type="number"
+              step="0.01"
+              min={0}
+              value={form.amount}
+              onChange={(e) => set('amount', e.target.value as never)}
+            />
+          </Field>
+          <Field label="Payment Method" required>
+            <Select
+              value={form.method}
+              onChange={(e) => set('method', e.target.value as PaymentMethod)}
+            >
+              {METHODS.map((m) => (
+                <option key={m}>{m}</option>
+              ))}
+            </Select>
+          </Field>
+          <Field label="Vendor / Payee">
+            <Input value={form.vendor} onChange={(e) => set('vendor', e.target.value)} />
+          </Field>
+          <Field label="Reference">
+            <Input value={form.reference} onChange={(e) => set('reference', e.target.value)} />
+          </Field>
+          <Field label="Company (optional)">
+            <Select value={form.companyId} onChange={(e) => set('companyId', e.target.value)}>
+              <option value="">—</option>
+              {companies.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </Select>
+          </Field>
+          <Field label="Job (optional)">
+            <Select value={form.jobId} onChange={(e) => set('jobId', e.target.value)}>
+              <option value="">—</option>
+              {jobs.map((j) => (
+                <option key={j.id} value={j.id}>
+                  {j.jobNo} — {j.partName}
+                </option>
+              ))}
+            </Select>
+          </Field>
+          <Field label="Notes" className="sm:col-span-2">
+            <Textarea rows={2} value={form.notes} onChange={(e) => set('notes', e.target.value)} />
+          </Field>
+        </div>
+      )}
     </Modal>
   )
 }

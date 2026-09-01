@@ -194,7 +194,9 @@ create table if not exists invoice_lines (
   description text not null,
   quantity numeric(14,3) not null check (quantity > 0),
   rate numeric(14,2) not null check (rate >= 0),
-  line_no int
+  line_no int,
+  material_id text references materials(id), -- set => this line deducts stock (see 0011)
+  owner_type text                             -- 'Company' = customer stock, 'Shop' = own
 );
 create index if not exists idx_lines_invoice on invoice_lines (invoice_id);
 

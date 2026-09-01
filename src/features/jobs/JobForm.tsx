@@ -6,7 +6,7 @@ import { useCompanies } from '@/features/companies/hooks/useCompanies'
 import { useMaterials, useMaterialBalance } from '@/features/materials/hooks/useMaterials'
 import { usePreviewNo } from '@/features/shared/usePreviewNo'
 import { toUserMessage } from '@/lib/api/errors'
-import { todayISO, qty } from '@/lib/format'
+import { todayISO, qty, fmtDateTime } from '@/lib/format'
 import { Field, Input, Select, Textarea } from '@/components/ui/primitives'
 import { Modal } from '@/components/ui/Modal'
 import { useToast } from '@/components/ui/Toast'
@@ -102,6 +102,11 @@ export function JobForm({ job, onClose }: { job: JobOrder | null; onClose: () =>
         </>
       }
     >
+      {job && (
+        <p className="mb-3 text-right text-2xs text-slate-500">
+          Last updated {fmtDateTime(job.updatedAt)}
+        </p>
+      )}
       {!job && (
         <p className="mb-3 rounded-lg bg-brand-50 px-3 py-2 text-xs text-brand-700">
           Job number will be <b>{jobNoPreview}</b>

@@ -6,11 +6,12 @@ import { useCreateInvoice, useUpdateInvoice } from './hooks/useInvoices'
 import { useChallans, useSetChallanStatus } from '@/features/deliveries/hooks/useDeliveries'
 import { useCompanies } from '@/features/companies/hooks/useCompanies'
 import { useJobs } from '@/features/jobs/hooks/useJobs'
+import { useMaterials } from '@/features/materials/hooks/useMaterials'
 import { useProducts, useSettings } from '@/features/settings/hooks/useSettings'
 import { usePreviewNo } from '@/features/shared/usePreviewNo'
 import { toUserMessage } from '@/lib/api/errors'
 import { invoiceSubtotal, roundMoney } from '@/data/computations'
-import { currency, fmtDate, fmtDateTime, todayISO } from '@/lib/format'
+import { currency, fmtDate, fmtDateTime, qty, todayISO } from '@/lib/format'
 import { DEFAULT_SETTINGS } from '@/data/seed'
 import { uid } from '@/lib/id'
 import { Field, Input, Select, Textarea } from '@/components/ui/primitives'
@@ -35,6 +36,8 @@ export function InvoiceForm({
   const { data: allCompanies = [] } = useCompanies()
   const companies = allCompanies.filter((c) => c.active || c.id === invoice?.companyId)
   const { data: jobs = [] } = useJobs()
+  const { data: allMaterials = [] } = useMaterials()
+  const materials = allMaterials.filter((m) => m.active)
   const { data: allProducts = [] } = useProducts()
   const products = allProducts.filter((p) => p.active)
   const settings = useSettings().data ?? DEFAULT_SETTINGS
@@ -73,6 +76,9 @@ export function InvoiceForm({
   const [dcMatFilter, setDcMatFilter] = useState('')
   // Tracks which invoice lines came from which challan, so deselecting removes them.
   const dcLineMap = useRef<Map<string, string[]>>(new Map())
+  // Lines that arrived pre-filled from a challan (DeliveriesPage → invoice). The
+  // challan already deducted their stock, so they must not be re-linked here.
+  const prefillLineIds = useRef<Set<string>>(new Set((prefill?.lines ?? []).map((l) => l.id)))
   const companyChanged = useRef(false)
   // Only offer the picker for brand-new invoices not already prefilled from a DC.
   const showDcPicker = !invoice && !prefill?.dcReference
@@ -163,6 +169,25 @@ export function InvoiceForm({
   function updateLine(id: string, patch: Partial<InvoiceLine>) {
     setLines((ls) => ls.map((l) => (l.id === id ? { ...l, ...patch } : l)))
   }
+  // Link a line to a stock material (new invoices only). Picking a material makes
+  // this line deduct stock on save; it also fills the unit, a default owner and
+  // the description (when still blank). Clearing it makes the line description-only.
+  function pickMaterial(id: string, materialId: string) {
+    const m = materials.find((x) => x.id === materialId)
+    setLines((ls) =>
+      ls.map((l) =>
+        l.id === id
+          ? {
+              ...l,
+              materialId: materialId || undefined,
+              unit: m?.unit,
+              ownerType: materialId ? (l.ownerType ?? 'Company') : undefined,
+              description: !l.description.trim() && m ? m.name : l.description,
+            }
+          : l,
+      ),
+    )
+  }
   function addLine() {
     setLines((ls) => [...ls, { id: uid('l_'), description: '', quantity: 1, rate: 0 }])
   }
@@ -210,7 +235,7 @@ export function InvoiceForm({
         reference: reference || undefined,
         dcReference: dcReference || undefined,
         lines: lines
-          .filter((l) => l.description.trim() || l.rate > 0)
+          .filter((l) => l.description.trim() || l.rate > 0 || l.materialId)
           .map((l) => ({ ...l, quantity: Number(l.quantity), rate: Number(l.rate) })),
         discount: discountNum,
         cgstPercent: cgstNum,
@@ -355,19 +380,39 @@ export function InvoiceForm({
                   filteredDcs.map((d) => (
                     <label
                       key={d.id}
-                      className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-sm hover:bg-slate-50"
+                      className="flex cursor-pointer items-start gap-2 rounded px-2 py-1.5 text-sm hover:bg-slate-50"
                     >
                       <input
                         type="checkbox"
-                        className="h-4 w-4 accent-brand-600"
+                        className="mt-0.5 h-4 w-4 accent-brand-600"
                         checked={selectedDcIds.has(d.id)}
                         onChange={() => toggleDc(d)}
                       />
-                      <span className="font-mono text-xs font-semibold text-slate-700">
-                        {d.dcNo}
-                      </span>
-                      <span className="text-2xs text-slate-500">
-                        {fmtDate(d.date)} · {d.lines.length} item(s)
+                      <span className="min-w-0 flex-1">
+                        <span className="flex flex-wrap items-baseline gap-x-2">
+                          <span className="font-mono text-xs font-semibold text-slate-700">
+                            {d.dcNo}
+                          </span>
+                          <span className="text-2xs text-slate-500">{fmtDate(d.date)}</span>
+                        </span>
+                        {/* Show each material + its exact dispatched quantity so the
+                            right challan can be picked at a glance. */}
+                        <span className="mt-0.5 flex flex-wrap gap-1">
+                          {d.lines.map((l) => (
+                            <span
+                              key={l.id}
+                              className="inline-flex items-baseline gap-1 rounded bg-slate-100 px-1.5 py-0.5 text-2xs text-slate-600"
+                            >
+                              <span className="font-medium text-slate-700">
+                                {l.description || '—'}
+                              </span>
+                              <span className="font-semibold text-brand-700">
+                                {qty(l.quantity)}
+                              </span>
+                              <span className="text-slate-500">{l.unit}</span>
+                            </span>
+                          ))}
+                        </span>
                       </span>
                     </label>
                   ))
@@ -437,6 +482,13 @@ export function InvoiceForm({
       )}
 
       <div className="mt-4">
+        {!invoice && (
+          <p className="mb-1 text-2xs text-slate-500">
+            Pick a <b>Stock item</b> on a line to bill directly against stock — saving reduces that
+            material's balance. Leave it blank for service/labour lines, or when the line came from
+            a delivery challan (already deducted).
+          </p>
+        )}
         <div className="mb-1 flex items-center justify-between gap-2">
           <label className="label mb-0">Line Items</label>
           <div className="flex items-center gap-2">
@@ -468,6 +520,7 @@ export function InvoiceForm({
             <thead>
               <tr className="bg-slate-50">
                 <th className="th">Description</th>
+                <th className="th w-56">Stock item (deducts)</th>
                 <th className="th w-24 text-right">Qty</th>
                 <th className="th w-28 text-right">Rate</th>
                 <th className="th w-28 text-right">Amount</th>
@@ -475,45 +528,107 @@ export function InvoiceForm({
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {lines.map((l) => (
-                <tr key={l.id}>
-                  <td className="px-2 py-1.5">
-                    <input
-                      className="input"
-                      placeholder="Item / service"
-                      value={l.description}
-                      onChange={(e) => updateLine(l.id, { description: e.target.value })}
-                    />
-                  </td>
-                  <td className="px-2 py-1.5">
-                    <input
-                      type="number"
-                      step="0.001"
-                      className="input text-right"
-                      value={l.quantity}
-                      onChange={(e) => updateLine(l.id, { quantity: Number(e.target.value) })}
-                    />
-                  </td>
-                  <td className="px-2 py-1.5">
-                    <input
-                      type="number"
-                      step="0.01"
-                      className="input text-right"
-                      value={l.rate}
-                      onChange={(e) => updateLine(l.id, { rate: Number(e.target.value) })}
-                    />
-                  </td>
-                  <td className="td text-right font-medium">{currency(l.quantity * l.rate)}</td>
-                  <td className="px-2 py-1.5 text-right">
-                    <button
-                      className="btn-ghost btn-sm text-red-500"
-                      onClick={() => removeLine(l.id)}
-                    >
-                      <Trash2 size={15} />
-                    </button>
-                  </td>
-                </tr>
-              ))}
+              {lines.map((l) => {
+                // Stock-affecting fields (material, owner, qty) are locked once
+                // the invoice exists — the deduction was posted at create time.
+                const stockLocked = !!invoice && !!l.materialId
+                // A line sourced from a challan already deducted stock there, so
+                // it can't be linked to a material again (would double count).
+                const fromChallan =
+                  prefillLineIds.current.has(l.id) ||
+                  [...dcLineMap.current.values()].some((ids) => ids.includes(l.id))
+                return (
+                  <tr key={l.id}>
+                    <td className="px-2 py-1.5">
+                      <input
+                        className="input"
+                        placeholder="Item / service"
+                        value={l.description}
+                        onChange={(e) => updateLine(l.id, { description: e.target.value })}
+                      />
+                    </td>
+                    <td className="px-2 py-1.5">
+                      {invoice ? (
+                        // Edit mode: show the linked material read-only (its stock
+                        // was already deducted); no new links on an existing invoice.
+                        <span className="text-2xs text-slate-500">
+                          {l.materialId
+                            ? `${materials.find((m) => m.id === l.materialId)?.name ?? 'Material'} · ${
+                                l.ownerType === 'Shop' ? 'Own' : 'Customer'
+                              }`
+                            : '—'}
+                        </span>
+                      ) : fromChallan ? (
+                        <span className="text-2xs text-slate-400">
+                          From challan (already deducted)
+                        </span>
+                      ) : (
+                        <div className="flex flex-col gap-1">
+                          <select
+                            className="input h-8 py-1 text-xs"
+                            aria-label="Stock material to deduct"
+                            value={l.materialId ?? ''}
+                            onChange={(e) => pickMaterial(l.id, e.target.value)}
+                          >
+                            <option value="">No stock deduction</option>
+                            {materials.map((m) => (
+                              <option key={m.id} value={m.id}>
+                                {m.name} ({m.unit})
+                              </option>
+                            ))}
+                          </select>
+                          {l.materialId && (
+                            <select
+                              className="input h-8 py-1 text-2xs"
+                              aria-label="Stock owner"
+                              value={l.ownerType ?? 'Company'}
+                              onChange={(e) =>
+                                updateLine(l.id, {
+                                  ownerType: e.target.value as InvoiceLine['ownerType'],
+                                })
+                              }
+                            >
+                              <option value="Company">This customer's stock</option>
+                              <option value="Shop">Own (shop) stock</option>
+                            </select>
+                          )}
+                        </div>
+                      )}
+                    </td>
+                    <td className="px-2 py-1.5">
+                      <input
+                        type="number"
+                        step="0.001"
+                        className="input text-right"
+                        value={l.quantity}
+                        disabled={stockLocked}
+                        title={stockLocked ? 'Quantity is locked — it already reduced stock' : ''}
+                        onChange={(e) => updateLine(l.id, { quantity: Number(e.target.value) })}
+                      />
+                    </td>
+                    <td className="px-2 py-1.5">
+                      <input
+                        type="number"
+                        step="0.01"
+                        className="input text-right"
+                        value={l.rate}
+                        onChange={(e) => updateLine(l.id, { rate: Number(e.target.value) })}
+                      />
+                    </td>
+                    <td className="td text-right font-medium">{currency(l.quantity * l.rate)}</td>
+                    <td className="px-2 py-1.5 text-right">
+                      {!stockLocked && (
+                        <button
+                          className="btn-ghost btn-sm text-red-500"
+                          onClick={() => removeLine(l.id)}
+                        >
+                          <Trash2 size={15} />
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                )
+              })}
             </tbody>
           </table>
         </div>

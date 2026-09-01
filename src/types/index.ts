@@ -143,6 +143,13 @@ export interface InvoiceLine {
   quantity: number
   rate: number
   // amount is derived: quantity * rate
+  // Optional stock link: when materialId is set, creating the invoice deducts
+  // this quantity from stock (reference INVOICE). ownerType picks the scope
+  // ('Company' = customer's stock, 'Shop' = own). Lines imported from a delivery
+  // challan leave these unset — the challan already deducted, so no double count.
+  materialId?: ID
+  ownerType?: MaterialOwnerType
+  unit?: string
 }
 
 export type DcStatus = 'Open' | 'Invoiced' | 'Cancelled'
