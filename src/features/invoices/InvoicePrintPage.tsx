@@ -1,5 +1,5 @@
-import { useParams, useNavigate } from '@tanstack/react-router'
 import { ArrowLeft, Download, Printer } from 'lucide-react'
+import { useAppNavigate } from '@/components/nav/app-link'
 import { computeInvoice } from '@/data/computations'
 import { currency, fmtDate, qty } from '@/lib/format'
 import { InvoiceStatusBadge } from '@/components/common/status'
@@ -10,9 +10,11 @@ import { useCompanies } from '@/features/companies/hooks/useCompanies'
 import { useSettings } from '@/features/settings/hooks/useSettings'
 import { DEFAULT_SETTINGS } from '@/data/seed'
 
-export function InvoicePrintPage() {
-  const { id } = useParams({ strict: false })
-  const navigate = useNavigate()
+// `id` comes from the route param, injected by each framework's route wrapper
+// (TanStack `Route.useParams()` / Next `useParams()`), keeping this page
+// router-agnostic.
+export function InvoicePrintPage({ id }: { id?: string }) {
+  const navigate = useAppNavigate()
   const { data: invoices = [] } = useInvoices()
   const invoice = invoices.find((i) => i.id === id)
   const { data: companies = [] } = useCompanies()
@@ -24,10 +26,7 @@ export function InvoicePrintPage() {
     return (
       <div className="py-16 text-center text-slate-500">
         Invoice not found.{' '}
-        <button
-          className="text-brand-600 underline"
-          onClick={() => navigate({ to: '/app/invoices' })}
-        >
+        <button className="text-brand-600 underline" onClick={() => navigate('/app/invoices')}>
           Back to invoices
         </button>
       </div>
@@ -39,7 +38,7 @@ export function InvoicePrintPage() {
   return (
     <div>
       <div className="no-print mb-4 flex items-center justify-between">
-        <button className="btn-secondary" onClick={() => navigate({ to: '/app/invoices' })}>
+        <button className="btn-secondary" onClick={() => navigate('/app/invoices')}>
           <ArrowLeft size={16} /> Back
         </button>
         <div className="flex gap-2">

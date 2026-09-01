@@ -30,3 +30,18 @@ export function AppLink(props: AppLinkProps) {
   if (!Impl) throw new Error('AppLink must be used within an AppLinkProvider')
   return <Impl {...props} />
 }
+
+// Imperative navigation counterpart to AppLink — same injection pattern. Pages
+// call `useAppNavigate()('/app/x')` (optionally `{ replace: true }`); each app
+// provides its adapter (TanStack `useNavigate` / Next `useRouter`).
+export type AppNavigate = (to: string, opts?: { replace?: boolean }) => void
+
+const AppNavContext = createContext<AppNavigate | null>(null)
+
+export const AppNavProvider = AppNavContext.Provider
+
+export function useAppNavigate(): AppNavigate {
+  const nav = useContext(AppNavContext)
+  if (!nav) throw new Error('useAppNavigate must be used within an AppNavProvider')
+  return nav
+}

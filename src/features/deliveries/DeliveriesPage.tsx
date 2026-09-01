@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Link, useNavigate } from '@tanstack/react-router'
+import { AppLink, useAppNavigate } from '@/components/nav/app-link'
 import { clsx } from 'clsx'
 import {
   Ban,
@@ -58,7 +58,7 @@ export function DeliveriesPage() {
   const companyName = useCompanyName()
   const toast = useToast()
   const confirm = useConfirm()
-  const navigate = useNavigate()
+  const navigate = useAppNavigate()
 
   // A challan marked "Invoiced" whose invoice is gone or cancelled is stranded:
   // its dispatch was never actually billed, so let the user reopen it.
@@ -312,14 +312,13 @@ export function DeliveriesPage() {
                       {billed ? (
                         <div className="flex flex-col gap-0.5">
                           <Badge tone="green">Invoiced</Badge>
-                          <Link
-                            to="/app/invoices/$id/print"
-                            params={{ id: inv!.id }}
+                          <AppLink
+                            to={`/app/invoices/${inv!.id}/print`}
                             className="font-mono text-2xs font-semibold text-brand-700 hover:underline"
                             title="View invoice for this challan"
                           >
                             {inv!.invoiceNo}
-                          </Link>
+                          </AppLink>
                         </div>
                       ) : d.status === 'Cancelled' ? (
                         <Badge tone="red">Cancelled</Badge>
@@ -332,9 +331,7 @@ export function DeliveriesPage() {
                         <button
                           className="btn-ghost btn-sm"
                           title="View / Print"
-                          onClick={() =>
-                            navigate({ to: '/app/deliveries/$id/print', params: { id: d.id } })
-                          }
+                          onClick={() => navigate(`/app/deliveries/${d.id}/print`)}
                         >
                           <Printer size={15} />
                         </button>

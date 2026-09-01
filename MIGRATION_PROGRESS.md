@@ -142,6 +142,27 @@ Verification: `next build` ✓ (12 routes incl. `/app`); **Next `/app` guard ver
 
 **Pending visual check (not a blocker):** the authenticated shell + dashboard _render_ (both Vite dashboard after the AppLink change, and the Next portal) needs a login to see. I could not perform it — the session had expired and typing passwords via browser automation is disallowed by policy. Build + typecheck + guard are green and the components are faithful ports; recommend a quick manual login on `:5173` (Vite) and `:3000` (Next) to confirm the dashboard renders.
 
-### Increment 3.4 — remaining portal routes + hub redirects — NEXT
+### Increment 3.4 — ALL remaining portal routes + hub redirects (DONE) ✅
 
-Migrate the 16 remaining `/app/*` pages module-by-module (each uses TanStack `Link` → swap to `AppLink`/`next/link`; jsPDF print routes stay client) + the 4 hub redirects. See `ROUTE_MIGRATION_MAP.md`.
+**Phase 3 (routing) is complete — Next.js now serves every URL of the application.**
+
+Migrated in this increment (all verified with an authenticated Playwright session):
+
+- 14 simple portal pages: jobs, production, materials, sales, expenses, deliveries, invoices, payments, vendors, subcontracting, companies, approvals, reports, settings — each a thin `'use client'` wrapper reusing the shared feature page.
+- 2 dynamic print routes: `deliveries/[id]/print`, `invoices/[id]/print` (client; jsPDF; `id` injected via next/navigation `useParams`).
+- 4 hub redirects: production-planning→jobs, accounts→expenses, supply-chain→vendors, configuration→companies (server `redirect()`; embedded as NEXT_REDIRECT under the client layout — client-side execution, parity with the old `ssr:false` behaviour).
+- 2 catch-alls preserving old notFound behaviour: `app/[...rest]`→`/` (307), `app/app/[...rest]`→`/app`.
+
+Nav abstraction completed (no duplicated business pages):
+
+- `useAppNavigate()` added to `src/components/nav/app-link.tsx` (+ `TanStackNavBridge` / `NextNavBridge` adapters wired in both roots).
+- De-coupled the last 5 TanStack-importing feature files: `DeliveriesPage` (Link+navigate), `InvoicesPage` (navigate), `ChallanPrintPage` + `InvoicePrintPage` (useParams→`id` prop + navigate; Vite route wrappers now pass `Route.useParams()`), `ApprovalsPage` (`<Navigate>`→effect redirect).
+- `ConfirmProvider` added to Next providers (SSR-safe; Modal touches DOM only in effects).
+- `src/features/**` now has ZERO `@tanstack/react-router` imports (site/* pages excepted — Vite-only by design).
+
+Verification (all green): Vite `tsc` ✓ · Vitest 26/26 ✓ · Vite SPA build ✓ · `next build` ✓ (26 routes) · lint 0 errors · **authenticated Playwright sweep on Next**: dashboard, jobs, materials, deliveries (15-row table, real data), challan print (full document via row click → param injection), reports, approvals (super-admin), settings — **0 console errors on every route** (prefetch 404s gone) · hub redirects + catch-alls verified · **Vite parity re-verified**: deliveries → print click-through works identically.
+
+### Next phases
+
+- **Phase 4 (per master plan): deployment cutover decision + E2E repoint** — point `playwright.config.ts` at the Next server, run the full suite, then flip Vercel to the Next build.
+- **Phase 5+: shadcn/Radix design system + rebrand, RHF+Zod forms, cleanup (remove Vite/TanStack per CLEANUP_PLAN).**

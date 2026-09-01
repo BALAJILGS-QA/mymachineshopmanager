@@ -1,5 +1,5 @@
-import { useMemo, useState } from 'react'
-import { Navigate } from '@tanstack/react-router'
+import { useEffect, useMemo, useState } from 'react'
+import { useAppNavigate } from '@/components/nav/app-link'
 import { Check, ShieldCheck, UserCheck, X } from 'lucide-react'
 import type { AppUser, UserStatus } from '@/types'
 import { useUsers, useApproveUser, useRejectUser } from './hooks/useUsers'
@@ -22,6 +22,7 @@ const FILTERS: { key: UserStatus | 'all'; label: string }[] = [
 
 export function ApprovalsPage() {
   const { isSuperAdmin, session } = useAuth()
+  const navigate = useAppNavigate()
   const { data: users = [] } = useUsers()
   const approveUser = useApproveUser()
   const rejectUser = useRejectUser()
@@ -43,7 +44,11 @@ export function ApprovalsPage() {
 
   // Only the super admin may review registrations. Guard AFTER all hooks so the
   // hook call order is stable across renders (react-hooks/rules-of-hooks).
-  if (!isSuperAdmin) return <Navigate to="/app" replace />
+  // Router-agnostic redirect: an effect replaces the old <Navigate> element.
+  useEffect(() => {
+    if (!isSuperAdmin) navigate('/app', { replace: true })
+  }, [isSuperAdmin, navigate])
+  if (!isSuperAdmin) return null
 
   async function onApprove(u: AppUser) {
     try {

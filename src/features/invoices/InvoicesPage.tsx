@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { useNavigate } from '@tanstack/react-router'
+import { useAppNavigate } from '@/components/nav/app-link'
 import {
   Ban,
   Clock,
@@ -40,7 +40,7 @@ export function InvoicesPage() {
   const { data: payments = [] } = usePayments()
   const setInvoiceStatus = useSetInvoiceStatus()
   const companyName = useCompanyName()
-  const navigate = useNavigate()
+  const navigate = useAppNavigate()
   const toast = useToast()
   const confirm = useConfirm()
 
@@ -362,9 +362,7 @@ export function InvoicesPage() {
                       <button
                         className="btn-ghost btn-sm"
                         title="Print"
-                        onClick={() =>
-                          navigate({ to: '/app/invoices/$id/print', params: { id: inv.id } })
-                        }
+                        onClick={() => navigate(`/app/invoices/${inv.id}/print`)}
                       >
                         <Printer size={15} />
                       </button>

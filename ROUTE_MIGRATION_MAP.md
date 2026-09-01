@@ -1,6 +1,6 @@
 # ROUTE_MIGRATION_MAP.md — TanStack Router → Next.js App Router
 
-> Status: **PLAN ONLY — no routes migrated yet.** All rows are `Pending` / `Not verified`.
+> Status: **ALL ROUTES MIGRATED (Phase 3 complete).** Next.js serves every URL; the Vite/TanStack routes remain in place until the cleanup phase per the parallel-run rule.
 > Rule: never delete a TanStack route until the Next.js equivalent is built **and** verified (typecheck + relevant Playwright spec green). Preserve every URL, dynamic segment, redirect, and auth boundary.
 
 Legend — **Type:** SSR (public, server-rendered) · CSR (client-only, `/app` `ssr:false`) · Redirect · Layout. **Auth:** Public · Protected · Super-admin.
@@ -11,7 +11,7 @@ Legend — **Type:** SSR (public, server-rendered) · CSR (client-only, `/app` `
 
 | Existing route (file)       | URL                                    | Next.js target                                                         | Type   | Auth   | Status       | Verified |
 | --------------------------- | -------------------------------------- | ---------------------------------------------------------------------- | ------ | ------ | ------------ | -------- |
-| `src/routes/__root.tsx`     | (root layout, head/SEO, catch-all→`/`) | `app/layout.tsx` (+ `not-found.tsx`)                                   | Layout | Public | Pending      | ☐        |
+| `src/routes/__root.tsx`     | (root layout, head/SEO, catch-all→`/`) | `app/layout.tsx` (+ `not-found.tsx`)                                   | Layout | Public | **Migrated** | ☑ P3.4   |
 | `src/routes/index.tsx`      | `/`                                    | `app/page.tsx` (Landing + login/signup UI merged in)                   | SSR    | Public | **Migrated** | ☑ P3     |
 | `src/routes/blog/index.tsx` | `/blog`                                | `app/blog/page.tsx`                                                    | SSR    | Public | **Migrated** | ☑ P3     |
 | `src/routes/blog/$slug.tsx` | `/blog/:slug`                          | `app/blog/[slug]/page.tsx` (`generateStaticParams` from `blogData.ts`) | SSG    | Public | **Migrated** | ☑ P3     |
@@ -34,38 +34,38 @@ Legend — **Type:** SSR (public, server-rendered) · CSR (client-only, `/app` `
 | Existing route                            | URL                         | Next.js target                                                | Type | Auth        | Status       | Verified                                    |
 | ----------------------------------------- | --------------------------- | ------------------------------------------------------------- | ---- | ----------- | ------------ | ------------------------------------------- |
 | `src/routes/app/index.tsx`                | `/app`                      | `app/app/page.tsx` (Dashboard, **recharts** → client)         | CSR  | Protected   | **Migrated** | ◑ P3 (build✓, guard✓; login render pending) |
-| `src/routes/app/jobs.tsx`                 | `/app/jobs`                 | `app/app/jobs/page.tsx`                                       | CSR  | Protected   | Pending      | ☐                                           |
-| `src/routes/app/production.tsx`           | `/app/production`           | `app/app/production/page.tsx`                                 | CSR  | Protected   | Pending      | ☐                                           |
-| `src/routes/app/materials.tsx`            | `/app/materials`            | `app/app/materials/page.tsx`                                  | CSR  | Protected   | Pending      | ☐                                           |
-| `src/routes/app/sales.tsx`                | `/app/sales`                | `app/app/sales/page.tsx`                                      | CSR  | Protected   | Pending      | ☐                                           |
-| `src/routes/app/expenses.tsx`             | `/app/expenses`             | `app/app/expenses/page.tsx`                                   | CSR  | Protected   | Pending      | ☐                                           |
-| `src/routes/app/deliveries/index.tsx`     | `/app/deliveries`           | `app/app/deliveries/page.tsx`                                 | CSR  | Protected   | Pending      | ☐                                           |
-| `src/routes/app/deliveries/$id.print.tsx` | `/app/deliveries/:id/print` | `app/app/deliveries/[id]/print/page.tsx` (**jsPDF** → client) | CSR  | Protected   | Pending      | ☐                                           |
-| `src/routes/app/invoices/index.tsx`       | `/app/invoices`             | `app/app/invoices/page.tsx`                                   | CSR  | Protected   | Pending      | ☐                                           |
-| `src/routes/app/invoices/$id.print.tsx`   | `/app/invoices/:id/print`   | `app/app/invoices/[id]/print/page.tsx` (**jsPDF** → client)   | CSR  | Protected   | Pending      | ☐                                           |
-| `src/routes/app/payments.tsx`             | `/app/payments`             | `app/app/payments/page.tsx`                                   | CSR  | Protected   | Pending      | ☐                                           |
-| `src/routes/app/vendors.tsx`              | `/app/vendors`              | `app/app/vendors/page.tsx`                                    | CSR  | Protected   | Pending      | ☐                                           |
-| `src/routes/app/subcontracting.tsx`       | `/app/subcontracting`       | `app/app/subcontracting/page.tsx`                             | CSR  | Protected   | Pending      | ☐                                           |
-| `src/routes/app/companies.tsx`            | `/app/companies`            | `app/app/companies/page.tsx`                                  | CSR  | Protected   | Pending      | ☐                                           |
-| `src/routes/app/approvals.tsx`            | `/app/approvals`            | `app/app/approvals/page.tsx` (super-admin only)               | CSR  | Super-admin | Pending      | ☐                                           |
-| `src/routes/app/reports.tsx`              | `/app/reports`              | `app/app/reports/page.tsx` (charts + xlsx export → client)    | CSR  | Protected   | Pending      | ☐                                           |
-| `src/routes/app/settings.tsx`             | `/app/settings`             | `app/app/settings/page.tsx`                                   | CSR  | Protected   | Pending      | ☐                                           |
+| `src/routes/app/jobs.tsx`                 | `/app/jobs`                 | `app/app/jobs/page.tsx`                                       | CSR  | Protected   | **Migrated** | ☑ P3.4                                      |
+| `src/routes/app/production.tsx`           | `/app/production`           | `app/app/production/page.tsx`                                 | CSR  | Protected   | **Migrated** | ☑ P3.4                                      |
+| `src/routes/app/materials.tsx`            | `/app/materials`            | `app/app/materials/page.tsx`                                  | CSR  | Protected   | **Migrated** | ☑ P3.4                                      |
+| `src/routes/app/sales.tsx`                | `/app/sales`                | `app/app/sales/page.tsx`                                      | CSR  | Protected   | **Migrated** | ☑ P3.4                                      |
+| `src/routes/app/expenses.tsx`             | `/app/expenses`             | `app/app/expenses/page.tsx`                                   | CSR  | Protected   | **Migrated** | ☑ P3.4                                      |
+| `src/routes/app/deliveries/index.tsx`     | `/app/deliveries`           | `app/app/deliveries/page.tsx`                                 | CSR  | Protected   | **Migrated** | ☑ P3.4                                      |
+| `src/routes/app/deliveries/$id.print.tsx` | `/app/deliveries/:id/print` | `app/app/deliveries/[id]/print/page.tsx` (**jsPDF** → client) | CSR  | Protected   | **Migrated** | ☑ P3.4                                      |
+| `src/routes/app/invoices/index.tsx`       | `/app/invoices`             | `app/app/invoices/page.tsx`                                   | CSR  | Protected   | **Migrated** | ☑ P3.4                                      |
+| `src/routes/app/invoices/$id.print.tsx`   | `/app/invoices/:id/print`   | `app/app/invoices/[id]/print/page.tsx` (**jsPDF** → client)   | CSR  | Protected   | **Migrated** | ☑ P3.4                                      |
+| `src/routes/app/payments.tsx`             | `/app/payments`             | `app/app/payments/page.tsx`                                   | CSR  | Protected   | **Migrated** | ☑ P3.4                                      |
+| `src/routes/app/vendors.tsx`              | `/app/vendors`              | `app/app/vendors/page.tsx`                                    | CSR  | Protected   | **Migrated** | ☑ P3.4                                      |
+| `src/routes/app/subcontracting.tsx`       | `/app/subcontracting`       | `app/app/subcontracting/page.tsx`                             | CSR  | Protected   | **Migrated** | ☑ P3.4                                      |
+| `src/routes/app/companies.tsx`            | `/app/companies`            | `app/app/companies/page.tsx`                                  | CSR  | Protected   | **Migrated** | ☑ P3.4                                      |
+| `src/routes/app/approvals.tsx`            | `/app/approvals`            | `app/app/approvals/page.tsx` (super-admin only)               | CSR  | Super-admin | **Migrated** | ☑ P3.4                                      |
+| `src/routes/app/reports.tsx`              | `/app/reports`              | `app/app/reports/page.tsx` (charts + xlsx export → client)    | CSR  | Protected   | **Migrated** | ☑ P3.4                                      |
+| `src/routes/app/settings.tsx`             | `/app/settings`             | `app/app/settings/page.tsx`                                   | CSR  | Protected   | **Migrated** | ☑ P3.4                                      |
 
 ## Module-hub redirects (land on first tab — preserve exactly)
 
-| Existing route                           | URL                        | Redirects to     | Next.js target                                                   | Type     | Status  | Verified |
-| ---------------------------------------- | -------------------------- | ---------------- | ---------------------------------------------------------------- | -------- | ------- | -------- |
-| `src/routes/app/production-planning.tsx` | `/app/production-planning` | `/app/jobs`      | `app/app/production-planning/page.tsx` → `redirect('/app/jobs')` | Redirect | Pending | ☐        |
-| `src/routes/app/accounts.tsx`            | `/app/accounts`            | `/app/expenses`  | `redirect('/app/expenses')`                                      | Redirect | Pending | ☐        |
-| `src/routes/app/supply-chain.tsx`        | `/app/supply-chain`        | `/app/vendors`   | `redirect('/app/vendors')`                                       | Redirect | Pending | ☐        |
-| `src/routes/app/configuration.tsx`       | `/app/configuration`       | `/app/companies` | `redirect('/app/companies')`                                     | Redirect | Pending | ☐        |
+| Existing route                           | URL                        | Redirects to     | Next.js target                                                   | Type     | Status       | Verified |
+| ---------------------------------------- | -------------------------- | ---------------- | ---------------------------------------------------------------- | -------- | ------------ | -------- |
+| `src/routes/app/production-planning.tsx` | `/app/production-planning` | `/app/jobs`      | `app/app/production-planning/page.tsx` → `redirect('/app/jobs')` | Redirect | **Migrated** | ☑ P3.4   |
+| `src/routes/app/accounts.tsx`            | `/app/accounts`            | `/app/expenses`  | `redirect('/app/expenses')`                                      | Redirect | **Migrated** | ☑ P3.4   |
+| `src/routes/app/supply-chain.tsx`        | `/app/supply-chain`        | `/app/vendors`   | `redirect('/app/vendors')`                                       | Redirect | **Migrated** | ☑ P3.4   |
+| `src/routes/app/configuration.tsx`       | `/app/configuration`       | `/app/companies` | `redirect('/app/companies')`                                     | Redirect | **Migrated** | ☑ P3.4   |
 
 ## Catch-alls / not-found
 
-| Existing behaviour        | Source                            | Next.js target                            | Status  | Verified |
-| ------------------------- | --------------------------------- | ----------------------------------------- | ------- | -------- |
-| Unknown root URL → `/`    | `__root.tsx notFoundComponent`    | `app/not-found.tsx` → redirect `/`        | Pending | ☐        |
-| Unknown `/app/*` → `/app` | `app/route.tsx notFoundComponent` | `app/app/not-found.tsx` → redirect `/app` | Pending | ☐        |
+| Existing behaviour        | Source                            | Next.js target                            | Status       | Verified |
+| ------------------------- | --------------------------------- | ----------------------------------------- | ------------ | -------- |
+| Unknown root URL → `/`    | `__root.tsx notFoundComponent`    | `app/not-found.tsx` → redirect `/`        | **Migrated** | ☑ P3.4   |
+| Unknown `/app/*` → `/app` | `app/route.tsx notFoundComponent` | `app/app/not-found.tsx` → redirect `/app` | **Migrated** | ☑ P3.4   |
 
 ---
 

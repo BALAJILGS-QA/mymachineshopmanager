@@ -11,7 +11,7 @@ import { AuthProvider } from '@/features/auth/auth'
 import { ToastProvider } from '@/components/ui/Toast'
 import { ConfirmProvider } from '@/components/ui/ConfirmDialog'
 import { AppLinkProvider } from '@/components/nav/app-link'
-import { TanStackAppLink } from '@/components/nav/tanstack-app-link'
+import { TanStackAppLink, TanStackNavBridge } from '@/components/nav/tanstack-app-link'
 import { validateEnv } from '@/lib/env'
 import appCss from '@/index.css?url'
 
@@ -81,7 +81,9 @@ function RootComponent() {
           <ToastProvider>
             <ConfirmProvider>
               <AppLinkProvider value={TanStackAppLink}>
-                <Outlet />
+                <TanStackNavBridge>
+                  <Outlet />
+                </TanStackNavBridge>
               </AppLinkProvider>
             </ConfirmProvider>
           </ToastProvider>
