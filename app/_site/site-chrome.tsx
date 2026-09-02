@@ -19,13 +19,14 @@ import { BRAND } from '@/lib/brand'
 import { useReveal } from '@/features/site/useReveal'
 import '@/features/site/site.css'
 
-// `/`, `/blog` and `/contact` are real routes; hash entries scroll to sections.
+// `/`, `/about`, `/blog` and `/contact` are real routes; hash entries scroll.
 const NAV = [
   { href: '/', label: 'Home' },
   { href: '/#features', label: 'Features' },
+  { href: '/about', label: 'About' },
   { href: '/#faq', label: 'FAQ' },
   { href: '/blog', label: 'Blog' },
-  { href: '/contact', label: 'Contact Us' },
+  { href: '/contact', label: 'Reach Us' },
 ]
 
 // In-page hash links use a plain <a> (reliable anchor scrolling); real routes use
@@ -199,6 +200,11 @@ function Footer() {
               </a>
             </li>
             <li>
+              <Link href="/about" className="hover:text-[var(--ink)]">
+                About
+              </Link>
+            </li>
+            <li>
               <a href="/#faq" className="hover:text-[var(--ink)]">
                 FAQ
               </a>
@@ -210,7 +216,7 @@ function Footer() {
             </li>
             <li>
               <Link href="/contact" className="hover:text-[var(--ink)]">
-                Contact Us
+                Reach Us
               </Link>
             </li>
           </ul>

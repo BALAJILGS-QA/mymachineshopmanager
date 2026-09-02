@@ -4,12 +4,15 @@
 // via contactsApi (Supabase `contact_messages` with a local fallback), where it
 // surfaces in the app's CRM module. Router-agnostic and provider-light: uses a
 // local success state rather than depending on app context.
+//
+// UI is a page-scoped premium redesign; the form logic (zod schema, react-hook-
+// form, submitContact, success/error/loading states) is preserved exactly.
 
 import { useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import { Building2, CheckCircle2, Loader2, Mail, MessageSquare, Phone, User } from 'lucide-react'
+import { AlertCircle, ArrowRight, CheckCircle2, Loader2 } from 'lucide-react'
 import { submitContact } from '@/features/crm/contactsApi'
 
 const schema = z.object({
@@ -20,6 +23,11 @@ const schema = z.object({
   message: z.string().trim().min(1, 'Please tell us how we can help'),
 })
 type Values = z.infer<typeof schema>
+
+// Page-scoped input styling: clean brand-line border, comfortable height,
+// industrial-orange focus ring. Not shared with other pages.
+const inputCls =
+  'w-full rounded-lg border border-[var(--line)] bg-white px-3.5 py-2.5 text-sm text-[var(--ink)] outline-none transition placeholder:text-slate-400 hover:border-slate-300 focus:border-[var(--amber)] focus:ring-2 focus:ring-[var(--amber)]/20 disabled:opacity-60'
 
 export function ContactForm() {
   const [done, setDone] = useState(false)
@@ -45,88 +53,117 @@ export function ContactForm() {
 
   if (done) {
     return (
-      <div className="rounded-2xl border border-[var(--line)] bg-white/80 p-8 text-center shadow-xl shadow-orange-900/5 backdrop-blur">
-        <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-xl bg-emerald-100 text-emerald-700">
+      <div className="rounded-2xl border border-[var(--line)] bg-white p-8 text-center shadow-[0_1px_2px_rgba(17,26,43,0.04),0_18px_40px_-24px_rgba(17,26,43,0.25)] sm:p-10">
+        <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-emerald-50 text-emerald-600 ring-1 ring-emerald-100">
           <CheckCircle2 size={24} />
         </div>
-        <h2 className="display text-xl font-bold text-[var(--ink)]">Thanks — message received</h2>
-        <p className="mt-2 text-sm text-[var(--ink-dim)]">
-          Our team will get back to you shortly. Your enquiry has been logged with us.
+        <h3 className="display text-xl font-bold text-[var(--ink)]">Message sent successfully</h3>
+        <p className="mx-auto mt-2 max-w-sm text-sm leading-relaxed text-[var(--ink-dim)]">
+          Thanks for reaching out. Our team will get back to you within 1 business day.
         </p>
       </div>
     )
   }
 
   return (
-    <form
-      onSubmit={onSubmit}
-      noValidate
-      className="rounded-2xl border border-[var(--line)] bg-white/80 p-6 shadow-xl shadow-orange-900/5 backdrop-blur sm:p-7"
-    >
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <IconField icon={User} label="Name" required error={errors.name?.message}>
-          <input className="input pl-9" aria-label="Name" {...register('name')} />
-        </IconField>
-        <IconField icon={Mail} label="Email" required error={errors.email?.message}>
-          <input
-            className="input pl-9"
-            type="email"
-            autoComplete="email"
-            placeholder="you@example.com"
-            aria-label="Email"
-            {...register('email')}
-          />
-        </IconField>
-        <IconField icon={Phone} label="Phone">
-          <input className="input pl-9" aria-label="Phone" {...register('phone')} />
-        </IconField>
-        <IconField icon={Building2} label="Company">
-          <input className="input pl-9" aria-label="Company" {...register('company')} />
-        </IconField>
+    <div className="rounded-2xl border border-[var(--line)] bg-white p-6 shadow-[0_1px_2px_rgba(17,26,43,0.04),0_18px_40px_-24px_rgba(17,26,43,0.25)] sm:p-8">
+      <div className="mb-6">
+        <h2 className="display text-xl font-bold text-[var(--ink)]">Send us a message</h2>
+        <p className="mt-1 text-sm text-[var(--ink-dim)]">
+          Tell us what you need and our team will get back to you.
+        </p>
       </div>
 
-      <div className="mt-4">
-        <label className="label" htmlFor="message">
-          Message <span className="text-red-500">*</span>
-        </label>
-        <div className="relative">
-          <MessageSquare
-            size={16}
-            className="pointer-events-none absolute left-3 top-3 text-slate-500"
-          />
+      <form onSubmit={onSubmit} noValidate className="space-y-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <Field htmlFor="name" label="Name" required error={errors.name?.message}>
+            <input
+              id="name"
+              className={inputCls}
+              placeholder="Your full name"
+              autoComplete="name"
+              {...register('name')}
+            />
+          </Field>
+          <Field htmlFor="email" label="Email" required error={errors.email?.message}>
+            <input
+              id="email"
+              type="email"
+              className={inputCls}
+              placeholder="you@company.com"
+              autoComplete="email"
+              {...register('email')}
+            />
+          </Field>
+          <Field htmlFor="phone" label="Phone">
+            <input
+              id="phone"
+              className={inputCls}
+              placeholder="+91 XXXXX XXXXX"
+              autoComplete="tel"
+              {...register('phone')}
+            />
+          </Field>
+          <Field htmlFor="company" label="Company">
+            <input
+              id="company"
+              className={inputCls}
+              placeholder="Your company name"
+              autoComplete="organization"
+              {...register('company')}
+            />
+          </Field>
+        </div>
+
+        <Field htmlFor="message" label="Message" required error={errors.message?.message}>
           <textarea
             id="message"
             rows={5}
-            className="input pl-9"
-            placeholder="How can we help your shop?"
+            className={`${inputCls} resize-y`}
+            placeholder="Tell us how we can help your business"
             {...register('message')}
           />
-        </div>
-        {errors.message && <p className="mt-1 text-xs text-red-600">{errors.message.message}</p>}
-      </div>
+        </Field>
 
-      {failed && (
-        <p className="mt-3 rounded-lg bg-red-50 px-3 py-2 text-center text-xs text-red-600">
-          Something went wrong. Please try again or email us directly.
-        </p>
-      )}
+        {failed && (
+          <div className="flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 px-3.5 py-2.5 text-xs text-red-700">
+            <AlertCircle size={14} className="mt-0.5 shrink-0" />
+            Something went wrong. Please try again or email us directly.
+          </div>
+        )}
 
-      <button type="submit" className="btn-primary mt-5 w-full py-2.5" disabled={isSubmitting}>
-        {isSubmitting && <Loader2 size={16} className="animate-spin" />}
-        Send message
-      </button>
-    </form>
+        <button
+          type="submit"
+          disabled={isSubmitting}
+          className="group inline-flex w-full items-center justify-center gap-2 rounded-lg bg-[var(--amber)] px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-[#a8380a] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--amber)] active:translate-y-px disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          {isSubmitting ? (
+            <>
+              <Loader2 size={16} className="animate-spin" /> Sending…
+            </>
+          ) : (
+            <>
+              Send Message
+              <ArrowRight
+                size={16}
+                className="transition-transform duration-200 group-hover:translate-x-0.5"
+              />
+            </>
+          )}
+        </button>
+      </form>
+    </div>
   )
 }
 
-function IconField({
-  icon: Icon,
+function Field({
+  htmlFor,
   label,
   required,
   error,
   children,
 }: {
-  icon: typeof Mail
+  htmlFor: string
   label: string
   required?: boolean
   error?: string
@@ -134,18 +171,12 @@ function IconField({
 }) {
   return (
     <div>
-      <label className="label">
+      <label htmlFor={htmlFor} className="mb-1.5 block text-xs font-semibold text-[var(--ink)]">
         {label}
-        {required && <span className="text-red-500"> *</span>}
+        {required && <span className="text-[var(--amber)]"> *</span>}
       </label>
-      <div className="relative">
-        <Icon
-          size={16}
-          className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-500"
-        />
-        {children}
-      </div>
-      {error && <p className="mt-1 text-xs text-red-600">{error}</p>}
+      {children}
+      {error && <p className="mt-1.5 text-xs text-red-600">{error}</p>}
     </div>
   )
 }

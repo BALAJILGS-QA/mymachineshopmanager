@@ -65,50 +65,74 @@ export default function ContactPage() {
   return (
     <SiteChrome showFooter>
       <JsonLd data={jsonLd} />
-      <section className="blueprint relative overflow-hidden border-b border-[var(--line)]">
-        <div className="glow-amber pointer-events-none absolute inset-x-0 top-0 h-[420px]" />
-        <div className="relative mx-auto grid max-w-6xl items-start gap-12 px-5 py-20 lg:grid-cols-[0.85fr_1.15fr]">
-          {/* Intro + details */}
-          <div>
-            <p className="kicker">Contact us</p>
-            <h1 className="display mt-3 text-4xl font-bold leading-[1.05] text-[var(--ink)] sm:text-5xl">
-              Let&apos;s get your shop floor <span className="grad">online.</span>
-            </h1>
-            <p className="mt-5 max-w-md text-base leading-relaxed text-[var(--ink-dim)]">
-              Questions about {BRAND.product}, a demo, or onboarding your machine shop? Send us a
-              message and our team will get back to you.
+
+      {/* Hero — compact, subtle grid, orange used only as an accent */}
+      <section className="relative overflow-hidden border-b border-[var(--line)]">
+        <div className="blueprint pointer-events-none absolute inset-0 opacity-50" />
+        <div className="relative mx-auto max-w-6xl px-5 py-16 sm:py-20">
+          <p className="kicker rise d1">Contact us</p>
+          <h1 className="display rise d2 mt-3 max-w-2xl text-4xl font-bold leading-[1.05] text-[var(--ink)] sm:text-5xl">
+            Let&apos;s simplify your <span className="text-[var(--amber)]">shop floor.</span>
+          </h1>
+          <p className="rise d3 mt-4 max-w-xl text-base leading-relaxed text-[var(--ink-dim)]">
+            Have questions about {BRAND.product}, need a demo, or want help getting started? Our
+            team is here to help.
+          </p>
+        </div>
+      </section>
+
+      {/* Main — premium 40 / 60 two-column layout */}
+      <section>
+        <div className="mx-auto grid max-w-6xl gap-10 px-5 py-16 lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)] lg:gap-16 lg:py-20">
+          {/* Left — contact information */}
+          <div className="reveal">
+            <h2 className="display text-2xl font-bold text-[var(--ink)] sm:text-3xl">
+              Let&apos;s talk about your business.
+            </h2>
+            <p className="mt-3 max-w-md text-base leading-relaxed text-[var(--ink-dim)]">
+              Whether you have a question, need a product walkthrough, or want help getting started,
+              we&apos;d love to hear from you.
             </p>
 
-            <div className="mt-10 space-y-4">
+            <div className="mt-8 border-t border-[var(--line)]">
               {DETAILS.map((d) => {
-                const body = (
-                  <div className="flex items-start gap-4 rounded-2xl border border-[var(--line)] bg-white/70 p-5 shadow-sm">
-                    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-orange-50 text-[var(--amber)]">
-                      <d.icon size={22} />
-                    </div>
-                    <div>
-                      <p className="text-xs uppercase tracking-wide text-[var(--ink-faint)]">
+                const inner = (
+                  <>
+                    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-[var(--line)] bg-white text-[var(--amber)] transition group-hover:border-[var(--amber)]/50 group-hover:bg-orange-50/60">
+                      <d.icon size={18} />
+                    </span>
+                    <span className="min-w-0">
+                      <span className="block text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--ink-faint)]">
                         {d.label}
-                      </p>
-                      <p className="mt-0.5 break-all text-sm font-medium text-[var(--ink)]">
+                      </span>
+                      <span className="mt-0.5 block break-words text-sm font-medium text-[var(--ink)] transition group-hover:text-[var(--amber)]">
                         {d.value}
-                      </p>
-                    </div>
-                  </div>
+                      </span>
+                    </span>
+                  </>
                 )
                 return d.href ? (
-                  <a key={d.label} href={d.href} className="block transition hover:opacity-80">
-                    {body}
+                  <a
+                    key={d.label}
+                    href={d.href}
+                    className="group flex items-center gap-4 border-b border-[var(--line)] py-4"
+                  >
+                    {inner}
                   </a>
                 ) : (
-                  <div key={d.label}>{body}</div>
+                  <div
+                    key={d.label}
+                    className="group flex items-center gap-4 border-b border-[var(--line)] py-4"
+                  >
+                    {inner}
+                  </div>
                 )
               })}
             </div>
           </div>
 
-          {/* Form */}
-          <div className="lg:pt-2">
+          {/* Right — contact form */}
+          <div className="reveal">
             <ContactForm />
           </div>
         </div>
