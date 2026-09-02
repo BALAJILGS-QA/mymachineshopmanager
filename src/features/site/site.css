@@ -119,6 +119,38 @@
   animation: spin-slow 26s linear infinite;
 }
 
+/* Gentle vertical bob — used to make the manufacturing-execution nodes/cards
+   drift instead of sitting static. Stagger via inline animation-delay. */
+@keyframes floaty {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-9px);
+  }
+}
+.floaty {
+  animation: floaty 3.6s ease-in-out infinite;
+  will-change: transform;
+}
+
+/* Connector pulse — arrows shimmer to suggest flow direction. */
+@keyframes flow-pulse {
+  0%,
+  100% {
+    opacity: 0.2;
+    transform: translateX(0);
+  }
+  50% {
+    opacity: 0.9;
+    transform: translateX(3px);
+  }
+}
+.flow-arrow {
+  animation: flow-pulse 2.2s ease-in-out infinite;
+}
+
 .site a {
   color: inherit;
 }
@@ -165,7 +197,9 @@
 @media (prefers-reduced-motion: reduce) {
   .site .rise,
   .reveal,
-  .spin-slow {
+  .spin-slow,
+  .floaty,
+  .flow-arrow {
     animation: none !important;
     transition: none !important;
     opacity: 1 !important;

@@ -63,4 +63,7 @@ export const qk = {
     all: ['subcontracts'] as const,
     docs: (scId: string) => ['subcontracts', 'docs', scId] as const,
   },
+  contacts: {
+    all: ['contacts'] as const,
+  },
 } as const

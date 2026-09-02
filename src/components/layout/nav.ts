@@ -13,6 +13,7 @@ import {
   BarChart3,
   Building2,
   ShieldCheck,
+  Users,
   Settings as SettingsIcon,
   type LucideIcon,
 } from 'lucide-react'
@@ -51,6 +52,7 @@ export const NAV_GROUPS: NavGroup[] = [
     ],
   },
   { items: [{ to: '/app/sales', label: 'Sales', icon: TrendingUp, short: 'Sales' }] },
+  { items: [{ to: '/app/crm', label: 'CRM', icon: Users, short: 'CRM' }] },
   {
     title: 'Accounts & Finance',
     to: '/app/accounts',

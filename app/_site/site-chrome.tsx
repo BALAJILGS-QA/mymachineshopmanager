@@ -19,7 +19,41 @@ import { BRAND } from '@/lib/brand'
 import { useReveal } from '@/features/site/useReveal'
 import '@/features/site/site.css'
 
-const NAV = [{ href: '/blog', label: 'Blog' }]
+// `/`, `/blog` and `/contact` are real routes; hash entries scroll to sections.
+const NAV = [
+  { href: '/', label: 'Home' },
+  { href: '/#features', label: 'Features' },
+  { href: '/#faq', label: 'FAQ' },
+  { href: '/blog', label: 'Blog' },
+  { href: '/contact', label: 'Contact Us' },
+]
+
+// In-page hash links use a plain <a> (reliable anchor scrolling); real routes use
+// Next <Link> for prefetching.
+function NavItem({
+  href,
+  label,
+  className,
+  onClick,
+}: {
+  href: string
+  label: string
+  className?: string
+  onClick?: () => void
+}) {
+  if (href.includes('#')) {
+    return (
+      <a href={href} className={className} onClick={onClick}>
+        {label}
+      </a>
+    )
+  }
+  return (
+    <Link href={href} className={className} onClick={onClick}>
+      {label}
+    </Link>
+  )
+}
 
 function Wordmark() {
   return (
@@ -68,21 +102,20 @@ export function SiteChrome({
           <Wordmark />
           <nav className="hidden items-center gap-7 md:flex">
             {NAV.map((n) => (
-              <Link
+              <NavItem
                 key={n.href}
                 href={n.href}
+                label={n.label}
                 className="text-sm font-medium text-[var(--ink-dim)] transition hover:text-[var(--ink)]"
-              >
-                {n.label}
-              </Link>
+              />
             ))}
           </nav>
           <div className="hidden items-center gap-3 md:flex">
-            <a href="/#access" className="site-btn site-btn-ghost">
-              Sign In
+            <a href="/login" className="site-btn site-btn-ghost">
+              Login
             </a>
-            <a href="/#access" className="site-btn site-btn-primary">
-              Sign Up <ArrowUpRight size={16} />
+            <a href="/signup" className="site-btn site-btn-primary">
+              Try for free <ArrowUpRight size={16} />
             </a>
           </div>
           <button
@@ -110,29 +143,28 @@ export function SiteChrome({
               </button>
             </div>
             {NAV.map((n) => (
-              <Link
+              <NavItem
                 key={n.href}
                 href={n.href}
+                label={n.label}
                 onClick={() => setOpen(false)}
                 className="rounded-lg px-3 py-2.5 text-[var(--ink-dim)] hover:bg-black/5 hover:text-[var(--ink)]"
-              >
-                {n.label}
-              </Link>
+              />
             ))}
             <div className="mt-4 flex flex-col gap-2">
               <a
-                href="/#access"
+                href="/login"
                 className="site-btn site-btn-ghost justify-center"
                 onClick={() => setOpen(false)}
               >
-                Sign In
+                Login
               </a>
               <a
-                href="/#access"
+                href="/signup"
                 className="site-btn site-btn-primary justify-center"
                 onClick={() => setOpen(false)}
               >
-                Sign Up
+                Try for free
               </a>
             </div>
           </div>
@@ -149,7 +181,7 @@ export function SiteChrome({
 function Footer() {
   const year = 2026
   return (
-    <footer id="contact" className="relative border-t border-[var(--line)] bg-white/60">
+    <footer className="relative border-t border-[var(--line)] bg-white/60">
       <div className="mx-auto grid max-w-6xl gap-10 px-5 py-14 md:grid-cols-[1.4fr_1fr_1fr]">
         <div>
           <Wordmark />
@@ -162,14 +194,24 @@ function Footer() {
           <p className="kicker mb-3">Company</p>
           <ul className="space-y-2 text-sm text-[var(--ink-dim)]">
             <li>
+              <a href="/#features" className="hover:text-[var(--ink)]">
+                Features
+              </a>
+            </li>
+            <li>
+              <a href="/#faq" className="hover:text-[var(--ink)]">
+                FAQ
+              </a>
+            </li>
+            <li>
               <Link href="/blog" className="hover:text-[var(--ink)]">
                 Blog
               </Link>
             </li>
             <li>
-              <a href="/#access" className="hover:text-[var(--ink)]">
-                Client Portal
-              </a>
+              <Link href="/contact" className="hover:text-[var(--ink)]">
+                Contact Us
+              </Link>
             </li>
           </ul>
         </div>
@@ -177,13 +219,13 @@ function Footer() {
           <p className="kicker mb-3">Access</p>
           <ul className="space-y-2 text-sm text-[var(--ink-dim)]">
             <li>
-              <a href="/#access" className="hover:text-[var(--ink)]">
-                Sign In
+              <a href="/login" className="hover:text-[var(--ink)]">
+                Login
               </a>
             </li>
             <li>
-              <a href="/#access" className="hover:text-[var(--ink)]">
-                Sign Up
+              <a href="/signup" className="hover:text-[var(--ink)]">
+                Try for free
               </a>
             </li>
           </ul>

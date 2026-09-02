@@ -33,3 +33,19 @@ export const supabase: SupabaseClient | null =
 export function isSupabaseEnabled(): boolean {
   return supabase !== null
 }
+
+// A sessionless client that always uses the anon key. Used for calls that must
+// NOT ride the current user's freshly-issued session token — e.g. the
+// registration RPC, where the just-minted JWT's `iat` can momentarily be ahead
+// of the DB clock ("JWT issued at future"). The static anon key has no such skew.
+export function makeAnonClient(): SupabaseClient | null {
+  if (!url || !anonKey) return null
+  return createClient(url, anonKey, {
+    auth: {
+      persistSession: false,
+      autoRefreshToken: false,
+      detectSessionInUrl: false,
+      lock: passThroughLock,
+    },
+  })
+}

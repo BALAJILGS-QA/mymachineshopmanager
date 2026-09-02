@@ -10,17 +10,9 @@
 //  • Local mode — a salted SHA-256 super-admin credential in localStorage;
 //    registered users (with approval state) live in the local data store.
 
-import {
-  createContext,
-  useContext,
-  useEffect,
-  useMemo,
-  useState,
-  type ReactNode,
-} from 'react'
-import { supabase, isSupabaseEnabled } from '@/data/supabase'
+import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { supabase, isSupabaseEnabled, makeAnonClient } from '@/data/supabase'
 import { userRepo, BusinessRuleError } from '@/data/repo'
-import { uid } from '@/lib/id'
 import type { AppUser } from '@/types'
 
 export type Role = 'SuperAdmin' | 'User'
@@ -98,22 +90,13 @@ async function ensureSuperAdminCredential(): Promise<void> {
 // ---- Supabase: profiles live in app_state.data.users (no extra table) -------
 async function fetchRemoteUsers(): Promise<AppUser[]> {
   if (!supabase) return []
-  const { data } = await supabase.from('app_state').select('data').eq('id', 'singleton').maybeSingle()
+  const { data } = await supabase
+    .from('app_state')
+    .select('data')
+    .eq('id', 'singleton')
+    .maybeSingle()
   const users = (data?.data as { users?: AppUser[] } | null)?.users
   return Array.isArray(users) ? users : []
-}
-
-async function appendRemoteUser(user: AppUser): Promise<void> {
-  if (!supabase) return
-  const { data } = await supabase.from('app_state').select('data').eq('id', 'singleton').maybeSingle()
-  const cur = (data?.data as Record<string, unknown> | null) ?? {}
-  const users = (Array.isArray((cur as { users?: AppUser[] }).users)
-    ? (cur as { users: AppUser[] }).users
-    : []) as AppUser[]
-  if (users.some((u) => u.email.toLowerCase() === user.email.toLowerCase())) return
-  users.push(user)
-  const { error } = await supabase.from('app_state').upsert({ id: 'singleton', data: { ...cur, users } })
-  if (error) throw error
 }
 
 // While a registration is in flight we briefly hold a session to write the
@@ -202,11 +185,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           }
           if (u.status === 'pending') {
             await supabase!.auth.signOut()
-            return { ok: false, pending: true, message: 'Your account is awaiting super-admin approval.' }
+            return {
+              ok: false,
+              pending: true,
+              message: 'Your account is awaiting super-admin approval.',
+            }
           }
           if (u.status === 'rejected') {
             await supabase!.auth.signOut()
-            return { ok: false, message: 'Your registration was not approved. Please contact the administrator.' }
+            return {
+              ok: false,
+              message: 'Your registration was not approved. Please contact the administrator.',
+            }
           }
           return { ok: true }
         }
@@ -217,7 +207,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const hash = await sha256(password)
         const cred = JSON.parse(localStorage.getItem(AUTH_KEY)!) as Credential
         if (uname === cred.username.toLowerCase() && hash === cred.hash) {
-          const next: Session = { username: cred.username, email: cred.username, role: 'SuperAdmin' }
+          const next: Session = {
+            username: cred.username,
+            email: cred.username,
+            role: 'SuperAdmin',
+          }
           localStorage.setItem(SESSION_KEY, JSON.stringify(next))
           setSession(next)
           return { ok: true }
@@ -225,9 +219,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const u = userRepo.getByEmail(username)
         if (!u) return { ok: false, message: 'Invalid username or password' }
         if (u.status === 'pending')
-          return { ok: false, pending: true, message: 'Your account is awaiting super-admin approval.' }
+          return {
+            ok: false,
+            pending: true,
+            message: 'Your account is awaiting super-admin approval.',
+          }
         if (u.status === 'rejected')
-          return { ok: false, message: 'Your registration was not approved. Please contact the administrator.' }
+          return {
+            ok: false,
+            message: 'Your registration was not approved. Please contact the administrator.',
+          }
         if (u.passwordHash !== hash) return { ok: false, message: 'Invalid username or password' }
         const next: Session = { username: u.fullName || u.email, email: u.email, role: 'User' }
         localStorage.setItem(SESSION_KEY, JSON.stringify(next))
@@ -243,32 +244,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (supabaseMode) {
           suppressGate = true
           try {
-            const { data, error } = await supabase!.auth.signUp({ email, password: input.password })
+            const { error } = await supabase!.auth.signUp({ email, password: input.password })
             if (error) return { ok: false, message: error.message }
-            if (!data.session) {
-              const { error: e2 } = await supabase!.auth.signInWithPassword({
-                email,
-                password: input.password,
-              })
-              if (e2) return { ok: false, message: 'Account created. Please ask the admin to approve you, then sign in.' }
-            }
-            const existing = await fetchRemoteUsers()
-            if (existing.some((u) => u.email.toLowerCase() === email.toLowerCase())) {
-              return { ok: false, message: 'An account with this email already exists.' }
-            }
-            const user: AppUser = {
-              id: uid('usr_'),
-              email,
-              fullName: input.fullName.trim(),
-              companyName: input.companyName.trim(),
-              phone: input.phone.trim(),
-              address: input.address.trim(),
-              gstin: input.gstin.trim(),
-              role: 'User',
-              status: 'pending',
-              createdAt: new Date().toISOString(),
-            }
-            await appendRemoteUser(user)
+            // Record the applicant's profile via a SECURITY DEFINER RPC — app_state
+            // is approval-gated, so a still-pending applicant cannot write it
+            // directly. A DB trigger already inserts a bare pending row on sign-up;
+            // the RPC merges the form details into it (migration 0018) and can never
+            // set status to approved, so the approval gate is intact.
+            //
+            // Call it on a sessionless anon client: the just-issued session token's
+            // `iat` can momentarily be ahead of the DB clock ("JWT issued at
+            // future"); the static anon key avoids that skew.
+            const anon = makeAnonClient() ?? supabase!
+            const { error: rpcErr } = await anon.rpc('register_pending_user', {
+              p_email: email,
+              p_full_name: input.fullName.trim(),
+              p_company: input.companyName.trim(),
+              p_phone: input.phone.trim(),
+              p_address: input.address.trim(),
+              p_gstin: input.gstin.trim(),
+            })
+            if (rpcErr) return { ok: false, message: rpcErr.message }
             return { ok: true, pending: true }
           } catch (e) {
             return { ok: false, message: e instanceof Error ? e.message : 'Registration failed' }
@@ -293,7 +289,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           })
           return { ok: true, pending: true }
         } catch (e) {
-          return { ok: false, message: e instanceof BusinessRuleError ? e.message : 'Registration failed' }
+          return {
+            ok: false,
+            message: e instanceof BusinessRuleError ? e.message : 'Registration failed',
+          }
         }
       },
 
