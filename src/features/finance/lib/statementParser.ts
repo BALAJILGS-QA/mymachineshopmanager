@@ -218,7 +218,6 @@ const SYNONYMS: Record<string, string[]> = {
     'remarks',
     'transaction remarks',
     'transaction details',
-    'transaction',
   ],
   reference: [
     'reference',
@@ -269,22 +268,40 @@ const SYNONYMS: Record<string, string[]> = {
 
 const norm = (s: string) => s.toLowerCase().replace(/[._]/g, ' ').replace(/\s+/g, ' ').trim()
 
+// Header-cell normalizer for matching: drop any parenthetical unit/note so real
+// bank headers reduce to their keyword — "Debit(Rs)" → "debit", "Balance(Rs)" →
+// "balance", "Date(Value Date)" → "date", "Date(Value" → "date" (unbalanced,
+// from a two-line PDF header) — and collapse separators.
+const headerNorm = (s: string) =>
+  s
+    .toLowerCase()
+    .split('(')[0]
+    .replace(/[._/\\-]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+
+function matchCanon(n: string): string | null {
+  for (const [canon, syns] of Object.entries(SYNONYMS)) {
+    if (syns.some((s) => n === s || n.startsWith(`${s} `))) return canon
+  }
+  return null
+}
+
 function detectColumns(rows: string[][]): { headerRow: number; map: Record<string, number> } {
   let best = { score: 0, row: 0, map: {} as Record<string, number> }
-  const limit = Math.min(rows.length, 20)
+  // Scan the WHOLE document — bank PDFs put the transaction header well below
+  // the logo + customer-details block (often past row 20).
+  const limit = Math.min(rows.length, 400)
   for (let r = 0; r < limit; r++) {
     const map: Record<string, number> = {}
     let score = 0
     rows[r].forEach((cell, i) => {
-      const n = norm(cell)
+      const n = headerNorm(cell)
       if (!n) return
-      for (const [canon, syns] of Object.entries(SYNONYMS)) {
-        if (map[canon] !== undefined) continue
-        if (syns.includes(n) || syns.some((s) => n === s)) {
-          map[canon] = i
-          score++
-          break
-        }
+      const canon = matchCanon(n)
+      if (canon && map[canon] === undefined) {
+        map[canon] = i
+        score++
       }
     })
     // A valid header needs a date and some amount signal.
@@ -388,6 +405,14 @@ export async function parseStatement(file: File): Promise<ParseResult> {
   const warnings: string[] = []
   const { headerRow, map } = detectColumns(grid)
   if (Object.keys(map).length === 0) {
+    // A text layer exists but no transaction table was found. The commonest
+    // cause is a statement whose table is a scanned/screenshot IMAGE (e.g. a
+    // page printed/exported from a chat or a photo), which has no selectable
+    // table text to read. Guide the user to the original download.
+    const hint =
+      parserType === 'pdf'
+        ? 'Could not find a transaction table in this PDF. If the statement is a scanned page or screenshot image, its rows are not selectable text — download the original statement from your bank as CSV/Excel or a text-based PDF and upload that.'
+        : 'Could not detect statement columns — the file has no recognisable Date / Debit / Credit columns. Check that this is a transaction statement (not a summary), or upload the bank’s CSV/Excel export.'
     return {
       parserType,
       rows: [],
@@ -395,7 +420,7 @@ export async function parseStatement(file: File): Promise<ParseResult> {
       headerRow: 0,
       columnMap: {},
       parserConfidence: 0,
-      warnings: ['Could not detect statement columns. Check the file format.'],
+      warnings: [hint],
     }
   }
 
