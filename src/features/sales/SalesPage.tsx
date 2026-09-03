@@ -152,7 +152,7 @@ export function SalesPage() {
           icon={<TrendingUp size={18} />}
           label="Sale lines"
           value={rows.length}
-          tone="brand"
+          tone="blue"
         />
         <StatTile
           icon={<FileText size={18} />}
@@ -160,7 +160,12 @@ export function SalesPage() {
           value={currency(totalValue)}
           tone="green"
         />
-        <StatTile icon={<Truck size={18} />} label="Materials sold" value={perMaterial.length} />
+        <StatTile
+          icon={<Truck size={18} />}
+          label="Materials sold"
+          value={perMaterial.length}
+          tone="cyan"
+        />
       </div>
 
       {/* Quantity sold per material — "Material name — Qty unit". */}

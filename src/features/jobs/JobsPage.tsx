@@ -93,6 +93,7 @@ export function JobsPage() {
     <div>
       <PageHeader
         title="Job Orders"
+        subtitle="Track every job from order through machining to dispatch"
         actions={
           <>
             <button className="btn-secondary" onClick={exportExcel}>

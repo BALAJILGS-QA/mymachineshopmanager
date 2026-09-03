@@ -36,6 +36,7 @@ import { toUserMessage } from '@/lib/api/errors'
 import { fmtDate, inRange, qty } from '@/lib/format'
 import { downloadXlsx } from '@/lib/xlsx'
 import { PageHeader, ResponsiveTable } from '@/components/common/PageHeader'
+import { StatTile } from '@/components/common/StatTile'
 import { Badge, Card, EmptyState } from '@/components/ui/primitives'
 import { Modal } from '@/components/ui/Modal'
 import { Pagination, usePagination } from '@/components/common/Pagination'
@@ -388,39 +389,20 @@ export function MaterialsPage() {
           {/* Summary — total on-hand stock vs total dispatched for the current
           view + filters (updates dynamically). Values/calculations unchanged. */}
           <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <div className="relative flex items-center justify-between gap-3 overflow-hidden rounded-xl border border-slate-200 bg-white p-4 pl-5 shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
-              <span className="absolute inset-y-0 left-0 w-1.5 bg-brand-500" aria-hidden />
-              <div className="min-w-0">
-                <p className="truncate text-2xs font-semibold uppercase tracking-wide text-slate-500">
-                  {`Total material stock${view === 'customer' && fCompany ? ` — ${companyName(fCompany)}` : ''}`}
-                </p>
-                <p className="tnum mt-1 text-2xl font-bold leading-none text-slate-900">
-                  {qty(totals.stock)}
-                  <span className="ml-1 text-sm font-semibold text-slate-400">Nos</span>
-                </p>
-                <p className="mt-1.5 text-2xs text-slate-400">On-hand available stock</p>
-              </div>
-              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-brand-50 text-brand-600 ring-1 ring-brand-100">
-                <Boxes size={20} />
-              </div>
-            </div>
-
-            <div className="relative flex items-center justify-between gap-3 overflow-hidden rounded-xl border border-slate-200 bg-white p-4 pl-5 shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
-              <span className="absolute inset-y-0 left-0 w-1.5 bg-blue-500" aria-hidden />
-              <div className="min-w-0">
-                <p className="truncate text-2xs font-semibold uppercase tracking-wide text-slate-500">
-                  Total materials dispatched
-                </p>
-                <p className="tnum mt-1 text-2xl font-bold leading-none text-slate-900">
-                  {qty(totals.dispatched)}
-                  <span className="ml-1 text-sm font-semibold text-slate-400">Nos</span>
-                </p>
-                <p className="mt-1.5 text-2xs text-slate-400">Delivery challans + invoices</p>
-              </div>
-              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-blue-50 text-blue-600 ring-1 ring-blue-100">
-                <Send size={20} />
-              </div>
-            </div>
+            <StatTile
+              icon={<Boxes size={20} />}
+              tone="cyan"
+              label={`Total material stock${view === 'customer' && fCompany ? ` — ${companyName(fCompany)}` : ''}`}
+              value={`${qty(totals.stock)} Nos`}
+              hint="On-hand available stock"
+            />
+            <StatTile
+              icon={<Send size={20} />}
+              tone="blue"
+              label="Total materials dispatched"
+              value={`${qty(totals.dispatched)} Nos`}
+              hint="Delivery challans + invoices"
+            />
           </div>
 
           {/* Material count summary — click a chip to filter by status. */}
@@ -802,7 +784,7 @@ function MaterialDetailFullPage({
       label: 'Received',
       value: summary.received,
       cls: 'text-blue-700',
-      chip: 'border-blue-100 bg-blue-50/60',
+      chip: 'border-blue-200 bg-blue-50',
     },
     {
       label: 'Issued',
@@ -814,8 +796,7 @@ function MaterialDetailFullPage({
       label: 'Current Stock',
       value: summary.current,
       cls: summary.current > 0 ? 'text-emerald-700' : 'text-red-700',
-      chip:
-        summary.current > 0 ? 'border-emerald-100 bg-emerald-50/60' : 'border-red-100 bg-red-50/60',
+      chip: summary.current > 0 ? 'border-green-200 bg-green-50' : 'border-red-200 bg-red-50',
     },
   ]
 

@@ -23,7 +23,15 @@ import { useVendors } from '@/features/vendors/hooks/useVendors'
 import { useSettings } from '@/features/settings/hooks/useSettings'
 import { usePreviewNo } from '@/features/shared/usePreviewNo'
 import { toUserMessage } from '@/lib/api/errors'
-import { currency, fmtDate, fmtDateTime, inRange, todayISO } from '@/lib/format'
+import {
+  currency,
+  fmtDate,
+  fmtDateTime,
+  inRange,
+  momDelta,
+  prevMonthPrefix,
+  todayISO,
+} from '@/lib/format'
 import { downloadXlsx } from '@/lib/xlsx'
 import { PageHeader, ResponsiveTable } from '@/components/common/PageHeader'
 import { StatTile } from '@/components/common/StatTile'
@@ -73,12 +81,14 @@ export function ExpensesPage() {
   // Summary metrics for the current filter selection (§36).
   const stats = useMemo(() => {
     const monthPrefix = todayISO().slice(0, 7)
+    const prevPrefix = prevMonthPrefix()
     const total = rows.reduce((s, e) => s + e.amount, 0)
-    const thisMonth = rows
-      .filter((e) => e.date.slice(0, 7) === monthPrefix)
-      .reduce((s, e) => s + e.amount, 0)
+    const sumFor = (prefix: string) =>
+      rows.filter((e) => e.date.slice(0, 7) === prefix).reduce((s, e) => s + e.amount, 0)
+    const thisMonth = sumFor(monthPrefix)
+    const prevMonth = sumFor(prevPrefix)
     const cats = new Set(rows.map((e) => e.category)).size
-    return { total, thisMonth, count: rows.length, cats }
+    return { total, thisMonth, prevMonth, count: rows.length, cats }
   }, [rows])
 
   async function del(e: Expense) {
@@ -138,6 +148,8 @@ export function ExpensesPage() {
           label="This month"
           value={currency(stats.thisMonth)}
           tone="blue"
+          hint="vs last month"
+          {...momDelta(stats.thisMonth, stats.prevMonth, true)}
         />
         <StatTile icon={<Receipt size={18} />} label="Entries" value={stats.count} tone="slate" />
         <StatTile icon={<Layers size={18} />} label="Categories" value={stats.cats} tone="violet" />

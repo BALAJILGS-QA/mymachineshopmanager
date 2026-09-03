@@ -110,7 +110,9 @@ export function applyAppSeo(opts: {
   description?: string
   keywords?: string
 }): void {
-  const title = `${opts.pageLabel} · ${opts.shopName}`
+  // Brand-led, page-specific tab title (e.g. "MSM | Dashboard"). The shop name
+  // stays in og:site_name below and in the sidebar/login branding.
+  const title = `MSM | ${opts.pageLabel}`
   document.title = title
   upsertMeta('name', 'description', opts.description || opts.shopName)
   if (opts.keywords) upsertMeta('name', 'keywords', opts.keywords)

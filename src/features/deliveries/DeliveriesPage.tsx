@@ -32,7 +32,16 @@ import { useJobs } from '@/features/jobs/hooks/useJobs'
 import { useSourceStock } from '@/features/materials/hooks/useMaterials'
 import { usePreviewNo } from '@/features/shared/usePreviewNo'
 import { toUserMessage } from '@/lib/api/errors'
-import { fmtDate, fmtDateTime, inRange, qty, thisMonthLabel, thisMonthPrefix } from '@/lib/format'
+import {
+  fmtDate,
+  fmtDateTime,
+  inRange,
+  momDelta,
+  prevMonthPrefix,
+  qty,
+  thisMonthLabel,
+  thisMonthPrefix,
+} from '@/lib/format'
 import { uid } from '@/lib/id'
 import { PageHeader, ResponsiveTable } from '@/components/common/PageHeader'
 import { TableSkeleton } from '@/components/common/Skeleton'
@@ -98,8 +107,11 @@ export function DeliveriesPage() {
 
   // Current-month summary tiles.
   const monthPrefix = thisMonthPrefix()
-  const monthStats = useMemo(() => {
-    const inMonth = challans.filter((d) => d.date.slice(0, 7) === monthPrefix)
+  const prevPrefix = prevMonthPrefix()
+  // Challan aggregates for a `yyyy-MM` prefix — reused for the current and
+  // previous month (the month-over-month delta baseline).
+  const statsFor = (prefix: string) => {
+    const inMonth = challans.filter((d) => d.date.slice(0, 7) === prefix)
     let invoiced = 0
     let notInvoiced = 0
     let cancelled = 0
@@ -114,7 +126,17 @@ export function DeliveriesPage() {
       else notInvoiced++
     }
     return { total: inMonth.length, invoiced, notInvoiced, cancelled }
-  }, [challans, invoices, monthPrefix])
+  }
+  const monthStats = useMemo(
+    () => statsFor(monthPrefix),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [challans, invoices, monthPrefix],
+  )
+  const prevStats = useMemo(
+    () => statsFor(prevPrefix),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [challans, invoices, prevPrefix],
+  )
 
   // Total quantity dispatched per material across the filtered challans (company
   // + date range), excluding cancelled ones (their stock was restored).
@@ -193,6 +215,7 @@ export function DeliveriesPage() {
     <div>
       <PageHeader
         title="Delivery Challans"
+        subtitle="Dispatch documents and their invoicing status"
         actions={
           <button className="btn-primary" onClick={() => setEditing(null)}>
             <Plus size={16} /> New Challan
@@ -209,24 +232,32 @@ export function DeliveriesPage() {
           label="Challans"
           value={monthStats.total}
           tone="brand"
+          hint="vs last month"
+          {...momDelta(monthStats.total, prevStats.total)}
         />
         <StatTile
           icon={<FileCheck2 size={18} />}
           label="Invoiced"
           value={monthStats.invoiced}
           tone="green"
+          hint="vs last month"
+          {...momDelta(monthStats.invoiced, prevStats.invoiced)}
         />
         <StatTile
           icon={<FileClock size={18} />}
           label="Not invoiced"
           value={monthStats.notInvoiced}
           tone="amber"
+          hint="vs last month"
+          {...momDelta(monthStats.notInvoiced, prevStats.notInvoiced, true)}
         />
         <StatTile
           icon={<Ban size={18} />}
           label="Cancelled"
           value={monthStats.cancelled}
           tone="red"
+          hint="vs last month"
+          {...momDelta(monthStats.cancelled, prevStats.cancelled, true)}
         />
       </div>
 

@@ -14,6 +14,8 @@ import {
   Building2,
   ShieldCheck,
   Users,
+  Landmark,
+  Warehouse,
   Settings as SettingsIcon,
   type LucideIcon,
 } from 'lucide-react'
@@ -26,6 +28,11 @@ export interface NavItem {
   superAdmin?: boolean // visible only to the super admin
 }
 
+// Per-module semantic icon accent (inactive sidebar state only — the active
+// state is always unified orange + white). The token maps to concrete classes
+// in the app shell so colours stay centralised (no scattered hex).
+export type MenuAccent = 'blue' | 'orange' | 'emerald' | 'violet' | 'amber' | 'cyan' | 'slate'
+
 // A titled section of the sidebar. An untitled group renders as standalone
 // links with no header (Dashboard, Sales). When `to` is set the title is a
 // clickable link to that group's hub landing page (which shows its items as
@@ -33,6 +40,8 @@ export interface NavItem {
 export interface NavGroup {
   title?: string
   to?: string
+  icon?: LucideIcon // parent-module icon shown in the sidebar accordion header
+  accent?: MenuAccent // per-module inactive icon colour
   items: NavItem[]
 }
 
@@ -41,21 +50,31 @@ export interface NavGroup {
 // module; Materials & Stock sits with Production, Purchase Management with
 // Accounts & Finance.
 export const NAV_GROUPS: NavGroup[] = [
-  { items: [{ to: '/app', label: 'Dashboard', icon: LayoutDashboard, short: 'Home' }] },
+  {
+    accent: 'blue',
+    items: [{ to: '/app', label: 'Dashboard', icon: LayoutDashboard, short: 'Home' }],
+  },
   {
     title: 'Production Planning',
     to: '/app/production-planning',
+    icon: Factory,
+    accent: 'orange',
     items: [
       { to: '/app/jobs', label: 'Job Orders', icon: ClipboardList, short: 'Jobs' },
       { to: '/app/production', label: 'Production', icon: Factory, short: 'Floor' },
       { to: '/app/materials', label: 'Materials & Stock', icon: Boxes, short: 'Stock' },
     ],
   },
-  { items: [{ to: '/app/sales', label: 'Sales', icon: TrendingUp, short: 'Sales' }] },
-  { items: [{ to: '/app/crm', label: 'CRM', icon: Users, short: 'CRM' }] },
+  {
+    accent: 'emerald',
+    items: [{ to: '/app/sales', label: 'Sales', icon: TrendingUp, short: 'Sales' }],
+  },
+  { accent: 'violet', items: [{ to: '/app/crm', label: 'CRM', icon: Users, short: 'CRM' }] },
   {
     title: 'Accounts & Finance',
     to: '/app/accounts',
+    icon: Landmark,
+    accent: 'amber',
     items: [
       { to: '/app/expenses', label: 'Purchase Management', icon: ShoppingCart, short: 'Purchase' },
       { to: '/app/deliveries', label: 'Delivery Challan', icon: Truck, short: 'Challan' },
@@ -66,6 +85,8 @@ export const NAV_GROUPS: NavGroup[] = [
   {
     title: 'Supply Chain',
     to: '/app/supply-chain',
+    icon: Warehouse,
+    accent: 'cyan',
     items: [
       { to: '/app/vendors', label: 'Vendors', icon: Handshake, short: 'Vendors' },
       {
@@ -79,6 +100,8 @@ export const NAV_GROUPS: NavGroup[] = [
   {
     title: 'Configuration & Settings',
     to: '/app/configuration',
+    icon: SettingsIcon,
+    accent: 'slate',
     items: [
       { to: '/app/companies', label: 'Companies', icon: Building2, short: 'Company' },
       {

@@ -10,6 +10,7 @@ import { useEffect, useState, type ReactNode } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import {
+  ChevronDown,
   ChevronRight,
   LogOut,
   Menu,
@@ -17,6 +18,7 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   X,
+  type LucideIcon,
 } from 'lucide-react'
 import { clsx } from 'clsx'
 import {
@@ -25,6 +27,7 @@ import {
   MOBILE_PRIMARY,
   moduleGroupForPath,
   type NavGroup,
+  type MenuAccent,
 } from '@/components/layout/nav'
 import { useAuth } from '@/features/auth/auth'
 import { useSettings } from '@/features/settings/hooks/useSettings'
@@ -32,14 +35,67 @@ import { useUsers } from '@/features/approvals/hooks/useUsers'
 import { DEFAULT_SETTINGS } from '@/data/seed'
 import { applyAppSeo, applyFavicon } from '@/lib/seo'
 
-// Charcoal rail styling (MSM rebrand): light text on charcoal, restrained
-// orange reserved for the active state — soft orange tint, orange text and an
-// orange left indicator bar. Inactive links stay neutral until hovered.
+// Charcoal rail styling (MSM rebrand). Active item: solid industrial orange
+// (#fb923c = brand-400) with bright-white text + icon for unmistakable
+// "current page" contrast. Inactive: soft-white text with muted icons on the
+// #18181B rail; hover fades in a subtle transparent-orange wash, white text and
+// an orange icon. 150ms colour transition.
 const NAV_BASE =
-  'relative flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors'
-const NAV_ACTIVE =
-  'bg-brand-600/15 text-brand-400 font-semibold before:absolute before:left-0 before:top-1/2 before:h-5 before:w-1 before:-translate-y-1/2 before:rounded-r-full before:bg-brand-500'
-const NAV_INACTIVE = 'text-charcoal-100/70 hover:bg-white/5 hover:text-white'
+  'group relative flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm transition-colors duration-150'
+const NAV_ACTIVE = 'bg-brand-400 font-semibold text-white'
+const NAV_INACTIVE = 'font-medium text-zinc-100 hover:bg-brand-400/[0.12] hover:text-white'
+
+// Per-module inactive icon accent (centralised design tokens — §14). Each token
+// pairs a soft 10%-tint chip background with its accent icon colour. The ACTIVE
+// state ignores this entirely (unified orange row + white icon), so colour never
+// competes with the current-page signal.
+const MENU_ACCENT: Record<MenuAccent, string> = {
+  blue: 'bg-blue-400/10 text-blue-400',
+  orange: 'bg-brand-400/10 text-brand-400',
+  emerald: 'bg-emerald-400/10 text-emerald-400',
+  violet: 'bg-violet-400/10 text-violet-400',
+  amber: 'bg-amber-400/10 text-amber-400',
+  cyan: 'bg-cyan-400/10 text-cyan-400',
+  slate: 'bg-slate-400/10 text-slate-400',
+}
+
+// Main-menu icon in a subtle 32px rounded chip. Inactive = module accent colour;
+// active = white icon on a translucent-white chip (reads clearly on the orange
+// active row). The accent icon colour is preserved on hover (§6).
+function MenuIcon({
+  Icon,
+  accent,
+  active,
+  size = 18,
+}: {
+  Icon: LucideIcon
+  accent?: MenuAccent
+  active: boolean
+  size?: number
+}) {
+  return (
+    <span
+      className={clsx(
+        'flex h-8 w-8 shrink-0 items-center justify-center rounded-lg transition-colors',
+        active ? 'bg-white/20 text-white' : MENU_ACCENT[accent ?? 'slate'],
+      )}
+    >
+      <Icon size={size} strokeWidth={1.9} />
+    </span>
+  )
+}
+
+// Submenu (child) item styling — deliberately SUBTLER than the solid-orange
+// active parent: muted slate icons + light text, shifting to orange when active
+// (soft orange wash + orange text/icon). Kept legible against the connector rail.
+const CHILD_BASE =
+  'group relative flex items-center gap-2.5 rounded-lg py-1.5 pl-2.5 pr-3 text-sm transition-colors duration-150'
+const CHILD_ACTIVE = 'bg-brand-400/[0.10] font-semibold text-brand-400'
+const CHILD_INACTIVE = 'font-medium text-zinc-300 hover:bg-white/5 hover:text-white'
+
+function childIconClass(active: boolean): string {
+  return clsx('shrink-0', active ? 'text-brand-400' : 'text-slate-400 group-hover:text-brand-400')
+}
 
 // Active-link matching mirrors the TanStack config: the Dashboard (/app) matches
 // exactly; every other portal link matches its path prefix.
@@ -71,31 +127,103 @@ function SidebarLinks({
   collapsed?: boolean
   onNavigate?: () => void
 }) {
+  // Which parent modules are expanded. The module that owns the current route is
+  // always kept open (so the active child is visible); users can toggle others.
+  // Route drives active state — the open set is only extra user affordance.
+  const [open, setOpen] = useState<Set<string>>(
+    () => new Set(activeGroupTitle ? [activeGroupTitle] : []),
+  )
+  useEffect(() => {
+    if (!activeGroupTitle) return
+    setOpen((prev) => (prev.has(activeGroupTitle) ? prev : new Set(prev).add(activeGroupTitle)))
+  }, [activeGroupTitle])
+  const toggle = (title: string) =>
+    setOpen((prev) => {
+      const next = new Set(prev)
+      if (next.has(title)) next.delete(title)
+      else next.add(title)
+      return next
+    })
+
   return (
     <nav className={clsx('flex-1 space-y-0.5 overflow-y-auto py-3', collapsed ? 'px-2' : 'px-3')}>
       {groups.map((group) => {
-        // Titled groups collapse to a single top-level link to their hub page.
+        // ---- Titled parent module → expandable submenu accordion ----
         if (group.title) {
-          const GroupIcon = group.items[0]?.icon
+          const ParentIcon = group.icon ?? group.items[0]?.icon
           const active = group.title === activeGroupTitle
+          const groupPending = group.items.some((i) => i.to === '/app/approvals') ? pendingCount : 0
+
+          // Collapsed rail has no room for a submenu: the parent icon links to
+          // the module hub (which lists its pages), keeping every page reachable.
+          if (collapsed) {
+            return (
+              <Link
+                key={group.title}
+                href={group.to as string}
+                onClick={onNavigate}
+                title={group.title}
+                aria-label={group.title}
+                className={clsx(NAV_BASE, 'justify-center', active ? NAV_ACTIVE : NAV_INACTIVE)}
+              >
+                {ParentIcon && <MenuIcon Icon={ParentIcon} accent={group.accent} active={active} />}
+                {groupPending > 0 && (
+                  <span className="absolute right-1 top-1 h-2 w-2 rounded-full bg-amber-500" />
+                )}
+              </Link>
+            )
+          }
+
+          const expanded = open.has(group.title)
           return (
-            <Link
-              key={group.title}
-              href={group.to as string}
-              onClick={onNavigate}
-              title={collapsed ? group.title : undefined}
-              className={clsx(
-                NAV_BASE,
-                active ? NAV_ACTIVE : NAV_INACTIVE,
-                collapsed && 'justify-center',
+            <div key={group.title}>
+              <button
+                type="button"
+                onClick={() => toggle(group.title as string)}
+                aria-expanded={expanded}
+                title={group.title}
+                className={clsx(NAV_BASE, 'w-full', active ? NAV_ACTIVE : NAV_INACTIVE)}
+              >
+                {ParentIcon && <MenuIcon Icon={ParentIcon} accent={group.accent} active={active} />}
+                <span className="flex-1 truncate text-left">{group.title}</span>
+                {groupPending > 0 && !expanded && <PendingPill count={groupPending} />}
+                <ChevronDown
+                  size={16}
+                  aria-hidden
+                  className={clsx(
+                    'shrink-0 transition-transform duration-150',
+                    expanded && 'rotate-180',
+                    active ? 'text-white' : 'text-zinc-400 group-hover:text-white',
+                  )}
+                />
+              </button>
+              {expanded && (
+                <div className="ml-[1.375rem] mt-1 space-y-0.5 border-l border-zinc-700/70 pl-3">
+                  {group.items.map((item) => {
+                    const to = item.to as string
+                    const childActive = isLinkActive(pathname, to)
+                    return (
+                      <Link
+                        key={to}
+                        href={to}
+                        onClick={onNavigate}
+                        aria-current={childActive ? 'page' : undefined}
+                        className={clsx(CHILD_BASE, childActive ? CHILD_ACTIVE : CHILD_INACTIVE)}
+                      >
+                        <item.icon size={16} className={childIconClass(childActive)} />
+                        <span className="flex-1 truncate">{item.label}</span>
+                        {to === '/app/approvals' && pendingCount > 0 && (
+                          <PendingPill count={pendingCount} />
+                        )}
+                      </Link>
+                    )
+                  })}
+                </div>
               )}
-            >
-              {GroupIcon && <GroupIcon size={18} className="shrink-0" />}
-              {!collapsed && <span className="flex-1 truncate">{group.title}</span>}
-            </Link>
+            </div>
           )
         }
-        // Untitled groups (Dashboard, Sales) stay as standalone links.
+        // ---- Untitled group → standalone top-level link (Dashboard, Sales, CRM) ----
         return group.items.map((item) => {
           const to = item.to as string
           const active = isLinkActive(pathname, to)
@@ -105,17 +233,15 @@ function SidebarLinks({
               href={to}
               onClick={onNavigate}
               title={collapsed ? item.label : undefined}
+              aria-current={active ? 'page' : undefined}
               className={clsx(
                 NAV_BASE,
                 collapsed && 'justify-center',
                 active ? NAV_ACTIVE : NAV_INACTIVE,
               )}
             >
-              <item.icon size={18} className="shrink-0" />
+              <MenuIcon Icon={item.icon} accent={group.accent} active={active} />
               {!collapsed && <span className="flex-1 truncate">{item.label}</span>}
-              {!collapsed && to === '/app/approvals' && pendingCount > 0 && (
-                <PendingPill count={pendingCount} />
-              )}
             </Link>
           )
         })
@@ -180,8 +306,11 @@ export function AppShell({ children }: { children: ReactNode }) {
       n.to === '/app' ? pathname === '/app' : pathname.startsWith((n.to as string) ?? ''),
     )?.label ?? 'Portal'
 
+  // The module a route belongs to — drives the breadcrumb parent and the
+  // sidebar's active/expanded parent. Sub-module navigation now lives in the
+  // sidebar accordion, so the old in-module tab bar has been removed to avoid
+  // duplicating navigation (§11).
   const activeGroup = moduleGroupForPath(pathname)
-  const tabItems = (activeGroup?.items ?? []).filter((n) => !n.superAdmin || isSuperAdmin)
 
   useEffect(() => {
     applyAppSeo({
@@ -201,7 +330,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       {/* Desktop sidebar — charcoal rail (MSM rebrand) */}
       <aside
         className={clsx(
-          'fixed inset-y-0 left-0 z-30 hidden flex-col border-r border-charcoal-800 bg-charcoal-900 transition-[width] duration-200 lg:flex',
+          'fixed inset-y-0 left-0 z-30 hidden flex-col border-r border-charcoal-800 bg-[#18181B] transition-[width] duration-200 lg:flex',
           collapsed ? 'w-16' : 'w-60',
         )}
       >
@@ -234,7 +363,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       {drawerOpen && (
         <div className="fixed inset-0 z-40 lg:hidden">
           <div className="absolute inset-0 bg-slate-900/40" onClick={() => setDrawerOpen(false)} />
-          <aside className="absolute inset-y-0 left-0 flex w-64 flex-col bg-charcoal-900 shadow-xl">
+          <aside className="absolute inset-y-0 left-0 flex w-64 flex-col bg-[#18181B] shadow-xl">
             <div className="flex items-center justify-between">
               <Brand />
               <button
@@ -306,38 +435,6 @@ export function AppShell({ children }: { children: ReactNode }) {
           </button>
         </div>
       </header>
-
-      {/* In-module tabs */}
-      {activeGroup && tabItems.length > 0 && (
-        <div className={clsx('border-b border-slate-200 bg-white', ml)}>
-          <nav className="flex gap-1 overflow-x-auto px-4 lg:px-8" aria-label={activeGroup.title}>
-            {tabItems.map((item) => {
-              const to = item.to as string
-              const active = isLinkActive(pathname, to)
-              return (
-                <Link
-                  key={to}
-                  href={to}
-                  className={clsx(
-                    '-mb-px flex items-center gap-2 whitespace-nowrap border-b-2 px-3 py-2.5 text-sm font-medium transition-colors',
-                    active
-                      ? 'border-brand-600 text-brand-700'
-                      : 'border-transparent text-slate-500 hover:border-slate-300 hover:text-slate-800',
-                  )}
-                >
-                  <item.icon size={16} />
-                  <span>{item.label}</span>
-                  {to === '/app/approvals' && pendingCount > 0 && (
-                    <span className="rounded-full bg-amber-500 px-1.5 py-0.5 text-2xs font-bold text-white">
-                      {pendingCount}
-                    </span>
-                  )}
-                </Link>
-              )
-            })}
-          </nav>
-        </div>
-      )}
 
       {/* Main content */}
       <main className={clsx('px-4 pb-24 pt-4 lg:px-8 lg:pb-10', ml)}>

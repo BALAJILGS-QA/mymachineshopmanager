@@ -4,7 +4,14 @@ import type { Payment } from '@/types'
 import { usePayments, useDeletePayment } from './hooks/usePayments'
 import { useInvoices } from '@/features/invoices/hooks/useInvoices'
 import { toUserMessage } from '@/lib/api/errors'
-import { currency, fmtDate, inRange } from '@/lib/format'
+import {
+  currency,
+  fmtDate,
+  inRange,
+  momDelta,
+  prevMonthPrefix,
+  thisMonthPrefix,
+} from '@/lib/format'
 import { downloadXlsx } from '@/lib/xlsx'
 import { PageHeader, ResponsiveTable } from '@/components/common/PageHeader'
 import { TableSkeleton } from '@/components/common/Skeleton'
@@ -66,6 +73,26 @@ export function PaymentsPage() {
     return { count: rows.length, total, advance, companies: companies.size }
   }, [rows])
 
+  // Month-over-month trend signal over ALL payments (independent of the table
+  // filters) — a headline "vs last month" indicator for the KPI tiles.
+  const mom = useMemo(() => {
+    const monthPrefix = thisMonthPrefix()
+    const prevPrefix = prevMonthPrefix()
+    const acc = (prefix: string) => {
+      let total = 0
+      let advance = 0
+      let count = 0
+      for (const p of payments) {
+        if (p.date.slice(0, 7) !== prefix) continue
+        count += 1
+        total += p.amount
+        if (p.isAdvance) advance += p.amount
+      }
+      return { total, advance, count }
+    }
+    return { cur: acc(monthPrefix), prev: acc(prevPrefix) }
+  }, [payments])
+
   async function del(id: string) {
     const ok = await confirm({
       message: 'Delete this payment? Invoice outstanding will be recalculated.',
@@ -102,6 +129,7 @@ export function PaymentsPage() {
     <div>
       <PageHeader
         title="Payments"
+        subtitle="Customer receipts and advances against invoices"
         actions={
           <>
             <button className="btn-secondary" onClick={exportExcel}>
@@ -115,12 +143,21 @@ export function PaymentsPage() {
       />
 
       <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <StatTile icon={<Wallet size={18} />} label="Payments" value={stats.count} tone="brand" />
+        <StatTile
+          icon={<Wallet size={18} />}
+          label="Payments"
+          value={stats.count}
+          tone="brand"
+          hint="vs last month"
+          {...momDelta(mom.cur.count, mom.prev.count)}
+        />
         <StatTile
           icon={<IndianRupee size={18} />}
           label="Total received"
           value={currency(stats.total)}
           tone="green"
+          hint="vs last month"
+          {...momDelta(mom.cur.total, mom.prev.total)}
         />
         <StatTile
           icon={<Building2 size={18} />}
@@ -133,6 +170,8 @@ export function PaymentsPage() {
           label="Advances"
           value={currency(stats.advance)}
           tone="violet"
+          hint="vs last month"
+          {...momDelta(mom.cur.advance, mom.prev.advance)}
         />
       </div>
 

@@ -112,18 +112,19 @@ export function SubcontractingPage() {
           icon={<Factory size={18} />}
           label="Subcontracts"
           value={orders.length}
-          tone="brand"
+          tone="blue"
         />
         <StatTile
           icon={<Truck size={18} />}
           label="Open / in progress"
           value={totals.open}
-          tone="amber"
+          tone="purple"
         />
         <StatTile
           icon={<ArrowLeftRight size={18} />}
           label="Qty at vendors"
           value={qty(totals.atVendor)}
+          tone="cyan"
         />
       </div>
 

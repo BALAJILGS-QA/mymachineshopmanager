@@ -19,7 +19,15 @@ import { useInvoices, useSetInvoiceStatus } from './hooks/useInvoices'
 import { usePayments } from '@/features/payments/hooks/usePayments'
 import { toUserMessage } from '@/lib/api/errors'
 import { computeInvoice } from '@/data/computations'
-import { currency, fmtDate, inRange, thisMonthLabel, thisMonthPrefix } from '@/lib/format'
+import {
+  currency,
+  fmtDate,
+  inRange,
+  momDelta,
+  prevMonthPrefix,
+  thisMonthLabel,
+  thisMonthPrefix,
+} from '@/lib/format'
 import { downloadXlsx } from '@/lib/xlsx'
 import { PageHeader, ResponsiveTable } from '@/components/common/PageHeader'
 import { TableSkeleton } from '@/components/common/Skeleton'
@@ -70,9 +78,12 @@ export function InvoicesPage() {
 
   // Current-month summary tiles (excludes cancelled invoices from money totals).
   const monthPrefix = thisMonthPrefix()
-  const monthStats = useMemo(() => {
+  const prevPrefix = prevMonthPrefix()
+  // Aggregates for a given `yyyy-MM` prefix — reused for the current month and
+  // the previous month (the month-over-month delta baseline).
+  const statsFor = (prefix: string) => {
     const inMonth = invoices.filter(
-      (i) => i.date.slice(0, 7) === monthPrefix && i.status !== 'Cancelled',
+      (i) => i.date.slice(0, 7) === prefix && i.status !== 'Cancelled',
     )
     let total = 0
     let paid = 0
@@ -84,7 +95,17 @@ export function InvoicesPage() {
       outstanding += c.outstanding
     }
     return { count: inMonth.length, total, paid, outstanding }
-  }, [invoices, payments, monthPrefix])
+  }
+  const monthStats = useMemo(
+    () => statsFor(monthPrefix),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [invoices, payments, monthPrefix],
+  )
+  const prevStats = useMemo(
+    () => statsFor(prevPrefix),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [invoices, payments, prevPrefix],
+  )
 
   // GST summary over the filtered rows (excludes cancelled invoices).
   const gst = useMemo(() => {
@@ -173,6 +194,7 @@ export function InvoicesPage() {
     <div>
       <PageHeader
         title="Invoices"
+        subtitle="GST invoices, payments and outstanding balances by company"
         actions={
           <>
             <button className="btn-secondary" onClick={exportExcel}>
@@ -194,24 +216,32 @@ export function InvoicesPage() {
           label="Invoices"
           value={monthStats.count}
           tone="brand"
+          hint="vs last month"
+          {...momDelta(monthStats.count, prevStats.count)}
         />
         <StatTile
           icon={<IndianRupee size={18} />}
           label="Invoiced value"
           value={currency(monthStats.total)}
           tone="blue"
+          hint="vs last month"
+          {...momDelta(monthStats.total, prevStats.total)}
         />
         <StatTile
           icon={<Wallet size={18} />}
           label="Received"
           value={currency(monthStats.paid)}
           tone="green"
+          hint="vs last month"
+          {...momDelta(monthStats.paid, prevStats.paid)}
         />
         <StatTile
           icon={<Clock size={18} />}
           label="Outstanding"
           value={currency(monthStats.outstanding)}
           tone="amber"
+          hint="vs last month"
+          {...momDelta(monthStats.outstanding, prevStats.outstanding, true)}
         />
       </div>
 

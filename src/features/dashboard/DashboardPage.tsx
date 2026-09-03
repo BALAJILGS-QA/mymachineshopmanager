@@ -6,15 +6,9 @@ import {
   Boxes,
   ClipboardList,
   Factory,
-  FileText,
-  IndianRupee,
   PackageCheck,
-  PackageX,
-  Percent,
   Receipt,
   Send,
-  Wallet,
-  CheckCircle2,
 } from 'lucide-react'
 import { format, startOfMonth } from 'date-fns'
 import {
@@ -25,9 +19,11 @@ import {
   type StockDb,
 } from '@/data/computations'
 import { currency, fmtDate, qty } from '@/lib/format'
+import type { JobStatus } from '@/types'
 import { Card, Select } from '@/components/ui/primitives'
 import { PageHeader } from '@/components/common/PageHeader'
 import { WorkflowStepper } from '@/components/common/WorkflowStepper'
+import { BigStat, PanelCard, SummaryRow } from '@/components/common/SummaryPanels'
 import { JobStatusBadge, PriorityBadge } from '@/components/common/status'
 import { useCompanyName, useMaterialName } from '@/features/shared/lookups'
 import { useJobs } from '@/features/jobs/hooks/useJobs'
@@ -243,6 +239,36 @@ export function DashboardPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [jobsF, materials, stamp, company])
 
+  // Job-order status breakdown (reference "Product Details" colored counts).
+  const jobStatus = useMemo(() => {
+    const c = (s: JobStatus) => jobsF.filter((j) => j.status === s).length
+    return {
+      total: jobsF.length,
+      pending: c('Pending'),
+      inProgress: c('In Progress'),
+      onHold: c('On Hold'),
+      completed: c('Completed'),
+      cancelled: c('Cancelled'),
+    }
+  }, [jobsF])
+
+  // Stock health for the gauge donut (reference "Active Items 71%").
+  const stockHealth = useMemo(() => {
+    let healthy = 0
+    let low = 0
+    let out = 0
+    materials.forEach((m) => {
+      const bal = materialStock(stockDb, m.id, company || undefined).balance
+      if (bal <= 0) out += 1
+      else if (m.reorderLevel !== undefined && bal <= m.reorderLevel) low += 1
+      else healthy += 1
+    })
+    const total = materials.length
+    const pct = total ? Math.round((healthy / total) * 100) : 0
+    return { healthy, low, out, total, pct }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [materials, stamp, company])
+
   return (
     <div>
       <PageHeader
@@ -306,71 +332,114 @@ export function DashboardPage() {
         ]}
       />
 
-      {/* KPI cards */}
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-4">
-        <Kpi
-          icon={FileText}
-          tone="blue"
-          label="Invoiced (month)"
-          value={currency(kpi.invoicedThisMonth)}
-          to="/app/invoices"
-        />
-        <Kpi
-          icon={Percent}
-          tone="violet"
-          label="GST (month)"
-          value={currency(kpi.gstThisMonth)}
-          to="/app/reports"
-        />
-        <Kpi
-          icon={Wallet}
-          tone="green"
-          label="Payments (month)"
-          value={currency(kpi.paymentsThisMonth)}
-          to="/app/payments"
-        />
-        <Kpi
-          icon={IndianRupee}
-          tone="red"
-          label="Pending Payments"
-          value={currency(kpi.pending)}
-          to="/app/invoices"
-        />
-        <Kpi
-          icon={Receipt}
-          tone="amber"
-          label="Expenses (month)"
-          value={currency(kpi.expensesThisMonth)}
-          to="/app/expenses"
-        />
-        <Kpi
-          icon={ClipboardList}
-          tone="amber"
-          label="Open Job Orders"
-          value={String(kpi.open)}
-          to="/app/jobs"
-        />
-        <Kpi
-          icon={Factory}
-          tone="blue"
-          label="In Production"
-          value={String(kpi.inProd)}
-          to="/app/production"
-        />
-        <Kpi
-          icon={PackageX}
-          tone="violet"
-          label="Raw Material Value"
-          value={currency(kpi.rawValue)}
-          to="/app/materials"
-        />
-        <Kpi
-          icon={CheckCircle2}
-          tone="green"
-          label="Net (month)"
-          value={currency(kpi.paymentsThisMonth - kpi.expensesThisMonth)}
-          to="/app/reports"
-        />
+      {/* Activity + financial summary (command-center glance) */}
+      <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
+        <PanelCard title="Shop-floor activity" to="/app/jobs" className="lg:col-span-2">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <BigStat label="Open Jobs" value={kpi.open} tone="amber" to="/app/jobs" />
+            <BigStat label="In Production" value={kpi.inProd} tone="violet" to="/app/production" />
+            <BigStat
+              label="Ready to Dispatch"
+              value={flow.ready}
+              tone="green"
+              to="/app/production"
+            />
+            <BigStat label="Dispatched" value={flow.dispatched} tone="blue" to="/app/deliveries" />
+          </div>
+        </PanelCard>
+        <PanelCard title="Financial summary" to="/app/reports">
+          <div className="divide-y divide-slate-100">
+            <SummaryRow
+              label="Invoiced (month)"
+              value={currency(kpi.invoicedThisMonth)}
+              tone="blue"
+              to="/app/invoices"
+            />
+            <SummaryRow
+              label="GST (month)"
+              value={currency(kpi.gstThisMonth)}
+              tone="violet"
+              to="/app/reports"
+            />
+            <SummaryRow
+              label="Payments (month)"
+              value={currency(kpi.paymentsThisMonth)}
+              tone="green"
+              to="/app/payments"
+            />
+            <SummaryRow
+              label="Pending payments"
+              value={currency(kpi.pending)}
+              tone="red"
+              to="/app/invoices"
+            />
+            <SummaryRow
+              label="Net (month)"
+              value={currency(kpi.paymentsThisMonth - kpi.expensesThisMonth)}
+              tone={kpi.paymentsThisMonth - kpi.expensesThisMonth < 0 ? 'red' : 'green'}
+              to="/app/reports"
+            />
+          </div>
+        </PanelCard>
+      </div>
+
+      {/* Job status + stock health + purchase (reference-style detail panels) */}
+      <div className="mt-3 grid grid-cols-1 gap-3 lg:grid-cols-3">
+        <PanelCard title="Job orders by status" to="/app/jobs">
+          <div className="divide-y divide-slate-100">
+            <SummaryRow label="Pending" value={jobStatus.pending} tone="amber" to="/app/jobs" />
+            <SummaryRow
+              label="In progress"
+              value={jobStatus.inProgress}
+              tone="blue"
+              to="/app/production"
+            />
+            <SummaryRow label="On hold" value={jobStatus.onHold} tone="violet" to="/app/jobs" />
+            <SummaryRow label="Completed" value={jobStatus.completed} tone="green" to="/app/jobs" />
+            <SummaryRow label="Cancelled" value={jobStatus.cancelled} tone="red" to="/app/jobs" />
+          </div>
+        </PanelCard>
+        <PanelCard title="Stock health" to="/app/materials">
+          <Gauge pct={stockHealth.pct} />
+          <div className="mt-3 divide-y divide-slate-100">
+            <SummaryRow label="Healthy" value={stockHealth.healthy} tone="green" />
+            <SummaryRow
+              label="Low stock"
+              value={stockHealth.low}
+              tone="amber"
+              to="/app/materials"
+            />
+            <SummaryRow
+              label="Out of stock"
+              value={stockHealth.out}
+              tone="red"
+              to="/app/materials"
+            />
+          </div>
+        </PanelCard>
+        <PanelCard title="Purchase &amp; raw material" to="/app/expenses">
+          <BigStat
+            label="Expenses (month)"
+            value={currency(kpi.expensesThisMonth)}
+            tone="amber"
+            icon={<Receipt size={20} />}
+            to="/app/expenses"
+          />
+          <div className="mt-3 divide-y divide-slate-100">
+            <SummaryRow
+              label="Raw material value"
+              value={currency(kpi.rawValue)}
+              tone="violet"
+              to="/app/materials"
+            />
+            <SummaryRow
+              label="Materials in stock"
+              value={flow.inStock}
+              tone="brand"
+              to="/app/materials"
+            />
+          </div>
+        </PanelCard>
       </div>
 
       {/* Charts row 1 */}
@@ -551,45 +620,38 @@ export function DashboardPage() {
   )
 }
 
-const TONES: Record<string, string> = {
-  amber: 'bg-amber-50 text-amber-600',
-  blue: 'bg-blue-50 text-blue-600',
-  green: 'bg-emerald-50 text-emerald-600',
-  violet: 'bg-violet-50 text-violet-600',
-  red: 'bg-red-50 text-red-600',
-  slate: 'bg-slate-100 text-slate-600',
-}
-
-function Kpi({
-  icon: Icon,
-  label,
-  value,
-  tone,
-  to,
-}: {
-  icon: typeof ClipboardList
-  label: string
-  value: string
-  tone: string
-  to: string
-}) {
+// Stock-health gauge donut with a centred percentage (reference "Active Items").
+function Gauge({ pct }: { pct: number }) {
+  const data = [
+    { name: 'In stock', value: pct },
+    { name: 'Rest', value: 100 - pct },
+  ]
   return (
-    <AppLink
-      to={to}
-      className="card flex items-center justify-between gap-3 p-4 transition-colors hover:border-slate-300 hover:bg-slate-50/60"
-    >
-      <div className="min-w-0">
-        <p className="truncate text-2xs font-medium uppercase tracking-wide text-slate-500">
-          {label}
-        </p>
-        <p className="tnum mt-1 truncate text-xl font-bold leading-none text-slate-900">{value}</p>
+    <div className="relative mx-auto h-40 w-40">
+      <ResponsiveContainer width="100%" height="100%">
+        <PieChart>
+          <Pie
+            data={data}
+            dataKey="value"
+            innerRadius={54}
+            outerRadius={70}
+            startAngle={90}
+            endAngle={-270}
+            stroke="none"
+            isAnimationActive={false}
+          >
+            <Cell fill="#16a34a" />
+            <Cell fill="#eef2f7" />
+          </Pie>
+        </PieChart>
+      </ResponsiveContainer>
+      <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
+        <span className="tnum text-2xl font-bold leading-none text-slate-900">{pct}%</span>
+        <span className="mt-1 text-2xs font-medium uppercase tracking-wide text-slate-500">
+          in stock
+        </span>
       </div>
-      <div
-        className={`inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg ${TONES[tone]}`}
-      >
-        <Icon size={18} />
-      </div>
-    </AppLink>
+    </div>
   )
 }
 
