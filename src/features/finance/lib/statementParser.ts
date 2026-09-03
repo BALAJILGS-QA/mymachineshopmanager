@@ -371,7 +371,10 @@ const iso = (d: number, m: number, y: number) =>
   `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`
 
 // -- Main entry ----------------------------------------------------------------
-export async function parseStatement(file: File): Promise<ParseResult> {
+export async function parseStatement(
+  file: File,
+  onProgress?: (msg: string) => void,
+): Promise<ParseResult> {
   const name = file.name.toLowerCase()
   const buf = await file.arrayBuffer()
   let grid: string[][]
@@ -380,38 +383,36 @@ export async function parseStatement(file: File): Promise<ParseResult> {
     grid = await parseXlsx(buf)
     parserType = 'xlsx'
   } else if (name.endsWith('.pdf')) {
-    // Dynamic import keeps pdfjs out of the SSR/main bundle.
+    // Dynamic import keeps pdfjs/tesseract out of the SSR/main bundle.
     const { pdfToGrid } = await import('./pdfText')
     grid = await pdfToGrid(buf)
     parserType = 'pdf'
-    if (grid.length === 0) {
-      return {
-        parserType,
-        rows: [],
-        totalRows: 0,
-        headerRow: 0,
-        columnMap: {},
-        parserConfidence: 0,
-        warnings: [
-          'No text layer found. This looks like a scanned/image PDF — OCR is not performed; please upload a CSV/Excel statement or a text-based PDF.',
-        ],
-      }
-    }
   } else {
     grid = parseCsv(new TextDecoder().decode(buf))
     parserType = 'csv'
   }
 
   const warnings: string[] = []
-  const { headerRow, map } = detectColumns(grid)
+  let ocrUsed = false
+  let { headerRow, map } = detectColumns(grid)
+
+  // PDF with no detectable table (no text layer, or the table is a scanned/
+  // screenshot image) → OCR the rendered pages and try again.
+  if (parserType === 'pdf' && Object.keys(map).length === 0) {
+    onProgress?.('No selectable text found — running OCR on the statement image…')
+    const { pdfOcrToGrid } = await import('./pdfText')
+    const ocrGrid = await pdfOcrToGrid(buf, onProgress)
+    if (ocrGrid.length) {
+      grid = ocrGrid
+      ocrUsed = true
+      ;({ headerRow, map } = detectColumns(grid))
+    }
+  }
+
   if (Object.keys(map).length === 0) {
-    // A text layer exists but no transaction table was found. The commonest
-    // cause is a statement whose table is a scanned/screenshot IMAGE (e.g. a
-    // page printed/exported from a chat or a photo), which has no selectable
-    // table text to read. Guide the user to the original download.
     const hint =
       parserType === 'pdf'
-        ? 'Could not find a transaction table in this PDF. If the statement is a scanned page or screenshot image, its rows are not selectable text — download the original statement from your bank as CSV/Excel or a text-based PDF and upload that.'
+        ? 'Could not read a transaction table from this PDF, even with OCR. The image may be low-resolution or not a statement — try the bank’s CSV/Excel export, or a clearer/original PDF.'
         : 'Could not detect statement columns — the file has no recognisable Date / Debit / Credit columns. Check that this is a transaction statement (not a summary), or upload the bank’s CSV/Excel export.'
     return {
       parserType,
@@ -451,7 +452,9 @@ export async function parseStatement(file: File): Promise<ParseResult> {
     let conf = date && (debit || credit) ? 100 : 60
     // PDF grids are positionally reconstructed — cap confidence so every row is
     // reviewed before posting (§11: never silently import low-confidence data).
-    if (parserType === 'pdf') conf = Math.min(conf, 70)
+    // OCR is even less certain (digits can be misread) → cap lower still.
+    if (ocrUsed) conf = Math.min(conf, 55)
+    else if (parserType === 'pdf') conf = Math.min(conf, 70)
     if (conf >= 100) good++
     rows.push({
       transactionDate: date,
@@ -469,7 +472,11 @@ export async function parseStatement(file: File): Promise<ParseResult> {
   }
 
   if (rows.length === 0) warnings.push('No transaction rows were recognised.')
-  if (parserType === 'pdf' && rows.length)
+  else if (ocrUsed)
+    warnings.push(
+      'Read via OCR — amounts and dates can be misread, so VERIFY every row before posting.',
+    )
+  else if (parserType === 'pdf')
     warnings.push('PDF parsing is best-effort — review every row before posting.')
   const parserConfidence = rows.length ? Math.round((good / rows.length) * 100) : 0
 

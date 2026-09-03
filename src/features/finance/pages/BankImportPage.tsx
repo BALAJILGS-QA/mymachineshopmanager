@@ -53,6 +53,7 @@ export function BankImportPage() {
 
   const [bankAccountId, setBankAccountId] = useState('')
   const [busy, setBusy] = useState(false)
+  const [status, setStatus] = useState('')
   const [activeFileId, setActiveFileId] = useState<string | undefined>()
   const [edit, setEdit] = useState<BankTxn | null>(null)
   const [splitting, setSplitting] = useState<BankTxn | null>(null)
@@ -100,7 +101,7 @@ export function BankImportPage() {
         }
       }
 
-      const parsed = await parseStatement(file)
+      const parsed = await parseStatement(file, setStatus)
       if (parsed.rows.length === 0) {
         toast.error(parsed.warnings[0] ?? 'No transactions found in the file')
         setBusy(false)
@@ -162,6 +163,7 @@ export function BankImportPage() {
       toast.error(toUserMessage(e, 'Could not process the statement'))
     } finally {
       setBusy(false)
+      setStatus('')
       if (fileInput.current) fileInput.current.value = ''
     }
   }
@@ -378,7 +380,8 @@ export function BankImportPage() {
             <Upload size={16} /> {busy ? 'Processing…' : 'Upload statement'}
           </button>
           <span className="text-xs text-slate-500">
-            CSV, Excel (.xlsx) or text PDF. Columns are auto-detected; PDF rows always need review.
+            {status ||
+              'CSV, Excel (.xlsx) or PDF (text or scanned — OCR). Columns are auto-detected; PDF/OCR rows always need review.'}
           </span>
         </div>
         {bankAccounts.length === 0 && (

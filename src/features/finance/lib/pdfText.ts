@@ -5,8 +5,11 @@
 // horizontal gap is large — so the SAME column-detection pipeline that handles
 // CSV/XLSX also handles the PDF grid.
 //
-// Scope: text (digital) PDFs only. Scanned/image PDFs contain no text layer and
-// yield no rows — the caller surfaces that as "needs review" (no OCR, §11).
+// Digital (text-layer) PDFs go through pdfToGrid. Scanned/screenshot PDFs have no
+// text layer — pdfOcrToGrid renders each page to a canvas and OCRs it
+// (tesseract.js), reconstructing the same cell grid from word bounding boxes. OCR
+// output is inherently low-confidence, so callers force every OCR row through
+// review before posting (§11 — never silently import low-confidence data).
 
 // Rounding buckets for grouping items onto one visual line.
 const Y_TOLERANCE = 2.5
@@ -88,5 +91,115 @@ export async function pdfToGrid(buf: ArrayBuffer): Promise<string[][]> {
   }
 
   await doc.cleanup?.()
+  return grid
+}
+
+// --- OCR fallback for scanned / screenshot statements -----------------------
+// Horizontal gap (rendered pixels) above which two OCR words are different
+// columns, and vertical tolerance for grouping words onto one line. Tuned for a
+// scale-2 render; kept generous because OCR bounding boxes are approximate.
+const OCR_COLUMN_GAP = 26
+const OCR_LINE_TOL = 12
+const OCR_SCALE = 2
+
+interface OcrWord {
+  text: string
+  x: number
+  y: number
+  w: number
+}
+
+// Pull word boxes from whatever shape this tesseract build returns.
+function collectOcrWords(data: unknown): OcrWord[] {
+  const out: OcrWord[] = []
+  const push = (arr: unknown) => {
+    for (const w of (arr as { text?: string; bbox?: { x0: number; y0: number; x1: number } }[]) ??
+      []) {
+      if (w?.text && w.text.trim() && w.bbox) {
+        out.push({ text: w.text, x: w.bbox.x0, y: w.bbox.y0, w: w.bbox.x1 - w.bbox.x0 })
+      }
+    }
+  }
+  const d = data as {
+    words?: unknown
+    lines?: { words?: unknown }[]
+    blocks?: { paragraphs?: { lines?: { words?: unknown }[] }[] }[]
+  }
+  if (Array.isArray(d.words) && d.words.length) push(d.words)
+  else if (d.blocks)
+    for (const b of d.blocks)
+      for (const p of b.paragraphs ?? []) for (const l of p.lines ?? []) push(l.words)
+  else if (d.lines) for (const l of d.lines) push(l.words)
+  return out
+}
+
+export async function pdfOcrToGrid(
+  buf: ArrayBuffer,
+  onProgress?: (msg: string) => void,
+): Promise<string[][]> {
+  if (typeof document === 'undefined') return [] // client-only (needs canvas)
+  const pdfjs = await import('pdfjs-dist')
+  try {
+    pdfjs.GlobalWorkerOptions.workerSrc = new URL(
+      'pdfjs-dist/build/pdf.worker.min.mjs',
+      import.meta.url,
+    ).toString()
+  } catch {
+    /* fall back to main-thread worker */
+  }
+  const Tesseract = await import('tesseract.js')
+  const doc = await pdfjs.getDocument({ data: new Uint8Array(buf) }).promise
+  const grid: string[][] = []
+
+  const worker = await Tesseract.createWorker('eng')
+  try {
+    for (let p = 1; p <= doc.numPages; p++) {
+      onProgress?.(`Reading page ${p}/${doc.numPages} with OCR…`)
+      const page = await doc.getPage(p)
+      const viewport = page.getViewport({ scale: OCR_SCALE })
+      const canvas = document.createElement('canvas')
+      canvas.width = Math.ceil(viewport.width)
+      canvas.height = Math.ceil(viewport.height)
+      const ctx = canvas.getContext('2d')
+      if (!ctx) continue
+      // pdfjs renders the whole page — including embedded statement images — so
+      // OCR sees the table even when it isn't in the text layer.
+      await page.render({ canvasContext: ctx, viewport }).promise
+
+      const { data } = await worker.recognize(canvas)
+      const words = collectOcrWords(data)
+      if (!words.length) continue
+
+      // Group words into lines by Y (OCR origin is top-left → ascending Y is
+      // top→bottom), then split into cells by X gaps.
+      words.sort((a, b) => a.y - b.y || a.x - b.x)
+      const lines: OcrWord[][] = []
+      for (const w of words) {
+        const last = lines[lines.length - 1]
+        if (last && Math.abs(w.y - last[0].y) <= OCR_LINE_TOL) last.push(w)
+        else lines.push([w])
+      }
+      for (const line of lines) {
+        line.sort((a, b) => a.x - b.x)
+        const cells: string[] = []
+        let cur = ''
+        let cursorEnd = -Infinity
+        for (const w of line) {
+          const gap = w.x - cursorEnd
+          if (cur === '') cur = w.text
+          else if (gap > OCR_COLUMN_GAP) {
+            cells.push(cur.trim())
+            cur = w.text
+          } else cur += ` ${w.text}`
+          cursorEnd = w.x + w.w
+        }
+        if (cur !== '') cells.push(cur.trim())
+        if (cells.some((c) => c !== '')) grid.push(cells)
+      }
+    }
+  } finally {
+    await worker.terminate()
+    await doc.cleanup?.()
+  }
   return grid
 }
