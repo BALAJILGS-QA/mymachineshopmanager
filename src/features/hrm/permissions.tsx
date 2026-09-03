@@ -56,6 +56,17 @@ export type PermKey =
   | 'HR_SETTINGS_MANAGE'
   | 'ROLE_MANAGE'
   | 'AUDIT_VIEW'
+  // Accounts & Finance (catalog seeded in migration 0022)
+  | 'ACCOUNTS_VIEW'
+  | 'ACCOUNTS_MANAGE'
+  | 'JOURNAL_POST'
+  | 'BANK_MANAGE'
+  | 'BANK_IMPORT'
+  | 'RECON_MANAGE'
+  | 'GST_VIEW'
+  | 'GST_MANAGE'
+  | 'EINVOICE_MANAGE'
+  | 'EWAYBILL_MANAGE'
 
 export interface AccessRow {
   permission_key: PermKey
@@ -95,10 +106,16 @@ export function usePermissions(): PermissionsApi {
   const map = new Map<PermKey, Scope>()
   for (const r of rows) map.set(r.permission_key, r.scope)
 
+  // Bootstrap: the RBAC is unconfigured until roles are actually assigned. Until
+  // then the app behaves as it always has — any approved user can do everything
+  // (mirrors the DB, whose module tables use a single is_app_approved() policy).
+  // Once real grants exist (map non-empty) the permission checks take over.
+  const unconfigured = !localMode && !query.isLoading && map.size === 0
+
   return {
     isLoading: localMode ? false : query.isLoading,
-    can: (key) => localMode || map.has(key),
-    scopeOf: (key) => (localMode ? 'all' : map.get(key)),
+    can: (key) => localMode || unconfigured || map.has(key),
+    scopeOf: (key) => (localMode || unconfigured ? 'all' : map.get(key)),
     keys: localMode ? [] : Array.from(map.keys()),
   }
 }
