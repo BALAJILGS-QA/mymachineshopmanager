@@ -9,12 +9,14 @@ import { Toaster } from './shadcn/sonner'
 interface ToastApi {
   success: (msg: string) => void
   error: (msg: string) => void
+  warning: (msg: string) => void
   info: (msg: string) => void
 }
 
 const api: ToastApi = {
   success: (m) => sonnerToast.success(m),
   error: (m) => sonnerToast.error(m),
+  warning: (m) => sonnerToast.warning(m),
   info: (m) => sonnerToast.info(m),
 }
 
@@ -30,8 +32,8 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   return (
     <ToastContext.Provider value={api}>
       {children}
-      {/* Bottom-centre position preserved from the previous custom toaster. */}
-      <Toaster position="bottom-center" duration={4000} closeButton />
+      {/* Top-right, colour-coded by status (green/red/orange, white text). */}
+      <Toaster position="top-right" duration={4000} closeButton />
     </ToastContext.Provider>
   )
 }

@@ -5,7 +5,8 @@ import { Toaster as Sonner } from 'sonner'
 type ToasterProps = React.ComponentProps<typeof Sonner>
 
 // Light-only app — no next-themes indirection. Styled with the design-system
-// tokens so toasts match cards/dialogs.
+// tokens so toasts match cards/dialogs. Per-type variants render as solid
+// status colours with white text (success=green, error=red, warning=orange).
 const Toaster = ({ ...props }: ToasterProps) => {
   return (
     <Sonner
@@ -13,11 +14,17 @@ const Toaster = ({ ...props }: ToasterProps) => {
       className="toaster group"
       toastOptions={{
         classNames: {
-          toast:
-            'group toast group-[.toaster]:bg-background group-[.toaster]:text-foreground group-[.toaster]:border-border group-[.toaster]:shadow-lg',
-          description: 'group-[.toast]:text-muted-foreground',
-          actionButton: 'group-[.toast]:bg-primary group-[.toast]:text-primary-foreground',
-          cancelButton: 'group-[.toast]:bg-muted group-[.toast]:text-muted-foreground',
+          toast: 'group toast rounded-md border-0 shadow-lg',
+          title: 'group-[.toast]:text-white',
+          description: 'group-[.toast]:text-white/90',
+          closeButton: 'group-[.toast]:text-white group-[.toast]:border-white/30',
+          actionButton: 'group-[.toast]:bg-white/20 group-[.toast]:text-white',
+          cancelButton: 'group-[.toast]:bg-white/10 group-[.toast]:text-white',
+          // Solid status backgrounds; `!` beats Sonner's default type tints.
+          success: '!bg-green-600 !text-white [&_[data-icon]]:!text-white',
+          error: '!bg-red-600 !text-white [&_[data-icon]]:!text-white',
+          warning: '!bg-[#ea580c] !text-white [&_[data-icon]]:!text-white',
+          info: '!bg-charcoal-700 !text-white [&_[data-icon]]:!text-white',
         },
       }}
       {...props}
