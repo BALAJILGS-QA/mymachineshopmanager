@@ -33,7 +33,7 @@ import { useAuth } from '@/features/auth/auth'
 import { useSettings } from '@/features/settings/hooks/useSettings'
 import { useUsers } from '@/features/approvals/hooks/useUsers'
 import { DEFAULT_SETTINGS } from '@/data/seed'
-import { applyAppSeo, applyFavicon } from '@/lib/seo'
+import { applyAppSeo, applyFavicon } from '@/lib/app-seo'
 
 // Charcoal rail styling (MSM rebrand). Active item: solid industrial orange
 // (#fb923c = brand-400) with bright-white text + icon for unmistakable

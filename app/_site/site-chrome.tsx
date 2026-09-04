@@ -17,14 +17,15 @@ import { clsx } from 'clsx'
 import { Logo } from '@/components/ui/Logo'
 import { BRAND } from '@/lib/brand'
 import { useReveal } from '@/features/site/useReveal'
+import { FEATURES, INDUSTRIES } from '@/features/site/solutionsData'
 import '@/features/site/site.css'
 
 // `/`, `/about`, `/blog` and `/contact` are real routes; hash entries scroll.
 const NAV = [
   { href: '/', label: 'Home' },
-  { href: '/#features', label: 'Features' },
+  { href: '/features', label: 'Features' },
+  { href: '/industries', label: 'Industries' },
   { href: '/about', label: 'About' },
-  { href: '/#faq', label: 'FAQ' },
   { href: '/blog', label: 'Blog' },
   { href: '/contact', label: 'Reach Us' },
 ]
@@ -172,7 +173,9 @@ export function SiteChrome({
         </div>
       )}
 
-      {children}
+      {/* Primary content landmark — one <main> per public page (accessibility +
+          semantic SEO). Individual pages render their <section>s inside this. */}
+      <main>{children}</main>
 
       {showFooter && <Footer />}
     </div>
@@ -183,7 +186,7 @@ function Footer() {
   const year = 2026
   return (
     <footer className="relative border-t border-[var(--line)] bg-white/60">
-      <div className="mx-auto grid max-w-6xl gap-10 px-5 py-14 md:grid-cols-[1.4fr_1fr_1fr]">
+      <div className="mx-auto grid max-w-6xl gap-10 px-5 py-14 md:grid-cols-2 lg:grid-cols-[1.5fr_1fr_1fr_1fr]">
         <div>
           <Wordmark />
           <p className="mt-4 max-w-xs text-sm leading-relaxed text-[var(--ink-dim)]">
@@ -192,22 +195,46 @@ function Footer() {
           </p>
         </div>
         <div>
+          <p className="kicker mb-3">Features</p>
+          <ul className="space-y-2 text-sm text-[var(--ink-dim)]">
+            {FEATURES.slice(0, 6).map((f) => (
+              <li key={f.slug}>
+                <Link href={`/features/${f.slug}`} className="hover:text-[var(--ink)]">
+                  {f.name}
+                </Link>
+              </li>
+            ))}
+            <li>
+              <Link href="/features" className="font-medium hover:text-[var(--ink)]">
+                All features →
+              </Link>
+            </li>
+          </ul>
+        </div>
+        <div>
+          <p className="kicker mb-3">Industries</p>
+          <ul className="space-y-2 text-sm text-[var(--ink-dim)]">
+            {INDUSTRIES.map((i) => (
+              <li key={i.slug}>
+                <Link href={`/industries/${i.slug}`} className="hover:text-[var(--ink)]">
+                  {i.name}
+                </Link>
+              </li>
+            ))}
+            <li>
+              <Link href="/industries" className="font-medium hover:text-[var(--ink)]">
+                All industries →
+              </Link>
+            </li>
+          </ul>
+        </div>
+        <div>
           <p className="kicker mb-3">Company</p>
           <ul className="space-y-2 text-sm text-[var(--ink-dim)]">
-            <li>
-              <a href="/#features" className="hover:text-[var(--ink)]">
-                Features
-              </a>
-            </li>
             <li>
               <Link href="/about" className="hover:text-[var(--ink)]">
                 About
               </Link>
-            </li>
-            <li>
-              <a href="/#faq" className="hover:text-[var(--ink)]">
-                FAQ
-              </a>
             </li>
             <li>
               <Link href="/blog" className="hover:text-[var(--ink)]">
@@ -219,11 +246,11 @@ function Footer() {
                 Reach Us
               </Link>
             </li>
-          </ul>
-        </div>
-        <div>
-          <p className="kicker mb-3">Access</p>
-          <ul className="space-y-2 text-sm text-[var(--ink-dim)]">
+            <li>
+              <a href="/#faq" className="hover:text-[var(--ink)]">
+                FAQ
+              </a>
+            </li>
             <li>
               <a href="/login" className="hover:text-[var(--ink)]">
                 Login

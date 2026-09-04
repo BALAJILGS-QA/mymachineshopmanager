@@ -24,6 +24,18 @@ const nextConfig = {
           { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
         ],
       },
+      // The authenticated portal is client-rendered, so it cannot export a
+      // `noindex` <meta> tag. Send X-Robots-Tag on every /app response as a
+      // hard, defence-in-depth signal that these pages must never be indexed
+      // (complements the robots.txt Disallow and client-side auth gate).
+      {
+        source: '/app/:path*',
+        headers: [{ key: 'X-Robots-Tag', value: 'noindex, nofollow' }],
+      },
+      {
+        source: '/app',
+        headers: [{ key: 'X-Robots-Tag', value: 'noindex, nofollow' }],
+      },
     ]
   },
   // Note: Next 16 removed the built-in `next lint` integration, so there is no

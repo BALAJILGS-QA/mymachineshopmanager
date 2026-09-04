@@ -1,20 +1,33 @@
 import type { Metadata, Viewport } from 'next'
 import { Providers } from './providers'
+import { Analytics } from './_site/analytics'
+import { seoConfig } from '@/lib/seo'
 import './globals.css'
 
 // Root layout for the Next.js App Router. This is a Server Component.
 //
-// The SEO defaults below mirror the meta currently emitted by the Vite app's
-// TanStack root route (`src/routes/__root.tsx`). Per-route pages override title
-// and description via their own `metadata` export during route migration.
+// The SEO defaults below are the global branding fallback; per-route pages
+// override title/description/canonical via their own `metadata` export (or the
+// centralized buildMetadata helper). The title `template` appends the brand to
+// any page title that does not already include it.
 export const metadata: Metadata = {
-  // Global default title; marketing pages override with their own metadata, and
-  // authenticated portal pages set a dynamic "MSM | <page>" title client-side
-  // via applyAppSeo. Single source of truth for global branding.
+  metadataBase: new URL(seoConfig.siteUrl),
+  // Global default title. Marketing pages fully override this with their own
+  // brand-inclusive titles (no `template`, so existing titles never double-brand);
+  // authenticated portal pages set "MSM | <page>" client-side via applyAppSeo.
   title: 'MSM | Sree Balaji Industries',
+  applicationName: seoConfig.siteName,
   description:
     'MSM (Machine Shop Management) — track job orders, materials, delivery challans, invoices, payments and expenses for your machine shop, company-wise, from order to dispatch.',
   robots: 'index,follow',
+  // Search-engine verification (env-driven; omitted entirely when unset).
+  verification: {
+    ...(seoConfig.verification.google ? { google: seoConfig.verification.google } : {}),
+    ...(seoConfig.verification.yandex ? { yandex: seoConfig.verification.yandex } : {}),
+    ...(seoConfig.verification.bing
+      ? { other: { 'msvalidate.01': seoConfig.verification.bing } }
+      : {}),
+  },
   // One global favicon (premium hexagon + MSM). SVG for modern browsers, PNG
   // fallbacks for older ones, plus the Apple touch icon. Configured ONCE here.
   icons: {
@@ -48,6 +61,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="en">
       <body>
         <Providers>{children}</Providers>
+        <Analytics />
       </body>
     </html>
   )

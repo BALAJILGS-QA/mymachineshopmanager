@@ -18,6 +18,7 @@
     "test:coverage": "vitest run --coverage",
     "test:e2e": "playwright test",
     "test:e2e:prod": "playwright test --config=playwright.prod.config.ts",
+    "seo:audit": "node scripts/seo-audit.mjs",
     "deploy": "node scripts/deploy.mjs",
     "prepare": "husky"
   },
