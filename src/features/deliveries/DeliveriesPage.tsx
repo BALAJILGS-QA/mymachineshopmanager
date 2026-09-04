@@ -480,11 +480,11 @@ function DcForm({ dc, onClose }: { dc: DeliveryChallan | null; onClose: () => vo
   const materialName = useMaterialName()
   const dcNoPreview = usePreviewNo('dc')
   const isEdit = !!dc
-  // An Open (un-invoiced) challan is fully editable — every field and the set of
-  // materials — and its stock is re-synced on save. Once invoiced/cancelled it is
-  // locked (only reference/vehicle/notes), since stock is frozen against it.
-  const canFullEdit = isEdit && dc.status === 'Open'
-  const metaOnly = isEdit && dc.status !== 'Open'
+  // Open and Invoiced challans are fully editable — every field and the set of
+  // materials — with stock re-synced on save (update_challan_full). Only a
+  // Cancelled challan stays locked (its stock was already reversed).
+  const canFullEdit = isEdit && dc.status !== 'Cancelled'
+  const metaOnly = isEdit && dc.status === 'Cancelled'
 
   const [companyId, setCompanyId] = useState(dc?.companyId ?? companies[0]?.id ?? '')
   const [date, setDate] = useState(dc?.date ?? '')
