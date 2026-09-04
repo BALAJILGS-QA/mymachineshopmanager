@@ -384,12 +384,56 @@ function ExpenseCategoryDetail({
   companyName: (id?: string) => string
   jobNo: (id?: string) => string
 }) {
-  const pg = usePagination(summary.entries)
+  const [payee, setPayee] = useState('')
+  const [from, setFrom] = useState('')
+  const [to, setTo] = useState('')
+
+  // Distinct payees within this category (for the filter dropdown).
+  const payees = useMemo(() => {
+    const set = new Set<string>()
+    for (const e of summary.entries) if (e.payee) set.add(e.payee)
+    return [...set].sort((a, b) => a.localeCompare(b))
+  }, [summary.entries])
+
+  // Entries after the payee + date-range filters.
+  const filtered = useMemo(
+    () =>
+      summary.entries.filter((e) => {
+        if (payee === '__none__') {
+          if (e.payee) return false
+        } else if (payee && e.payee !== payee) return false
+        if (!inRange(e.date, from, to)) return false
+        return true
+      }),
+    [summary.entries, payee, from, to],
+  )
+
+  // KPIs recomputed from the filtered set — the total updates dynamically as the
+  // payee / date filters change.
+  const stats = useMemo(() => {
+    const monthPrefix = todayISO().slice(0, 7)
+    let total = 0
+    let thisMonth = 0
+    for (const e of filtered) {
+      total += e.amount
+      if (e.date.slice(0, 7) === monthPrefix) thisMonth += e.amount
+    }
+    return { total, thisMonth, count: filtered.length }
+  }, [filtered])
+
+  const pg = usePagination(filtered)
+
+  const filtersActive = Boolean(payee || from || to)
+  function clearFilters() {
+    setPayee('')
+    setFrom('')
+    setTo('')
+  }
 
   function exportCategory() {
     downloadXlsx(
       `expenses-${summary.category}`,
-      summary.entries,
+      filtered,
       [
         { header: 'Expense', value: (e) => e.expenseNo, width: 16 },
         { header: 'Date', value: (e) => e.date, width: 14 },
@@ -407,20 +451,20 @@ function ExpenseCategoryDetail({
 
   const kpis = [
     {
-      label: 'Total',
-      value: currency(summary.total),
+      label: filtersActive ? 'Total (filtered)' : 'Total',
+      value: currency(stats.total),
       cls: 'text-slate-900',
       chip: 'border-slate-200 bg-slate-50',
     },
     {
       label: 'Entries',
-      value: String(summary.count),
+      value: String(stats.count),
       cls: 'text-slate-700',
       chip: 'border-slate-200 bg-slate-50',
     },
     {
       label: 'This month',
-      value: currency(summary.thisMonth),
+      value: currency(stats.thisMonth),
       cls: 'text-blue-700',
       chip: 'border-blue-200 bg-blue-50',
     },
@@ -441,6 +485,31 @@ function ExpenseCategoryDetail({
         }
       />
 
+      <FilterBar>
+        <div>
+          <label className="label">Payee</label>
+          <Select
+            value={payee}
+            onChange={(e) => setPayee(e.target.value)}
+            className="min-w-[12rem]"
+          >
+            <option value="">All payees</option>
+            {payees.map((p) => (
+              <option key={p} value={p}>
+                {p}
+              </option>
+            ))}
+            <option value="__none__">(No payee)</option>
+          </Select>
+        </div>
+        <DateRangeFilter from={from} to={to} onFrom={setFrom} onTo={setTo} />
+        {filtersActive && (
+          <button className="btn-ghost btn-sm mb-0.5" onClick={clearFilters}>
+            Clear
+          </button>
+        )}
+      </FilterBar>
+
       <div className="mb-4 grid grid-cols-3 gap-3">
         {kpis.map((k) => (
           <div key={k.label} className={clsx('rounded-xl border px-4 py-3', k.chip)}>
@@ -453,48 +522,57 @@ function ExpenseCategoryDetail({
       </div>
 
       <Card>
-        <ResponsiveTable>
-          <thead>
-            <tr className="border-b border-slate-100">
-              <th className="th">Expense</th>
-              <th className="th">Date</th>
-              <th className="th text-right">Amount</th>
-              <th className="th">Method</th>
-              <th className="th">Payee</th>
-              <th className="th">Vendor</th>
-              <th className="th">Company / Job</th>
-              <th className="th text-right">Actions</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-50">
-            {pg.pageItems.map((e) => (
-              <tr key={e.id} className="hover:bg-slate-50/60">
-                <td className="td font-mono text-xs text-slate-500">{e.expenseNo}</td>
-                <td className="td">{fmtDate(e.date)}</td>
-                <td className="td text-right font-semibold">{currency(e.amount)}</td>
-                <td className="td">{e.method}</td>
-                <td className="td">{e.payee || '—'}</td>
-                <td className="td">{e.vendor || '—'}</td>
-                <td className="td text-2xs text-slate-500">
-                  {e.companyId ? companyName(e.companyId) : ''}
-                  {e.jobId ? ` · ${jobNo(e.jobId)}` : ''}
-                  {!e.companyId && !e.jobId ? '—' : ''}
-                </td>
-                <td className="td">
-                  <div className="flex justify-end gap-1">
-                    <button className="btn-ghost btn-sm" onClick={() => onEdit(e)}>
-                      <Pencil size={15} />
-                    </button>
-                    <button className="btn-ghost btn-sm text-red-500" onClick={() => onDelete(e)}>
-                      <Trash2 size={15} />
-                    </button>
-                  </div>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </ResponsiveTable>
-        <Pagination pg={pg} />
+        {filtered.length === 0 ? (
+          <EmptyState icon={<Receipt size={40} />} title="No entries match the filters" />
+        ) : (
+          <>
+            <ResponsiveTable>
+              <thead>
+                <tr className="border-b border-slate-100">
+                  <th className="th">Expense</th>
+                  <th className="th">Date</th>
+                  <th className="th text-right">Amount</th>
+                  <th className="th">Method</th>
+                  <th className="th">Payee</th>
+                  <th className="th">Vendor</th>
+                  <th className="th">Company / Job</th>
+                  <th className="th text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-50">
+                {pg.pageItems.map((e) => (
+                  <tr key={e.id} className="hover:bg-slate-50/60">
+                    <td className="td font-mono text-xs text-slate-500">{e.expenseNo}</td>
+                    <td className="td">{fmtDate(e.date)}</td>
+                    <td className="td text-right font-semibold">{currency(e.amount)}</td>
+                    <td className="td">{e.method}</td>
+                    <td className="td">{e.payee || '—'}</td>
+                    <td className="td">{e.vendor || '—'}</td>
+                    <td className="td text-2xs text-slate-500">
+                      {e.companyId ? companyName(e.companyId) : ''}
+                      {e.jobId ? ` · ${jobNo(e.jobId)}` : ''}
+                      {!e.companyId && !e.jobId ? '—' : ''}
+                    </td>
+                    <td className="td">
+                      <div className="flex justify-end gap-1">
+                        <button className="btn-ghost btn-sm" onClick={() => onEdit(e)}>
+                          <Pencil size={15} />
+                        </button>
+                        <button
+                          className="btn-ghost btn-sm text-red-500"
+                          onClick={() => onDelete(e)}
+                        >
+                          <Trash2 size={15} />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </ResponsiveTable>
+            <Pagination pg={pg} />
+          </>
+        )}
       </Card>
     </div>
   )
