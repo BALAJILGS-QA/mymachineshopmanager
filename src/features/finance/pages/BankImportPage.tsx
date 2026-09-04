@@ -108,6 +108,24 @@ export function BankImportPage() {
         return
       }
 
+      // Per-transaction de-duplication (works even if the file bytes/format
+      // differ from a previous upload): compute each row's dedupe hash and drop
+      // the ones already present in the ledger BEFORE inserting anything.
+      setStatus('Checking for already-imported transactions…')
+      const hashes = await Promise.all(parsed.rows.map((t) => dedupeHash(bankAccountId, t)))
+      const already = await api.existingDedupeHashes(hashes)
+      const fresh = parsed.rows.filter((_, i) => !already.has(hashes[i]))
+      const dupCount = parsed.rows.length - fresh.length
+      if (fresh.length === 0) {
+        toast.info(
+          `All ${parsed.rows.length} transaction(s) in this statement are already imported — nothing new to add.`,
+        )
+        setBusy(false)
+        setStatus('')
+        if (fileInput.current) fileInput.current.value = ''
+        return
+      }
+
       const fileRow = await api.createStatementFile({
         companyId: bank?.companyId,
         bankAccountId,
@@ -115,14 +133,16 @@ export function BankImportPage() {
         fileHash: hash,
         fileSize: file.size,
         parserType: parsed.parserType,
-        rowCount: parsed.rows.length,
+        rowCount: fresh.length,
         status: 'parsed',
         meta: { columnMap: parsed.columnMap, parserConfidence: parsed.parserConfidence },
       })
 
-      // Classify + build canonical rows.
+      // Classify + build canonical rows (only the fresh, not-yet-imported ones).
       const rows: Partial<BankTxn>[] = []
-      for (const t of parsed.rows) {
+      for (let i = 0; i < parsed.rows.length; i++) {
+        const t = parsed.rows[i]
+        if (already.has(hashes[i])) continue
         const c = classifyTxn(t, ctx)
         rows.push({
           bankAccountId,
@@ -146,7 +166,7 @@ export function BankImportPage() {
           matchedInvoiceId: c.matchedInvoiceId,
           matchedLedgerAccountId: c.matchedLedgerAccountId,
           confidence: c.confidence,
-          dedupeHash: await dedupeHash(bankAccountId, t),
+          dedupeHash: hashes[i],
           dupStatus: 'new',
           reviewStatus: 'pending',
           reconciliationStatus: 'unreconciled',
@@ -154,6 +174,7 @@ export function BankImportPage() {
         })
       }
       await api.insertBankTxns(rows)
+      // Also flag any duplicates WITHIN this batch (identical rows in one file).
       await api.detectDuplicates(fileRow.id)
       setActiveFileId(fileRow.id)
 
@@ -163,7 +184,8 @@ export function BankImportPage() {
       setStatus('Posting to Payments / Expenses…')
       const res = await postFile.mutateAsync(fileRow.id)
       const parts = [`Imported ${rows.length}`, `posted ${res.posted}`]
-      if (res.skipped) parts.push(`${res.skipped} skipped (duplicates/ignored)`)
+      if (dupCount) parts.push(`${dupCount} already imported (skipped)`)
+      if (res.skipped) parts.push(`${res.skipped} in-file duplicate(s) skipped`)
       if (res.failed) parts.push(`${res.failed} need review`)
       if (res.failed) toast.info(parts.join(' · ') + ' — see the grid below')
       else toast.success(parts.join(' · '))

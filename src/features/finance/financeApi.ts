@@ -245,6 +245,26 @@ export async function updateBankTxn(id: string, patch: Partial<BankTxn>): Promis
   return updateRow<BankTxn>(maps.bankTransactions, id, patch as Record<string, unknown>)
 }
 
+// Which of these dedupe hashes already exist in bank_transactions? Used to drop
+// already-imported transactions BEFORE inserting, so re-uploading the same
+// statement (even as a different file/format) never creates duplicate entries.
+export async function existingDedupeHashes(hashes: string[]): Promise<Set<string>> {
+  if (!enabled() || !supabase || hashes.length === 0) return new Set()
+  const found = new Set<string>()
+  // Chunk to stay well under URL/IN-list limits for large statements.
+  const CHUNK = 200
+  for (let i = 0; i < hashes.length; i += CHUNK) {
+    const slice = hashes.slice(i, i + CHUNK)
+    const { data, error } = await supabase
+      .from('bank_transactions')
+      .select('dedupe_hash')
+      .in('dedupe_hash', slice)
+    if (error) throw error
+    for (const r of data ?? []) if (r.dedupe_hash) found.add(String(r.dedupe_hash))
+  }
+  return found
+}
+
 export async function detectDuplicates(fileId: string): Promise<number> {
   if (!supabase) return 0
   const { data, error } = await supabase.rpc('detect_bank_duplicates', { p_file_id: fileId })
