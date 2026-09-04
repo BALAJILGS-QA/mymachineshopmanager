@@ -12,11 +12,12 @@ import { BRAND } from '@/lib/brand'
 // Read a NEXT_PUBLIC_* var at build/runtime with a fallback. process.env access
 // is statically inlined by Next for NEXT_PUBLIC_* keys.
 function envUrl(): string {
-  const raw =
-    process.env.NEXT_PUBLIC_SITE_URL ||
-    // Vercel provides this at build time for the production/preview domain.
-    (process.env.NEXT_PUBLIC_VERCEL_URL ? `https://${process.env.NEXT_PUBLIC_VERCEL_URL}` : '') ||
-    'https://sreebalajiindustries.netlify.app'
+  // Only an EXPLICIT NEXT_PUBLIC_SITE_URL overrides the stable production domain.
+  // We deliberately do NOT fall back to Vercel's per-deployment URL — that value
+  // changes every deploy, which would make canonicals/sitemap/OG unstable. When
+  // unset, canonicals point at the stable production domain (so preview builds
+  // correctly canonicalize to production instead of to an ephemeral host).
+  const raw = process.env.NEXT_PUBLIC_SITE_URL || 'https://sreebalajiindustries.netlify.app'
   // Normalise: strip a trailing slash so `${siteUrl}/path` never doubles up.
   return raw.replace(/\/+$/, '')
 }
