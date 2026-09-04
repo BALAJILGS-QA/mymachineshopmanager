@@ -287,7 +287,10 @@ function matchCanon(n: string): string | null {
   return null
 }
 
-function detectColumns(rows: string[][]): { headerRow: number; map: Record<string, number> } {
+export function detectColumns(rows: string[][]): {
+  headerRow: number
+  map: Record<string, number>
+} {
   let best = { score: 0, row: 0, map: {} as Record<string, number> }
   // Scan the WHOLE document — bank PDFs put the transaction header well below
   // the logo + customer-details block (often past row 20).
@@ -396,6 +399,239 @@ export function firstDate(raw?: string): string | undefined {
   return undefined
 }
 
+// -- Column-aware PDF reconstruction ------------------------------------------
+// Many bank PDFs (e.g. Indian Overseas Bank) print each transaction across 2-3
+// physical text lines — date on one line, particulars wrapping over two, the
+// value-date in parentheses below, amounts on their own baseline — and the
+// header labels are split/centered. A naive "group by Y, split by X-gap" grid
+// then has no single row carrying date+amounts, so the generic column detector
+// fails. This reconstruction instead:
+//   1. derives column x-boundaries from the header labels' positions (adapts to
+//      the template rather than hard-coding pixels), and
+//   2. anchors each transaction on its primary date, folding every item that
+//      belongs to that date's block (across all its physical lines) into one row.
+// It returns a clean aligned grid (synthetic header + one row per transaction)
+// that flows through the same detectColumns/extractRows pipeline. Pure over the
+// positioned text items, so it is unit-testable without pdfjs.
+export interface PdfItem {
+  str: string
+  x: number // left edge
+  y: number // baseline (PDF origin bottom-left: larger y = higher on the page)
+  w: number
+  page: number
+}
+
+const HDR = {
+  date: /^date/i,
+  part: /^particular/i,
+  ref: /^(ref|chq|cheque|\/cheque|instrument)/i,
+  type: /^(transaction|type|txn)/i,
+  debit: /^(debit|withdrawal|dr\b)/i,
+  credit: /^(credit|deposit|cr\b)/i,
+  balance: /^balance/i,
+}
+
+const PDF_DATE_RE = /^\(?\d{1,2}[-/][A-Za-z0-9]{2,}[-/]\d{2,4}\)?$/
+
+export function alignPdfItems(items: PdfItem[]): string[][] {
+  if (!items.length) return []
+  // Locate the header via the distinctive amount labels.
+  const amountHdr = items.filter(
+    (i) =>
+      HDR.debit.test(i.str.trim()) ||
+      HDR.credit.test(i.str.trim()) ||
+      HDR.balance.test(i.str.trim()),
+  )
+  if (!amountHdr.length) return []
+  const headerPage = amountHdr[0].page
+  const headerY = amountHdr[0].y
+  const hdr = items.filter((i) => i.page === headerPage && Math.abs(i.y - headerY) < 16)
+  const span = (re: RegExp) => {
+    const m = hdr.filter((i) => re.test(i.str.trim()))
+    if (!m.length) return null
+    return { left: Math.min(...m.map((i) => i.x)), right: Math.max(...m.map((i) => i.x + i.w)) }
+  }
+  const D = span(HDR.date)
+  const R = span(HDR.ref)
+  const T = span(HDR.type)
+  const DB = span(HDR.debit)
+  const CR = span(HDR.credit)
+  const BL = span(HDR.balance)
+  if (!D || !DB || !CR || !BL) return [] // not enough structure — let OCR/others try
+
+  // Column cut lines (by an item's LEFT edge). Left-aligned text columns cut just
+  // before the next column's label; right-aligned amount columns cut at the gap
+  // midpoint between neighbouring labels.
+  const c1 = D.right + 10 // date | particulars
+  const c2 = (R?.left ?? DB.left - 90) - 5 // particulars | reference
+  const c4 = DB.left - 6 // (type) | debit
+  const c3 = T ? T.left - 6 : c4 // reference | type
+  const c5 = (DB.right + CR.left) / 2 // debit | credit
+  const c6 = (CR.right + BL.left) / 2 // credit | balance
+  const colOf = (
+    x: number,
+  ): 'date' | 'narration' | 'reference' | 'type' | 'debit' | 'credit' | 'balance' => {
+    if (x < c1) return 'date'
+    if (x < c2) return 'narration'
+    if (x < c3) return 'reference'
+    if (x < c4) return 'type'
+    if (x < c5) return 'debit'
+    if (x < c6) return 'credit'
+    return 'balance'
+  }
+
+  // Primary date anchors (a bare date in the date column, not the "(value date)").
+  const anchors = items
+    .filter((i) => colOf(i.x) === 'date' && PDF_DATE_RE.test(i.str.trim()) && !i.str.includes('('))
+    .sort((a, b) => a.page - b.page || b.y - a.y)
+  if (!anchors.length) return []
+
+  interface Bucket {
+    date: string
+    narration: PdfItem[]
+    reference: string[]
+    debit: string[]
+    credit: string[]
+    balance: string[]
+    y: number
+    page: number
+  }
+  const buckets: Bucket[] = anchors.map((a) => ({
+    date: a.str.trim(),
+    narration: [],
+    reference: [],
+    debit: [],
+    credit: [],
+    balance: [],
+    y: a.y,
+    page: a.page,
+  }))
+  const anchorsByPage = new Map<number, { y: number; idx: number }[]>()
+  anchors.forEach((a, idx) => {
+    const arr = anchorsByPage.get(a.page) ?? []
+    arr.push({ y: a.y, idx })
+    anchorsByPage.set(a.page, arr)
+  })
+
+  for (const it of items) {
+    const col = colOf(it.x)
+    const pageAnchors = anchorsByPage.get(it.page)
+    if (!pageAnchors) continue
+    // Owner = nearest anchor at or above the item (content flows downward from the
+    // date), within a downward band so page totals/footers below the last txn are
+    // excluded.
+    let owner = -1
+    let bestY = Infinity
+    for (const a of pageAnchors) {
+      if (a.y >= it.y - 3 && a.y < bestY && a.y <= it.y + 40) {
+        bestY = a.y
+        owner = a.idx
+      }
+    }
+    if (owner < 0) continue
+    if (it.y < buckets[owner].y - 22) continue // too far below the date → footer/total
+    const b = buckets[owner]
+    const s = it.str.trim()
+    if (!s) continue
+    if (col === 'date')
+      continue // date already captured; skip value-date
+    else if (col === 'narration') b.narration.push(it)
+    else if (col === 'reference') b.reference.push(s)
+    else if (col === 'debit') b.debit.push(s)
+    else if (col === 'credit') b.credit.push(s)
+    else if (col === 'balance') b.balance.push(s)
+    // 'type' column is intentionally dropped.
+  }
+
+  const amount = (arr: string[]) => arr.find((s) => /\d/.test(s)) ?? ''
+  const grid: string[][] = [
+    [
+      'Date(Value Date)',
+      'Particulars',
+      'Ref No./Cheque No',
+      'Debit(Rs)',
+      'Credit(Rs)',
+      'Balance(Rs)',
+    ],
+  ]
+  for (const b of buckets) {
+    const narration = b.narration
+      .sort((a, c) => c.y - a.y || a.x - c.x)
+      .map((i) => i.str.trim())
+      .join(' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+    grid.push([
+      b.date,
+      narration,
+      b.reference.join(' '),
+      amount(b.debit),
+      amount(b.credit),
+      amount(b.balance),
+    ])
+  }
+  return grid
+}
+
+// Turn a detected grid + column map into canonical transactions. Exported so the
+// pure detection→row pipeline can be validated against real grids (e.g. a bank
+// PDF) independently of pdfjs. A row is a real transaction iff it has a parseable
+// date and a non-zero amount; everything else (headers, sub-lines, totals) is
+// skipped — but nothing with a date+amount is ever dropped.
+export function extractRows(
+  grid: string[][],
+  map: Record<string, number>,
+  headerRow: number,
+  opts: { parserType: 'csv' | 'xlsx' | 'pdf'; ocrUsed: boolean },
+): { rows: ParsedTxn[]; good: number } {
+  const rows: ParsedTxn[] = []
+  let good = 0
+  for (let r = headerRow + 1; r < grid.length; r++) {
+    const cells = grid[r]
+    const get = (k: string) => (map[k] !== undefined ? (cells[map[k]] ?? '').trim() : '')
+    const date = firstDate(get('transactionDate')) ?? firstDate(get('valueDate'))
+    if (!date) continue // skip non-transaction rows (headers/footers/totals)
+
+    let debit = 0
+    let credit = 0
+    if (map.debit !== undefined || map.credit !== undefined) {
+      debit = parseAmount(get('debit'))
+      credit = parseAmount(get('credit'))
+    } else if (map.amount !== undefined) {
+      const amt = parseAmount(get('amount'))
+      const dc = norm(get('drcr'))
+      const signed = Number((get('amount') || '').replace(/[₹$,\s]/g, ''))
+      if (dc.startsWith('d') || /-/.test(get('amount'))) debit = amt
+      else if (dc.startsWith('c')) credit = amt
+      else if (signed < 0) debit = amt
+      else credit = amt
+    }
+    if (debit === 0 && credit === 0) continue
+
+    let conf = date && (debit || credit) ? 100 : 60
+    // PDF grids are positionally reconstructed — cap confidence so every row is
+    // reviewed before posting (§11: never silently import low-confidence data).
+    // OCR is even less certain (digits can be misread) → cap lower still.
+    if (opts.ocrUsed) conf = Math.min(conf, 55)
+    else if (opts.parserType === 'pdf') conf = Math.min(conf, 70)
+    if (conf >= 100) good++
+    rows.push({
+      transactionDate: date,
+      valueDate: firstDate(get('valueDate')),
+      narration: get('narration') || get('reference') || '',
+      referenceNumber: get('reference') || undefined,
+      chequeNumber: get('cheque') || undefined,
+      debitAmount: debit,
+      creditAmount: credit,
+      balanceAfter:
+        map.balance !== undefined ? parseAmount(get('balance')) || undefined : undefined,
+      sourceRowNumber: r + 1,
+      parserConfidence: conf,
+    })
+  }
+  return { rows, good }
+}
+
 // -- Main entry ----------------------------------------------------------------
 export async function parseStatement(
   file: File,
@@ -405,13 +641,15 @@ export async function parseStatement(
   const buf = await file.arrayBuffer()
   let grid: string[][]
   let parserType: 'csv' | 'xlsx' | 'pdf'
+  let pdfItems: PdfItem[] | null = null
   if (name.endsWith('.xlsx') || name.endsWith('.xlsm')) {
     grid = await parseXlsx(buf)
     parserType = 'xlsx'
   } else if (name.endsWith('.pdf')) {
     // Dynamic import keeps pdfjs/tesseract out of the SSR/main bundle.
-    const { pdfToGrid } = await import('./pdfText')
-    grid = await pdfToGrid(buf)
+    const { pdfToItems, itemsToGrid } = await import('./pdfText')
+    pdfItems = await pdfToItems(buf)
+    grid = itemsToGrid(pdfItems)
     parserType = 'pdf'
   } else {
     grid = parseCsv(new TextDecoder().decode(buf))
@@ -421,6 +659,21 @@ export async function parseStatement(
   const warnings: string[] = []
   let ocrUsed = false
   let { headerRow, map } = detectColumns(grid)
+
+  // PDF whose transactions span multiple physical lines (the generic grid then
+  // has no row carrying date+amounts together, e.g. Indian Overseas Bank) →
+  // reconstruct a column-aligned grid from the raw items and try again.
+  if (parserType === 'pdf' && Object.keys(map).length === 0 && pdfItems) {
+    const aligned = alignPdfItems(pdfItems)
+    if (aligned.length > 1) {
+      const d = detectColumns(aligned)
+      if (Object.keys(d.map).length > 0) {
+        grid = aligned
+        headerRow = d.headerRow
+        map = d.map
+      }
+    }
+  }
 
   // PDF with no detectable table (no text layer, or the table is a scanned/
   // screenshot image) → OCR the rendered pages and try again.
@@ -451,51 +704,7 @@ export async function parseStatement(
     }
   }
 
-  const rows: ParsedTxn[] = []
-  let good = 0
-  for (let r = headerRow + 1; r < grid.length; r++) {
-    const cells = grid[r]
-    const get = (k: string) => (map[k] !== undefined ? (cells[map[k]] ?? '').trim() : '')
-    const date = firstDate(get('transactionDate')) ?? firstDate(get('valueDate'))
-    if (!date) continue // skip non-transaction rows (headers/footers/totals)
-
-    let debit = 0
-    let credit = 0
-    if (map.debit !== undefined || map.credit !== undefined) {
-      debit = parseAmount(get('debit'))
-      credit = parseAmount(get('credit'))
-    } else if (map.amount !== undefined) {
-      const amt = parseAmount(get('amount'))
-      const dc = norm(get('drcr'))
-      const signed = Number((get('amount') || '').replace(/[₹$,\s]/g, ''))
-      if (dc.startsWith('d') || /-/.test(get('amount'))) debit = amt
-      else if (dc.startsWith('c')) credit = amt
-      else if (signed < 0) debit = amt
-      else credit = amt
-    }
-    if (debit === 0 && credit === 0) continue
-
-    let conf = date && (debit || credit) ? 100 : 60
-    // PDF grids are positionally reconstructed — cap confidence so every row is
-    // reviewed before posting (§11: never silently import low-confidence data).
-    // OCR is even less certain (digits can be misread) → cap lower still.
-    if (ocrUsed) conf = Math.min(conf, 55)
-    else if (parserType === 'pdf') conf = Math.min(conf, 70)
-    if (conf >= 100) good++
-    rows.push({
-      transactionDate: date,
-      valueDate: firstDate(get('valueDate')),
-      narration: get('narration') || get('reference') || '',
-      referenceNumber: get('reference') || undefined,
-      chequeNumber: get('cheque') || undefined,
-      debitAmount: debit,
-      creditAmount: credit,
-      balanceAfter:
-        map.balance !== undefined ? parseAmount(get('balance')) || undefined : undefined,
-      sourceRowNumber: r + 1,
-      parserConfidence: conf,
-    })
-  }
+  const { rows, good } = extractRows(grid, map, headerRow, { parserType, ocrUsed })
 
   if (rows.length === 0) warnings.push('No transaction rows were recognised.')
   else if (ocrUsed)

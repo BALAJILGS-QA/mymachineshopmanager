@@ -23,7 +23,18 @@ interface Item {
   w: number
 }
 
-export async function pdfToGrid(buf: ArrayBuffer): Promise<string[][]> {
+// A positioned text run from the PDF (page origin bottom-left: larger y = higher).
+export interface PositionedItem {
+  str: string
+  x: number
+  y: number
+  w: number
+  page: number
+}
+
+// Extract every positioned text run across all pages. Exported so the column-
+// aware reconstruction (alignPdfItems) can work from raw geometry.
+export async function pdfToItems(buf: ArrayBuffer): Promise<PositionedItem[]> {
   // pdfjs v4 is ESM; import the main entry and point the worker at the bundled
   // asset URL (webpack/Turbopack turn this into a real asset in the client build).
   const pdfjs = await import('pdfjs-dist')
@@ -37,14 +48,10 @@ export async function pdfToGrid(buf: ArrayBuffer): Promise<string[][]> {
   }
 
   const doc = await pdfjs.getDocument({ data: new Uint8Array(buf) }).promise
-  const grid: string[][] = []
-
+  const items: PositionedItem[] = []
   for (let p = 1; p <= doc.numPages; p++) {
     const page = await doc.getPage(p)
     const content = await page.getTextContent()
-
-    // Collect positioned text items.
-    const items: Item[] = []
     for (const it of content.items) {
       // TextItem has `str` + `transform`; TextMarkedContent does not.
       const anyIt = it as { str?: string; transform?: number[]; width?: number }
@@ -54,18 +61,29 @@ export async function pdfToGrid(buf: ArrayBuffer): Promise<string[][]> {
         x: anyIt.transform[4],
         y: anyIt.transform[5],
         w: anyIt.width ?? 0,
+        page: p,
       })
     }
+  }
+  await doc.cleanup?.()
+  return items
+}
 
-    // Group into rows by Y (page origin is bottom-left, so larger Y = higher up).
+// Generic grid: group items into visual rows by Y, split into cells by X gaps.
+// Works for statements whose rows are single physical lines; multi-line layouts
+// (e.g. IOB) need alignPdfItems instead.
+export function itemsToGrid(items: PositionedItem[]): string[][] {
+  const grid: string[][] = []
+  const pages = Array.from(new Set(items.map((i) => i.page))).sort((a, b) => a - b)
+  for (const p of pages) {
     const rowsByY = new Map<number, Item[]>()
     for (const it of items) {
+      if (it.page !== p) continue
       const key = Math.round(it.y / Y_TOLERANCE) * Y_TOLERANCE
       const arr = rowsByY.get(key) ?? []
-      arr.push(it)
+      arr.push({ str: it.str, x: it.x, y: it.y, w: it.w })
       rowsByY.set(key, arr)
     }
-
     const ys = Array.from(rowsByY.keys()).sort((a, b) => b - a) // top → bottom
     for (const y of ys) {
       const line = rowsByY.get(y)!.sort((a, b) => a.x - b.x)
@@ -89,9 +107,11 @@ export async function pdfToGrid(buf: ArrayBuffer): Promise<string[][]> {
       if (cells.some((c) => c !== '')) grid.push(cells)
     }
   }
-
-  await doc.cleanup?.()
   return grid
+}
+
+export async function pdfToGrid(buf: ArrayBuffer): Promise<string[][]> {
+  return itemsToGrid(await pdfToItems(buf))
 }
 
 // --- OCR fallback for scanned / screenshot statements -----------------------
