@@ -18,7 +18,7 @@ test('landing page renders with merged auth and SEO metadata', async ({ page }) 
   await expect(page.locator('meta[name="keywords"]')).toHaveAttribute('content', /CNC/i)
   await expect(page.locator('link[rel="canonical"]')).toHaveAttribute(
     'href',
-    /sreebalajiindustries/,
+    /mymachineshopmanager\.vercel\.app/,
   )
   await expect(page.locator('meta[property="og:title"]')).toHaveCount(1)
   await expect(page.locator('script#route-jsonld')).toHaveCount(1)

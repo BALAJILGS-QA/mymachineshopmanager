@@ -17,7 +17,7 @@ function envUrl(): string {
   // changes every deploy, which would make canonicals/sitemap/OG unstable. When
   // unset, canonicals point at the stable production domain (so preview builds
   // correctly canonicalize to production instead of to an ephemeral host).
-  const raw = process.env.NEXT_PUBLIC_SITE_URL || 'https://sreebalajiindustries.netlify.app'
+  const raw = process.env.NEXT_PUBLIC_SITE_URL || 'https://mymachineshopmanager.vercel.app'
   // Normalise: strip a trailing slash so `${siteUrl}/path` never doubles up.
   return raw.replace(/\/+$/, '')
 }
