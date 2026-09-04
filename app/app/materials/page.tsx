@@ -1,10 +1,7 @@
-'use client'
+import { redirect } from 'next/navigation'
 
-// Portal route /app/materials (was src/routes/app/materials.tsx). Client Component —
-// reuses the shared feature page (React Query + Supabase + browser APIs).
-
-import { MaterialsPage } from '@/features/materials/MaterialsPage'
-
+// Backward-compatibility: Materials & Stock moved into the Inventory module.
+// Existing bookmarks/deep links to /app/materials redirect to the new location.
 export default function Page() {
-  return <MaterialsPage />
+  redirect('/app/inventory/materials')
 }

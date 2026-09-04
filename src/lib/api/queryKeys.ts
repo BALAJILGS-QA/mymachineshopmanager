@@ -103,6 +103,9 @@ export const qk = {
     auditLog: ['hrm', 'auditLog'] as const,
     notifications: ['hrm', 'notifications'] as const,
   },
+  inventory: {
+    transfers: ['inventory', 'transfers'] as const,
+  },
   toolroom: {
     categories: ['toolroom', 'categories'] as const,
     tools: ['toolroom', 'tools'] as const,

@@ -1271,6 +1271,29 @@ export const maps = {
       updatedAt: 'updated_at',
     },
   },
+  // ---- Inventory (Stock Transfers) ----------------------------------------
+  stockTransfers: {
+    table: 'stock_transfers',
+    numeric: ['quantity'],
+    fields: {
+      id: 'id',
+      transferNo: 'transfer_no',
+      materialId: 'material_id',
+      companyId: 'company_id',
+      fromLocation: 'from_location',
+      toLocation: 'to_location',
+      quantity: 'quantity',
+      unit: 'unit',
+      transferDate: 'transfer_date',
+      requestedBy: 'requested_by',
+      approvedBy: 'approved_by',
+      status: 'status',
+      remarks: 'remarks',
+      createdAt: 'created_at',
+      updatedAt: 'updated_at',
+      createdBy: 'created_by',
+    },
+  },
   // ---- Tool Room ----------------------------------------------------------
   toolCategories: {
     table: 'tool_categories',

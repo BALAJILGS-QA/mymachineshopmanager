@@ -27,13 +27,8 @@ import {
   Upload,
   Percent,
   Wrench,
-  FolderTree,
-  Send,
-  PackageCheck,
-  CalendarClock,
-  Hammer,
-  Ruler,
   History,
+  Sliders,
   Settings as SettingsIcon,
   type LucideIcon,
 } from 'lucide-react'
@@ -65,8 +60,8 @@ export interface NavGroup {
 
 // PRD 14 — navigation grouped into modules. Routes live under /app (the public
 // marketing site owns the root). Sales is intentionally its own standalone
-// module; Materials & Stock sits with Production, Purchase Management with
-// Accounts & Finance.
+// module; Inventory (Materials & Stock) is its own top-level module, Purchase
+// Management sits with Accounts & Finance, and Tool Room sits under Production.
 export const NAV_GROUPS: NavGroup[] = [
   {
     accent: 'blue',
@@ -80,44 +75,42 @@ export const NAV_GROUPS: NavGroup[] = [
     items: [
       { to: '/app/jobs', label: 'Job Orders', icon: ClipboardList, short: 'Jobs' },
       { to: '/app/production', label: 'Production', icon: Factory, short: 'Floor' },
-      { to: '/app/materials', label: 'Materials & Stock', icon: Boxes, short: 'Stock' },
+      // Tool Room is specialized production tool management; its own multi-screen
+      // area lives under /app/tool-room (that page is the hub for its sub-screens).
+      { to: '/app/tool-room', label: 'Tool Room', icon: Wrench, short: 'Tools' },
     ],
   },
   {
-    // Production Planning → Tool Room. A large sub-module, so it gets its own
-    // titled accordion group (like HRM) with its hub at /app/tool-room.
-    title: 'Tool Room',
-    to: '/app/tool-room',
-    icon: Wrench,
-    accent: 'orange',
+    // Inventory — the source of truth for material stock. Materials & Stock moved
+    // here out of Production Planning; everything else is a view over the existing
+    // stock tables (no duplicate stock model).
+    title: 'Inventory',
+    to: '/app/inventory',
+    icon: Boxes,
+    accent: 'cyan',
     items: [
-      { to: '/app/tool-room/tools', label: 'Tool Master', icon: Wrench, short: 'Tools' },
+      { to: '/app/inventory/dashboard', label: 'Dashboard', icon: LayoutDashboard, short: 'Inv' },
+      { to: '/app/inventory/materials', label: 'Materials & Stock', icon: Boxes, short: 'Stock' },
+      { to: '/app/inventory/movements', label: 'Stock Movements', icon: History, short: 'Moves' },
       {
-        to: '/app/tool-room/categories',
-        label: 'Tool Categories',
-        icon: FolderTree,
-        short: 'Cats',
-      },
-      { to: '/app/tool-room/inventory', label: 'Tool Inventory', icon: Boxes, short: 'Stock' },
-      { to: '/app/tool-room/issue', label: 'Tool Issue', icon: Send, short: 'Issue' },
-      { to: '/app/tool-room/return', label: 'Tool Return', icon: PackageCheck, short: 'Return' },
-      {
-        to: '/app/tool-room/reservations',
-        label: 'Reservations',
-        icon: CalendarClock,
-        short: 'Reserve',
+        to: '/app/inventory/adjustments',
+        label: 'Stock Adjustments',
+        icon: Sliders,
+        short: 'Adjust',
       },
       {
-        to: '/app/tool-room/transfers',
-        label: 'Tool Transfers',
+        to: '/app/inventory/transfers',
+        label: 'Stock Transfers',
         icon: ArrowLeftRight,
         short: 'Transfer',
       },
-      { to: '/app/tool-room/maintenance', label: 'Maintenance', icon: Hammer, short: 'Maint' },
-      { to: '/app/tool-room/calibration', label: 'Calibration', icon: Ruler, short: 'Calib' },
-      { to: '/app/tool-room/ledger', label: 'Movement History', icon: History, short: 'Ledger' },
-      { to: '/app/tool-room/reports', label: 'Reports', icon: BarChart3, short: 'Reports' },
-      { to: '/app/tool-room/settings', label: 'Settings', icon: SettingsIcon, short: 'Setup' },
+      {
+        to: '/app/inventory/history',
+        label: 'Stock History',
+        icon: ClipboardList,
+        short: 'History',
+      },
+      { to: '/app/inventory/reports', label: 'Reports', icon: BarChart3, short: 'Reports' },
     ],
   },
   {
@@ -243,7 +236,7 @@ export function moduleGroupForPath(pathname: string): NavGroup | undefined {
 // Items shown in the mobile bottom bar (most-used shop-floor screens); the rest
 // (Dashboard, Job Orders, Production, Expenses, Reports, …) live in the "More" sheet.
 export const MOBILE_PRIMARY = [
-  '/app/materials',
+  '/app/inventory/materials',
   '/app/deliveries',
   '/app/invoices',
   '/app/payments',

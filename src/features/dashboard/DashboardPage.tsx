@@ -298,7 +298,7 @@ export function DashboardPage() {
             label: 'Material Stock',
             count: flow.inStock,
             icon: Boxes,
-            to: '/app/materials',
+            to: '/app/inventory/materials',
             tone: 'brand',
           },
           {
@@ -399,7 +399,7 @@ export function DashboardPage() {
             <SummaryRow label="Cancelled" value={jobStatus.cancelled} tone="red" to="/app/jobs" />
           </div>
         </PanelCard>
-        <PanelCard title="Stock health" to="/app/materials">
+        <PanelCard title="Stock health" to="/app/inventory/materials">
           <Gauge pct={stockHealth.pct} />
           <div className="mt-3 divide-y divide-slate-100">
             <SummaryRow label="Healthy" value={stockHealth.healthy} tone="green" />
@@ -407,13 +407,13 @@ export function DashboardPage() {
               label="Low stock"
               value={stockHealth.low}
               tone="amber"
-              to="/app/materials"
+              to="/app/inventory/materials"
             />
             <SummaryRow
               label="Out of stock"
               value={stockHealth.out}
               tone="red"
-              to="/app/materials"
+              to="/app/inventory/materials"
             />
           </div>
         </PanelCard>
@@ -430,13 +430,13 @@ export function DashboardPage() {
               label="Raw material value"
               value={currency(kpi.rawValue)}
               tone="violet"
-              to="/app/materials"
+              to="/app/inventory/materials"
             />
             <SummaryRow
               label="Materials in stock"
               value={flow.inStock}
               tone="brand"
-              to="/app/materials"
+              to="/app/inventory/materials"
             />
           </div>
         </PanelCard>
@@ -538,7 +538,7 @@ export function DashboardPage() {
         <Card className="p-4">
           <ListHeader
             title="Low / negative stock"
-            to="/app/materials"
+            to="/app/inventory/materials"
             icon={<AlertTriangle size={15} className="text-amber-500" />}
           />
           {lowStock.length === 0 ? (
@@ -590,7 +590,7 @@ export function DashboardPage() {
         <Card className="p-4">
           <ListHeader
             title="Recent material dispatches"
-            to="/app/materials"
+            to="/app/inventory/materials"
             icon={<Send size={15} className="text-violet-500" />}
           />
           {recentIssues.length === 0 ? (

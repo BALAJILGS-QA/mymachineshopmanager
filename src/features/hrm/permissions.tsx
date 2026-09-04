@@ -81,6 +81,14 @@ export type PermKey =
   | 'TOOLROOM_ADJUST'
   | 'TOOLROOM_REPORT'
   | 'TOOLROOM_SETTINGS'
+  // Inventory (catalog seeded in migration 0029)
+  | 'INVENTORY_VIEW'
+  | 'INVENTORY_MATERIAL_VIEW'
+  | 'INVENTORY_MATERIAL_MANAGE'
+  | 'INVENTORY_STOCK_VIEW'
+  | 'INVENTORY_ADJUST'
+  | 'INVENTORY_TRANSFER'
+  | 'INVENTORY_REPORT'
 
 export interface AccessRow {
   permission_key: PermKey
