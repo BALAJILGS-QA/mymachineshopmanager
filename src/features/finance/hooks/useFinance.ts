@@ -153,5 +153,9 @@ export function useBankImportActions() {
       api.postBankTxnSplit(id, splits),
     onSuccess: invalidateAll,
   })
-  return { updateTxn, post, split, invalidateAll }
+  const postFile = useMutation({
+    mutationFn: (fileId: string) => api.postBankFile(fileId),
+    onSuccess: invalidateAll,
+  })
+  return { updateTxn, post, split, postFile, invalidateAll }
 }

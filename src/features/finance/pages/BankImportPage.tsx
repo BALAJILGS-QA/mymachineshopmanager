@@ -58,7 +58,7 @@ export function BankImportPage() {
   const [edit, setEdit] = useState<BankTxn | null>(null)
   const [splitting, setSplitting] = useState<BankTxn | null>(null)
 
-  const { post, updateTxn, split } = useBankImportActions()
+  const { post, updateTxn, split, postFile } = useBankImportActions()
   const txns = useBankTxns(activeFileId).data ?? []
 
   const partyName = (id?: string) =>
@@ -154,11 +154,19 @@ export function BankImportPage() {
         })
       }
       await api.insertBankTxns(rows)
-      const dupes = await api.detectDuplicates(fileRow.id)
+      await api.detectDuplicates(fileRow.id)
       setActiveFileId(fileRow.id)
-      toast.success(
-        `Imported ${rows.length} transactions${dupes ? ` — ${dupes} flagged as duplicates` : ''}`,
-      )
+
+      // Fully automatic: post every non-duplicate row straight into Payments
+      // (credits) / Expenses (debits) with balanced journals. Nothing is skipped
+      // except confirmed duplicates; failures are surfaced, never silent.
+      setStatus('Posting to Payments / Expenses…')
+      const res = await postFile.mutateAsync(fileRow.id)
+      const parts = [`Imported ${rows.length}`, `posted ${res.posted}`]
+      if (res.skipped) parts.push(`${res.skipped} skipped (duplicates/ignored)`)
+      if (res.failed) parts.push(`${res.failed} need review`)
+      if (res.failed) toast.info(parts.join(' · ') + ' — see the grid below')
+      else toast.success(parts.join(' · '))
     } catch (e) {
       toast.error(toUserMessage(e, 'Could not process the statement'))
     } finally {
@@ -197,25 +205,32 @@ export function BankImportPage() {
     }
   }
 
-  async function postAllReady() {
-    const ready = txns.filter(isReady)
-    if (!ready.length) return toast.info('Nothing ready to post')
+  // Post everything still unposted (not just high-confidence) — credits →
+  // Payments, debits → Expenses. Confirmed duplicates / ignored rows are skipped.
+  async function postAllRemaining() {
+    if (!activeFileId) return
+    const remaining = txns.filter(
+      (t) =>
+        t.postingStatus === 'unposted' &&
+        t.dupStatus !== 'duplicate' &&
+        t.reviewStatus !== 'ignored' &&
+        (t.creditAmount > 0 || t.debitAmount > 0),
+    )
+    if (!remaining.length) return toast.info('Nothing left to post')
     const ok = await confirm({
-      title: 'Post high-confidence transactions',
-      message: `Post ${ready.length} transaction(s) with confidence ≥ 80%? Each creates a payment/receipt or expense plus a balanced journal.`,
+      title: 'Post all remaining transactions',
+      message: `Post ${remaining.length} transaction(s)? Credits become receipts in Payments and debits become Expenses, each with a balanced journal. Unmatched receipts are filed under the "Unallocated Bank Receipts" customer for you to re-assign later.`,
       confirmLabel: 'Post all',
     })
     if (!ok) return
-    let done = 0
-    for (const t of ready) {
-      try {
-        await post.mutateAsync({ id: t.id })
-        done++
-      } catch {
-        /* keep going; errors surfaced per row on retry */
-      }
+    try {
+      const res = await postFile.mutateAsync(activeFileId)
+      const msg = `Posted ${res.posted}${res.failed ? ` · ${res.failed} need review` : ''}`
+      if (res.failed) toast.info(msg)
+      else toast.success(msg)
+    } catch (e) {
+      toast.error(toUserMessage(e, 'Posting failed'))
     }
-    toast.success(`Posted ${done}/${ready.length}`)
   }
 
   async function ignore(t: BankTxn) {
@@ -341,12 +356,16 @@ export function BankImportPage() {
     <div>
       <PageHeader
         title="Bank Statement Import"
-        subtitle="Upload a statement → auto-extract, classify, de-duplicate, review, and post to Payments / Receipts with balanced journals"
+        subtitle="Upload a statement → auto-extract, classify, de-duplicate, and post every credit to Payments and every debit to Expenses with balanced journals"
         actions={
           activeFileId &&
           canImport && (
-            <button className="btn-primary btn-sm" onClick={postAllReady} disabled={post.isPending}>
-              <Check size={16} /> Post high-confidence
+            <button
+              className="btn-primary btn-sm"
+              onClick={postAllRemaining}
+              disabled={postFile.isPending}
+            >
+              <Check size={16} /> {postFile.isPending ? 'Posting…' : 'Post all remaining'}
             </button>
           )
         }
@@ -381,7 +400,7 @@ export function BankImportPage() {
           </button>
           <span className="text-xs text-slate-500">
             {status ||
-              'CSV, Excel (.xlsx) or PDF (text or scanned — OCR). Columns are auto-detected; PDF/OCR rows always need review.'}
+              'CSV, Excel (.xlsx) or the bank’s original PDF export. Columns are auto-detected; every non-duplicate row is posted automatically. Upload the bank’s own statement, not a screenshot/scan.'}
           </span>
         </div>
         {bankAccounts.length === 0 && (

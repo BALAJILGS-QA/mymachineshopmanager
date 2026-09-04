@@ -275,6 +275,26 @@ export async function postBankTxn(
   return (data ?? {}) as { payment_id?: string; expense_id?: string; journal_id?: string }
 }
 
+// Post every eligible transaction in a file in one round-trip (credits →
+// Payments, debits → Expenses, + balanced journals). Continue-on-error: confirmed
+// duplicates and ignored rows are skipped; failures are returned, not thrown.
+export async function postBankFile(fileId: string): Promise<{
+  posted: number
+  failed: number
+  skipped: number
+  errors: { txn_id: string; error: string }[]
+}> {
+  if (!supabase) throw new Error('Supabase is not configured')
+  const { data, error } = await supabase.rpc('post_bank_file', { p_file_id: fileId })
+  if (error) throw error
+  return (data ?? { posted: 0, failed: 0, skipped: 0, errors: [] }) as {
+    posted: number
+    failed: number
+    skipped: number
+    errors: { txn_id: string; error: string }[]
+  }
+}
+
 export interface BankSplit {
   ledgerAccountId: string
   amount: number

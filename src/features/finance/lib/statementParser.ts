@@ -370,6 +370,32 @@ const yr = (s: string) => (s.length === 2 ? 2000 + Number(s) : Number(s))
 const iso = (d: number, m: number, y: number) =>
   `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`
 
+// Extract the FIRST date found anywhere in a cell. Real bank cells often carry
+// more than a bare date — IOB puts the value date in parentheses on the same
+// logical row ("31-Mar-25 (31-Mar-25)"), and OCR/PDF reconstruction can glue
+// stray tokens onto the date. Anchored parseDate would return undefined for
+// those and the row would be silently dropped (§: never skip a real record), so
+// we scan for the first date-shaped substring and parse that.
+export function firstDate(raw?: string): string | undefined {
+  if (!raw) return undefined
+  const s = raw.trim()
+  const whole = parseDate(s)
+  if (whole) return whole
+  const patterns = [
+    /\d{1,2}[-/ ][A-Za-z]{3,}[-/ ]\d{2,4}/, // dd-MMM-yyyy / dd MMM yy
+    /\d{4}[-/]\d{1,2}[-/]\d{1,2}/, // yyyy-mm-dd
+    /\d{1,2}[-/]\d{1,2}[-/]\d{2,4}/, // dd/mm/yyyy
+  ]
+  for (const re of patterns) {
+    const m = s.match(re)
+    if (m) {
+      const d = parseDate(m[0])
+      if (d) return d
+    }
+  }
+  return undefined
+}
+
 // -- Main entry ----------------------------------------------------------------
 export async function parseStatement(
   file: File,
@@ -430,7 +456,7 @@ export async function parseStatement(
   for (let r = headerRow + 1; r < grid.length; r++) {
     const cells = grid[r]
     const get = (k: string) => (map[k] !== undefined ? (cells[map[k]] ?? '').trim() : '')
-    const date = parseDate(get('transactionDate')) ?? parseDate(get('valueDate'))
+    const date = firstDate(get('transactionDate')) ?? firstDate(get('valueDate'))
     if (!date) continue // skip non-transaction rows (headers/footers/totals)
 
     let debit = 0
@@ -458,7 +484,7 @@ export async function parseStatement(
     if (conf >= 100) good++
     rows.push({
       transactionDate: date,
-      valueDate: parseDate(get('valueDate')),
+      valueDate: firstDate(get('valueDate')),
       narration: get('narration') || get('reference') || '',
       referenceNumber: get('reference') || undefined,
       chequeNumber: get('cheque') || undefined,
