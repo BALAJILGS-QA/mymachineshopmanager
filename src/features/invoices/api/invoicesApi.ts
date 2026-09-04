@@ -92,12 +92,14 @@ export async function updateInvoice(id: string, patch: InvoiceUpdateInput): Prom
         quantity: l.quantity,
         rate: l.rate,
         line_no: i,
-        // Preserve each line's stock link on edit. Stock-affecting fields
-        // (material + qty + owner) are locked in the form once an invoice exists,
-        // so the stored lines stay in sync with the material_issues posted at
-        // create time; editing only ever changes money (rate/description/tax).
+        // Persist every line field on edit, including the stock link. The
+        // per-source stock view derives an invoice's dispatched quantity from
+        // material_id + source_receipt_id + quantity on the line, so keeping
+        // source_receipt_id here lets edits (qty/material/source) flow through
+        // to stock instead of silently dropping the allocation.
         material_id: l.materialId ?? null,
         owner_type: l.ownerType ?? null,
+        source_receipt_id: l.sourceReceiptId ?? null,
       }))
       const { error } = await sb().from('invoice_lines').insert(rows)
       if (error) throw error

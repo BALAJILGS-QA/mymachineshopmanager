@@ -496,6 +496,8 @@ function DcForm({ dc, onClose }: { dc: DeliveryChallan | null; onClose: () => vo
   // override the user types in. Auto mode never consumes the counter early.
   const [autoNumber, setAutoNumber] = useState(true)
   const [manualDcNo, setManualDcNo] = useState('')
+  // Editable challan number when editing an existing challan.
+  const [editDcNo, setEditDcNo] = useState(dc?.dcNo ?? '')
   // New challans start empty — sources are added via the source picker below.
   const [lines, setLines] = useState<DcLine[]>(dc?.lines ?? [])
 
@@ -596,11 +598,16 @@ function DcForm({ dc, onClose }: { dc: DeliveryChallan | null; onClose: () => vo
 
   async function submit() {
     try {
+      if (isEdit && !editDcNo.trim()) {
+        toast.error('Enter a challan number')
+        return
+      }
       if (isEdit && !canFullEdit) {
-        // Cancelled/invoiced challan: only metadata is editable.
+        // Cancelled/invoiced challan: metadata + challan number are editable.
         await updateChallan.mutateAsync({
           id: dc.id,
           patch: {
+            dcNo: editDcNo.trim(),
             reference: reference || undefined,
             vehicleNo: vehicleNo || undefined,
             notes: notes || undefined,
@@ -653,6 +660,11 @@ function DcForm({ dc, onClose }: { dc: DeliveryChallan | null; onClose: () => vo
             lines: payloadLines,
           },
         })
+        // The full-edit RPC doesn't carry the challan number, so persist a change
+        // to it with a direct column update.
+        if (editDcNo.trim() !== dc.dcNo) {
+          await updateChallan.mutateAsync({ id: dc.id, patch: { dcNo: editDcNo.trim() } })
+        }
         toast.success('Challan updated — stock re-synced')
         onClose()
         return
@@ -737,7 +749,11 @@ function DcForm({ dc, onClose }: { dc: DeliveryChallan | null; onClose: () => vo
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         {isEdit ? (
           <Field label="Challan No." required>
-            <Input value={dc.dcNo} disabled />
+            <Input
+              value={editDcNo}
+              onChange={(e) => setEditDcNo(e.target.value)}
+              placeholder="Challan no."
+            />
           </Field>
         ) : (
           <div>

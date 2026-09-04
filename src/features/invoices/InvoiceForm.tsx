@@ -618,9 +618,11 @@ export function InvoiceForm({
             </thead>
             <tbody className="divide-y divide-slate-100">
               {lines.map((l) => {
-                // Stock-affecting fields (material, owner, qty) are locked once
-                // the invoice exists — the deduction was posted at create time.
-                const stockLocked = !!invoice && !!l.materialId
+                // All line fields stay editable, including on existing invoices —
+                // updateInvoice rewrites the lines (with their stock link) so
+                // changes flow through to stock. Only challan-derived lines below
+                // remain locked, since their stock was deducted on the challan.
+                const stockLocked = false
                 // A line sourced from a challan already deducted stock there, so
                 // it can't be linked to a material again (would double count).
                 const fromChallan =
@@ -637,15 +639,7 @@ export function InvoiceForm({
                       />
                     </td>
                     <td className="px-2 py-1.5">
-                      {invoice ? (
-                        // Edit mode: show the linked source read-only (its stock was
-                        // already deducted); no new links on an existing invoice.
-                        <span className="text-2xs text-slate-500">
-                          {l.materialId
-                            ? `${materialName(l.materialId)} · ${l.ownerType === 'Shop' ? 'Own' : 'Customer'}`
-                            : '—'}
-                        </span>
-                      ) : fromChallan ? (
+                      {fromChallan ? (
                         <span className="text-2xs text-slate-400">
                           From challan (already deducted)
                         </span>
