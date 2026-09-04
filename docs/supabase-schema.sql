@@ -244,6 +244,7 @@ create table if not exists expenses (
   amount numeric(14,2) not null check (amount > 0),
   method payment_method not null,
   vendor text,
+  payee text,                                   -- receiver name (e.g. self for a cash withdrawal)
   reference text,
   company_id text references companies(id),
   job_id text references job_orders(id),

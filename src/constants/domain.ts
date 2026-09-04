@@ -47,6 +47,11 @@ export const INVOICE_STATUSES = [
 
 export const DC_STATUSES = ['Open', 'Invoiced', 'Cancelled'] as const satisfies readonly DcStatus[]
 
+// Built-in expense category for the owner withdrawing shop cash for personal use
+// ("drawings" / self cash transaction). Always offered in Purchase Management so
+// it is available even on installs whose saved settings predate it.
+export const CASH_WITHDRAWAL_CATEGORY = 'Cash Withdrawal (Self)'
+
 // Shared status→badge-tone maps (used by list + print views).
 export const DC_STATUS_TONE: Record<DcStatus, string> = {
   Open: 'amber',

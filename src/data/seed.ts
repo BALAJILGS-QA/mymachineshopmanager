@@ -35,6 +35,7 @@ export const DEFAULT_SETTINGS: Settings = {
     'Labour/Contract',
     'Repairs',
     'Packing',
+    'Cash Withdrawal (Self)',
     'Miscellaneous',
   ],
   numbering: {
@@ -61,12 +62,7 @@ export const DEFAULT_SETTINGS: Settings = {
   },
 }
 
-const INITIAL_COMPANIES = [
-  'Flowra Global',
-  'Vahinie Engineering',
-  'Nirmal Pumps',
-  'Local',
-]
+const INITIAL_COMPANIES = ['Flowra Global', 'Vahinie Engineering', 'Nirmal Pumps', 'Local']
 
 export function buildInitialDb(): Database {
   const ts = nowISO()
