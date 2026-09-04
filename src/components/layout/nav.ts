@@ -26,6 +26,14 @@ import {
   Scale,
   Upload,
   Percent,
+  Wrench,
+  FolderTree,
+  Send,
+  PackageCheck,
+  CalendarClock,
+  Hammer,
+  Ruler,
+  History,
   Settings as SettingsIcon,
   type LucideIcon,
 } from 'lucide-react'
@@ -73,6 +81,43 @@ export const NAV_GROUPS: NavGroup[] = [
       { to: '/app/jobs', label: 'Job Orders', icon: ClipboardList, short: 'Jobs' },
       { to: '/app/production', label: 'Production', icon: Factory, short: 'Floor' },
       { to: '/app/materials', label: 'Materials & Stock', icon: Boxes, short: 'Stock' },
+    ],
+  },
+  {
+    // Production Planning → Tool Room. A large sub-module, so it gets its own
+    // titled accordion group (like HRM) with its hub at /app/tool-room.
+    title: 'Tool Room',
+    to: '/app/tool-room',
+    icon: Wrench,
+    accent: 'orange',
+    items: [
+      { to: '/app/tool-room/tools', label: 'Tool Master', icon: Wrench, short: 'Tools' },
+      {
+        to: '/app/tool-room/categories',
+        label: 'Tool Categories',
+        icon: FolderTree,
+        short: 'Cats',
+      },
+      { to: '/app/tool-room/inventory', label: 'Tool Inventory', icon: Boxes, short: 'Stock' },
+      { to: '/app/tool-room/issue', label: 'Tool Issue', icon: Send, short: 'Issue' },
+      { to: '/app/tool-room/return', label: 'Tool Return', icon: PackageCheck, short: 'Return' },
+      {
+        to: '/app/tool-room/reservations',
+        label: 'Reservations',
+        icon: CalendarClock,
+        short: 'Reserve',
+      },
+      {
+        to: '/app/tool-room/transfers',
+        label: 'Tool Transfers',
+        icon: ArrowLeftRight,
+        short: 'Transfer',
+      },
+      { to: '/app/tool-room/maintenance', label: 'Maintenance', icon: Hammer, short: 'Maint' },
+      { to: '/app/tool-room/calibration', label: 'Calibration', icon: Ruler, short: 'Calib' },
+      { to: '/app/tool-room/ledger', label: 'Movement History', icon: History, short: 'Ledger' },
+      { to: '/app/tool-room/reports', label: 'Reports', icon: BarChart3, short: 'Reports' },
+      { to: '/app/tool-room/settings', label: 'Settings', icon: SettingsIcon, short: 'Setup' },
     ],
   },
   {

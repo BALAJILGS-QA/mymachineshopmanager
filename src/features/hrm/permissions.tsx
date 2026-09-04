@@ -67,6 +67,20 @@ export type PermKey =
   | 'GST_MANAGE'
   | 'EINVOICE_MANAGE'
   | 'EWAYBILL_MANAGE'
+  // Tool Room (catalog seeded in migration 0028)
+  | 'TOOLROOM_VIEW'
+  | 'TOOLROOM_TOOL_MANAGE'
+  | 'TOOLROOM_RECEIVE'
+  | 'TOOLROOM_ISSUE'
+  | 'TOOLROOM_RETURN'
+  | 'TOOLROOM_RESERVE'
+  | 'TOOLROOM_TRANSFER'
+  | 'TOOLROOM_MAINTAIN'
+  | 'TOOLROOM_CALIBRATE'
+  | 'TOOLROOM_SCRAP'
+  | 'TOOLROOM_ADJUST'
+  | 'TOOLROOM_REPORT'
+  | 'TOOLROOM_SETTINGS'
 
 export interface AccessRow {
   permission_key: PermKey
