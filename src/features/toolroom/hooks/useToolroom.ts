@@ -44,6 +44,21 @@ export const useMaintenanceRecords = () =>
 export const useCalibrationRecords = () =>
   useCrud<ToolCalibration>(qk.toolroom.calibrations, api.calibrationsApi)
 
+// Multi-line tool purchase: one combined expense + a tool receipt per line.
+// Invalidates tool inventory/ledger/tools plus the expenses list.
+export function useCreateToolPurchase() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: api.createToolPurchaseMulti,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: qk.toolroom.inventory })
+      qc.invalidateQueries({ queryKey: ['toolroom', 'transactions'] })
+      qc.invalidateQueries({ queryKey: qk.toolroom.tools })
+      qc.invalidateQueries({ queryKey: qk.expenses.all })
+    },
+  })
+}
+
 export function useTool(id: string | undefined) {
   return useQuery({
     queryKey: id ? qk.toolroom.tool(id) : ['toolroom', 'tools', 'none'],

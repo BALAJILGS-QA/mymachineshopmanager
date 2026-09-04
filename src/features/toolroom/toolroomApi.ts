@@ -7,8 +7,9 @@
 import { supabase, isSupabaseEnabled } from '@/data/supabase'
 import { maps, fromRow, type Row } from '@/lib/api/rowMap'
 import { selectAll, insertRow, updateRow, deleteRow } from '@/lib/api/supabaseCrud'
-import { nextDocNo, nextCode } from '@/lib/api/numbering'
+import { nextDocNo, nextCode, nextNumberedDoc } from '@/lib/api/numbering'
 import { uid } from '@/lib/id'
+import type { PaymentMethod } from '@/types'
 import type {
   Tool,
   ToolCalibration,
@@ -209,6 +210,53 @@ export const scrapTool = (i: Omit<MoveInput, 'txnType'>) => postMove({ ...i, txn
 export const consumeTool = (i: Omit<MoveInput, 'txnType'>) => postMove({ ...i, txnType: 'consume' })
 
 export const adjustStock = (i: Omit<MoveInput, 'txnType'>) => postMove({ ...i, txnType: 'adjust' })
+
+// ---- Multi-line tool purchase (one combined expense + M tool receipts) ------
+export interface ToolPurchaseLine {
+  toolId: string
+  qty: number
+  unit?: string
+  unitCost: number
+}
+export interface ToolPurchaseMultiInput {
+  supplier?: string
+  purchaseDate: string
+  method: PaymentMethod
+  notes?: string
+  category?: string
+  lines: ToolPurchaseLine[]
+}
+
+// Records several tool purchases as ONE purchase: a single combined expense plus
+// one tool 'receipt' movement per line (atomic via create_tool_purchase_multi).
+export async function createToolPurchaseMulti(
+  input: ToolPurchaseMultiInput,
+): Promise<{ expense_id: string; expense_no: string; lines: number; total: number }> {
+  const sb = requireSupabase()
+  const lines: Record<string, unknown>[] = []
+  for (const l of input.lines) {
+    lines.push({
+      tool_id: l.toolId,
+      qty: l.qty,
+      unit: l.unit ?? 'nos',
+      unit_cost: l.unitCost,
+      txn_id: uid('ttx_'),
+      txn_no: await nextDocNo('tool_txn', TXN_PATTERN),
+    })
+  }
+  const { data, error } = await sb.rpc('create_tool_purchase_multi', {
+    p_expense_id: uid('exp_'),
+    p_expense_no: await nextNumberedDoc('expense'),
+    p_date: input.purchaseDate,
+    p_supplier: input.supplier ?? null,
+    p_method: input.method,
+    p_notes: input.notes ?? null,
+    p_category: input.category ?? 'Tool Purchase',
+    p_lines: lines,
+  })
+  if (error) throw error
+  return data as { expense_id: string; expense_no: string; lines: number; total: number }
+}
 
 export const issueTool = (i: Omit<MoveInput, 'txnType'>, fromReservation = false) =>
   postMove({ ...i, txnType: fromReservation ? 'issue_reserved' : 'issue' })

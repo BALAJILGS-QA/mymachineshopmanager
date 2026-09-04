@@ -22,7 +22,16 @@ import {
 } from './hooks/useExpenses'
 import { useCompanies } from '@/features/companies/hooks/useCompanies'
 import { useJobs } from '@/features/jobs/hooks/useJobs'
-import { useMaterials, useCreateOwnPurchase } from '@/features/materials/hooks/useMaterials'
+import {
+  useMaterials,
+  useCreateMaterial,
+  useCreateOwnPurchaseMulti,
+} from '@/features/materials/hooks/useMaterials'
+import {
+  useTools,
+  useToolCategories,
+  useCreateToolPurchase,
+} from '@/features/toolroom/hooks/useToolroom'
 import { useVendors } from '@/features/vendors/hooks/useVendors'
 import { useSettings } from '@/features/settings/hooks/useSettings'
 import { usePreviewNo } from '@/features/shared/usePreviewNo'
@@ -578,6 +587,19 @@ function ExpenseCategoryDetail({
   )
 }
 
+type PurchaseMode = 'material' | 'tool' | 'expense'
+interface MatLine {
+  materialId: string
+  quantity: string
+  totalCost: string
+  totalGst: string
+}
+interface ToolLine {
+  toolId: string
+  qty: string
+  unitCost: string
+}
+
 function ExpenseForm({ expense, onClose }: { expense: Expense | null; onClose: () => void }) {
   const toast = useToast()
   const settings = useSettings().data
@@ -595,16 +617,27 @@ function ExpenseForm({ expense, onClose }: { expense: Expense | null; onClose: (
   const materials = allMaterials.filter((m) => m.active && !m.companyId)
   const { data: allVendors = [] } = useVendors()
   const vendors = allVendors.filter((v) => v.active)
+  // Tool Room master (for Tool Purchase mode).
+  const toolsCrud = useTools()
+  const toolList = (toolsCrud.list.data ?? []).filter((t) => (t.status ?? 'active') !== 'inactive')
+  const toolCategories = useToolCategories().list.data ?? []
+  const createMaterial = useCreateMaterial()
+  const createTool = toolsCrud.create
   const expenseNoPreview = usePreviewNo('expense')
   const createExpense = useCreateExpense()
   const updateExpense = useUpdateExpense()
-  const createPurchase = useCreateOwnPurchase()
-  const saving = createExpense.isPending || updateExpense.isPending || createPurchase.isPending
+  const createPurchaseMulti = useCreateOwnPurchaseMulti()
+  const createToolPurchase = useCreateToolPurchase()
+  const saving =
+    createExpense.isPending ||
+    updateExpense.isPending ||
+    createPurchaseMulti.isPending ||
+    createToolPurchase.isPending
 
   // New entries pick a mode; editing an existing row stays an expense edit.
-  const [mode, setMode] = useState<'purchase' | 'expense'>(expense ? 'expense' : 'purchase')
+  const [mode, setMode] = useState<PurchaseMode>(expense ? 'expense' : 'material')
 
-  // Shared fields (both modes).
+  // Shared header + Other-Expense fields.
   const [form, setForm] = useState({
     date: expense?.date ?? '',
     category: expense?.category ?? categories[0] ?? '',
@@ -617,37 +650,126 @@ function ExpenseForm({ expense, onClose }: { expense: Expense | null; onClose: (
     jobId: expense?.jobId ?? '',
     notes: expense?.notes ?? '',
   })
-  // Purchase-only fields.
-  const [pur, setPur] = useState({ materialId: '', quantity: '', totalCost: '', totalGst: '' })
-  const purMaterial = materials.find((m) => m.id === pur.materialId)
-  const purTotal = (Number(pur.totalCost) || 0) + (Number(pur.totalGst) || 0)
+  // Line-item grids (new material / tool purchases).
+  const [matLines, setMatLines] = useState<MatLine[]>([
+    { materialId: '', quantity: '', totalCost: '', totalGst: '' },
+  ])
+  const [toolLines, setToolLines] = useState<ToolLine[]>([{ toolId: '', qty: '', unitCost: '' }])
+  // Inline quick-add panels (null = closed).
+  const [newMat, setNewMat] = useState<{ name: string; unit: string } | null>(null)
+  const [newTool, setNewTool] = useState<{ name: string; categoryId: string; uom: string } | null>(
+    null,
+  )
 
   function set<K extends keyof typeof form>(k: K, v: (typeof form)[K]) {
     setForm((f) => ({ ...f, [k]: v }))
   }
-  function setP<K extends keyof typeof pur>(k: K, v: (typeof pur)[K]) {
-    setPur((p) => ({ ...p, [k]: v }))
+  const matTotal = matLines.reduce(
+    (s, l) => s + (Number(l.totalCost) || 0) + (Number(l.totalGst) || 0),
+    0,
+  )
+  const toolTotal = toolLines.reduce(
+    (s, l) => s + (Number(l.qty) || 0) * (Number(l.unitCost) || 0),
+    0,
+  )
+
+  function setMatLine(i: number, patch: Partial<MatLine>) {
+    setMatLines((ls) => ls.map((l, idx) => (idx === i ? { ...l, ...patch } : l)))
+  }
+  function setToolLine(i: number, patch: Partial<ToolLine>) {
+    setToolLines((ls) => ls.map((l, idx) => (idx === i ? { ...l, ...patch } : l)))
+  }
+
+  async function saveNewMaterial() {
+    if (!newMat?.name.trim()) return toast.error('Enter a material name')
+    try {
+      const m = await createMaterial.mutateAsync({
+        name: newMat.name.trim(),
+        unit: newMat.unit.trim() || 'Nos',
+        active: true,
+      })
+      // Drop it into the first empty line, else append a new one.
+      setMatLines((ls) => {
+        const idx = ls.findIndex((l) => !l.materialId)
+        if (idx >= 0) return ls.map((l, i) => (i === idx ? { ...l, materialId: m.id } : l))
+        return [...ls, { materialId: m.id, quantity: '', totalCost: '', totalGst: '' }]
+      })
+      setNewMat(null)
+      toast.success('Material added')
+    } catch (e) {
+      toast.error(toUserMessage(e, 'Could not add material'))
+    }
+  }
+
+  async function saveNewTool() {
+    if (!newTool?.name.trim()) return toast.error('Enter a tool name')
+    try {
+      const t = await createTool.mutateAsync({
+        name: newTool.name.trim(),
+        categoryId: newTool.categoryId || undefined,
+        uom: newTool.uom.trim() || 'nos',
+      })
+      setToolLines((ls) => {
+        const idx = ls.findIndex((l) => !l.toolId)
+        if (idx >= 0) return ls.map((l, i) => (i === idx ? { ...l, toolId: t.id } : l))
+        return [...ls, { toolId: t.id, qty: '', unitCost: '' }]
+      })
+      setNewTool(null)
+      toast.success('Tool added')
+    } catch (e) {
+      toast.error(toUserMessage(e, 'Could not add tool'))
+    }
   }
 
   async function submit() {
     try {
-      // --- Material purchase: adds to own stock + records the expense (atomic). ---
-      if (!expense && mode === 'purchase') {
-        if (!pur.materialId) return toast.error('Select a material')
-        const q = Number(pur.quantity)
-        if (!(q > 0)) return toast.error('Quantity must be greater than zero')
-        await createPurchase.mutateAsync({
+      if (!expense && mode === 'material') {
+        if (!form.date) return toast.error('Select a purchase date')
+        const lines = matLines
+          .filter((l) => l.materialId && Number(l.quantity) > 0)
+          .map((l) => ({
+            materialId: l.materialId,
+            quantity: Number(l.quantity),
+            unit: materials.find((m) => m.id === l.materialId)?.unit ?? 'Nos',
+            totalCost: Number(l.totalCost) || 0,
+            totalGst: Number(l.totalGst) || 0,
+          }))
+        if (lines.length === 0) return toast.error('Add at least one material with a quantity')
+        await createPurchaseMulti.mutateAsync({
           supplier: form.vendor || undefined,
-          materialId: pur.materialId,
           purchaseDate: form.date,
-          quantity: q,
-          unit: purMaterial?.unit ?? 'Nos',
-          totalCost: Number(pur.totalCost) || 0,
-          totalGst: Number(pur.totalGst) || 0,
           method: form.method,
           notes: form.notes || undefined,
+          lines,
         })
-        toast.success('Material purchased — added to own stock')
+        toast.success(
+          `Purchased ${lines.length} material${lines.length > 1 ? 's' : ''} — added to own stock`,
+        )
+        onClose()
+        return
+      }
+
+      if (!expense && mode === 'tool') {
+        if (!form.date) return toast.error('Select a purchase date')
+        const lines = toolLines
+          .filter((l) => l.toolId && Number(l.qty) > 0)
+          .map((l) => ({
+            toolId: l.toolId,
+            qty: Number(l.qty),
+            unit: toolList.find((t) => t.id === l.toolId)?.uom ?? 'nos',
+            unitCost: Number(l.unitCost) || 0,
+          }))
+        if (lines.length === 0) return toast.error('Add at least one tool with a quantity')
+        await createToolPurchase.mutateAsync({
+          supplier: form.vendor || undefined,
+          purchaseDate: form.date,
+          method: form.method,
+          notes: form.notes || undefined,
+          lines,
+        })
+        toast.success(
+          `Purchased ${lines.length} tool${lines.length > 1 ? 's' : ''} — added to tool stock`,
+        )
         onClose()
         return
       }
@@ -678,12 +800,54 @@ function ExpenseForm({ expense, onClose }: { expense: Expense | null; onClose: (
     }
   }
 
-  const isPurchase = !expense && mode === 'purchase'
+  const submitLabel = saving
+    ? 'Saving…'
+    : expense
+      ? 'Save changes'
+      : mode === 'material'
+        ? 'Record purchase'
+        : mode === 'tool'
+          ? 'Record tool purchase'
+          : 'Record expense'
+
+  // Shared header (Purchase Date / Supplier / Payment Method) for both grids.
+  const purchaseHeader = (
+    <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+      <Field label="Purchase Date" required>
+        <DateInput value={form.date} onChange={(v) => set('date', v)} />
+      </Field>
+      <Field label="Supplier / Vendor" hint={vendors.length ? 'Pick from the vendor master' : ''}>
+        {vendors.length ? (
+          <Select value={form.vendor} onChange={(e) => set('vendor', e.target.value)}>
+            <option value="">Select vendor…</option>
+            {vendors.map((v) => (
+              <option key={v.id} value={v.name}>
+                {v.name}
+              </option>
+            ))}
+          </Select>
+        ) : (
+          <Input value={form.vendor} onChange={(e) => set('vendor', e.target.value)} />
+        )}
+      </Field>
+      <Field label="Payment Method" required>
+        <Select
+          value={form.method}
+          onChange={(e) => set('method', e.target.value as PaymentMethod)}
+        >
+          {METHODS.map((m) => (
+            <option key={m}>{m}</option>
+          ))}
+        </Select>
+      </Field>
+    </div>
+  )
 
   return (
     <Modal
       open
       onClose={onClose}
+      size="lg"
       title={expense ? `Edit ${expense.expenseNo}` : 'Add Purchase / Expense'}
       footer={
         <>
@@ -691,13 +855,7 @@ function ExpenseForm({ expense, onClose }: { expense: Expense | null; onClose: (
             Cancel
           </button>
           <button className="btn-primary" onClick={submit} disabled={saving}>
-            {saving
-              ? 'Saving…'
-              : expense
-                ? 'Save changes'
-                : isPurchase
-                  ? 'Record purchase'
-                  : 'Record expense'}
+            {submitLabel}
           </button>
         </>
       }
@@ -708,13 +866,14 @@ function ExpenseForm({ expense, onClose }: { expense: Expense | null; onClose: (
         </p>
       )}
 
-      {/* Mode toggle (new entries only). */}
+      {/* Mode toggle (new entries only). Material vs Tool purchases are separate. */}
       {!expense && (
         <div className="mb-3">
           <div className="inline-flex rounded-lg bg-slate-200/60 p-1">
             {(
               [
-                { k: 'purchase', label: 'Material Purchase' },
+                { k: 'material', label: 'Material Purchase' },
+                { k: 'tool', label: 'Tool Purchase' },
                 { k: 'expense', label: 'Other Expense' },
               ] as const
             ).map((t) => (
@@ -732,91 +891,325 @@ function ExpenseForm({ expense, onClose }: { expense: Expense | null; onClose: (
             ))}
           </div>
           <p className="mt-2 rounded-lg bg-brand-50 px-3 py-2 text-xs text-brand-700">
-            {isPurchase
-              ? 'Records a raw-material purchase — the quantity is added to Own stock (visible in Materials & Stock → Own) and logged as an expense.'
-              : `Expense number will be ${expenseNoPreview}`}
+            {mode === 'material'
+              ? 'Buy one or more raw materials in a single record — each line is added to Own stock (Materials & Stock → Own); the whole purchase is logged as one expense.'
+              : mode === 'tool'
+                ? 'Buy one or more tools (inserts, drills, taps…) in a single record — each line is added to Tool Room stock; the whole purchase is logged as one expense.'
+                : `Expense number will be ${expenseNoPreview}`}
           </p>
         </div>
       )}
 
-      {isPurchase ? (
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <Field label="Purchase Date" required>
-            <DateInput value={form.date} onChange={(v) => set('date', v)} />
-          </Field>
-          <Field
-            label="Supplier / Vendor"
-            hint={vendors.length ? 'Pick from the vendor master' : ''}
-          >
-            {vendors.length ? (
-              <Select value={form.vendor} onChange={(e) => set('vendor', e.target.value)}>
-                <option value="">Select vendor…</option>
-                {vendors.map((v) => (
-                  <option key={v.id} value={v.name}>
-                    {v.name}
-                  </option>
-                ))}
-              </Select>
-            ) : (
-              <Input value={form.vendor} onChange={(e) => set('vendor', e.target.value)} />
-            )}
-          </Field>
-          <Field label="Material" required className="sm:col-span-2">
-            <Select value={pur.materialId} onChange={(e) => setP('materialId', e.target.value)}>
-              <option value="">Select material…</option>
-              {materials.map((m) => (
-                <option key={m.id} value={m.id}>
-                  {m.name} ({m.unit})
-                </option>
-              ))}
-            </Select>
-          </Field>
-          <Field label={`Quantity ${purMaterial ? `(${purMaterial.unit})` : ''}`} required>
-            <Input
-              type="number"
-              step="0.001"
-              min={0}
-              value={pur.quantity}
-              onChange={(e) => setP('quantity', e.target.value)}
-            />
-          </Field>
-          <Field label="Payment Method" required>
-            <Select
-              value={form.method}
-              onChange={(e) => set('method', e.target.value as PaymentMethod)}
-            >
-              {METHODS.map((m) => (
-                <option key={m}>{m}</option>
-              ))}
-            </Select>
-          </Field>
-          <Field label="Material Cost (₹)" required>
-            <Input
-              type="number"
-              step="0.01"
-              min={0}
-              value={pur.totalCost}
-              onChange={(e) => setP('totalCost', e.target.value)}
-            />
-          </Field>
-          <Field label="GST (₹)">
-            <Input
-              type="number"
-              step="0.01"
-              min={0}
-              value={pur.totalGst}
-              onChange={(e) => setP('totalGst', e.target.value)}
-            />
-          </Field>
-          <div className="sm:col-span-2 flex items-center justify-between rounded-lg bg-slate-50 px-3 py-2 text-sm">
-            <span className="text-slate-600">Total (cost + GST)</span>
-            <span className="font-semibold text-slate-900">{currency(purTotal)}</span>
+      {/* ---------- MATERIAL PURCHASE (multi-line grid) ---------- */}
+      {!expense && mode === 'material' && (
+        <div className="space-y-3">
+          {purchaseHeader}
+
+          <div className="overflow-x-auto rounded-lg border border-slate-200">
+            <table className="w-full min-w-[36rem] text-sm">
+              <thead>
+                <tr className="bg-slate-50 text-left text-2xs uppercase tracking-wide text-slate-500">
+                  <th className="px-3 py-2">Material</th>
+                  <th className="px-3 py-2 w-24 text-right">Qty</th>
+                  <th className="px-3 py-2 w-28 text-right">Cost (₹)</th>
+                  <th className="px-3 py-2 w-28 text-right">GST (₹)</th>
+                  <th className="px-3 py-2 w-24 text-right">Line total</th>
+                  <th className="px-3 py-2 w-10" />
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {matLines.map((l, i) => {
+                  const lineTotal = (Number(l.totalCost) || 0) + (Number(l.totalGst) || 0)
+                  return (
+                    <tr key={i}>
+                      <td className="px-2 py-1.5">
+                        <Select
+                          value={l.materialId}
+                          onChange={(e) => setMatLine(i, { materialId: e.target.value })}
+                        >
+                          <option value="">Select material…</option>
+                          {materials.map((m) => (
+                            <option key={m.id} value={m.id}>
+                              {m.name} ({m.unit})
+                            </option>
+                          ))}
+                        </Select>
+                      </td>
+                      <td className="px-2 py-1.5">
+                        <Input
+                          type="number"
+                          step="0.001"
+                          min={0}
+                          className="text-right"
+                          value={l.quantity}
+                          onChange={(e) => setMatLine(i, { quantity: e.target.value })}
+                        />
+                      </td>
+                      <td className="px-2 py-1.5">
+                        <Input
+                          type="number"
+                          step="0.01"
+                          min={0}
+                          className="text-right"
+                          value={l.totalCost}
+                          onChange={(e) => setMatLine(i, { totalCost: e.target.value })}
+                        />
+                      </td>
+                      <td className="px-2 py-1.5">
+                        <Input
+                          type="number"
+                          step="0.01"
+                          min={0}
+                          className="text-right"
+                          value={l.totalGst}
+                          onChange={(e) => setMatLine(i, { totalGst: e.target.value })}
+                        />
+                      </td>
+                      <td className="px-3 py-1.5 text-right font-medium text-slate-700">
+                        {currency(lineTotal)}
+                      </td>
+                      <td className="px-2 py-1.5 text-right">
+                        <button
+                          type="button"
+                          className="btn-ghost btn-sm text-red-500"
+                          disabled={matLines.length === 1}
+                          onClick={() => setMatLines((ls) => ls.filter((_, idx) => idx !== i))}
+                        >
+                          <Trash2 size={15} />
+                        </button>
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
           </div>
-          <Field label="Notes" className="sm:col-span-2">
+
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              className="btn-secondary btn-sm"
+              onClick={() =>
+                setMatLines((ls) => [
+                  ...ls,
+                  { materialId: '', quantity: '', totalCost: '', totalGst: '' },
+                ])
+              }
+            >
+              <Plus size={15} /> Add material
+            </button>
+            <button
+              type="button"
+              className="btn-ghost btn-sm"
+              onClick={() => setNewMat({ name: '', unit: 'Nos' })}
+            >
+              <Plus size={15} /> New material item
+            </button>
+          </div>
+
+          {newMat && (
+            <div className="rounded-lg border border-brand-200 bg-brand-50/50 p-3">
+              <p className="mb-2 text-xs font-semibold text-brand-700">New material item</p>
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr,8rem,auto]">
+                <Input
+                  placeholder="Material name"
+                  value={newMat.name}
+                  onChange={(e) => setNewMat({ ...newMat, name: e.target.value })}
+                />
+                <Input
+                  placeholder="Unit (Nos, Kg…)"
+                  value={newMat.unit}
+                  onChange={(e) => setNewMat({ ...newMat, unit: e.target.value })}
+                />
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    className="btn-primary btn-sm"
+                    onClick={saveNewMaterial}
+                    disabled={createMaterial.isPending}
+                  >
+                    Add
+                  </button>
+                  <button
+                    type="button"
+                    className="btn-secondary btn-sm"
+                    onClick={() => setNewMat(null)}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          <div className="flex items-center justify-between rounded-lg bg-slate-50 px-3 py-2 text-sm">
+            <span className="text-slate-600">Purchase total (cost + GST)</span>
+            <span className="font-semibold text-slate-900">{currency(matTotal)}</span>
+          </div>
+          <Field label="Notes">
             <Textarea rows={2} value={form.notes} onChange={(e) => set('notes', e.target.value)} />
           </Field>
         </div>
-      ) : (
+      )}
+
+      {/* ---------- TOOL PURCHASE (multi-line grid) ---------- */}
+      {!expense && mode === 'tool' && (
+        <div className="space-y-3">
+          {purchaseHeader}
+
+          <div className="overflow-x-auto rounded-lg border border-slate-200">
+            <table className="w-full min-w-[34rem] text-sm">
+              <thead>
+                <tr className="bg-slate-50 text-left text-2xs uppercase tracking-wide text-slate-500">
+                  <th className="px-3 py-2">Tool</th>
+                  <th className="px-3 py-2 w-24 text-right">Qty</th>
+                  <th className="px-3 py-2 w-32 text-right">Unit cost (₹)</th>
+                  <th className="px-3 py-2 w-24 text-right">Line total</th>
+                  <th className="px-3 py-2 w-10" />
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {toolLines.map((l, i) => {
+                  const lineTotal = (Number(l.qty) || 0) * (Number(l.unitCost) || 0)
+                  return (
+                    <tr key={i}>
+                      <td className="px-2 py-1.5">
+                        <Select
+                          value={l.toolId}
+                          onChange={(e) => setToolLine(i, { toolId: e.target.value })}
+                        >
+                          <option value="">Select tool…</option>
+                          {toolList.map((t) => (
+                            <option key={t.id} value={t.id}>
+                              {t.name}
+                              {t.size ? ` — ${t.size}` : ''} ({t.uom ?? 'nos'})
+                            </option>
+                          ))}
+                        </Select>
+                      </td>
+                      <td className="px-2 py-1.5">
+                        <Input
+                          type="number"
+                          step="1"
+                          min={0}
+                          className="text-right"
+                          value={l.qty}
+                          onChange={(e) => setToolLine(i, { qty: e.target.value })}
+                        />
+                      </td>
+                      <td className="px-2 py-1.5">
+                        <Input
+                          type="number"
+                          step="0.01"
+                          min={0}
+                          className="text-right"
+                          value={l.unitCost}
+                          onChange={(e) => setToolLine(i, { unitCost: e.target.value })}
+                        />
+                      </td>
+                      <td className="px-3 py-1.5 text-right font-medium text-slate-700">
+                        {currency(lineTotal)}
+                      </td>
+                      <td className="px-2 py-1.5 text-right">
+                        <button
+                          type="button"
+                          className="btn-ghost btn-sm text-red-500"
+                          disabled={toolLines.length === 1}
+                          onClick={() => setToolLines((ls) => ls.filter((_, idx) => idx !== i))}
+                        >
+                          <Trash2 size={15} />
+                        </button>
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              className="btn-secondary btn-sm"
+              onClick={() => setToolLines((ls) => [...ls, { toolId: '', qty: '', unitCost: '' }])}
+            >
+              <Plus size={15} /> Add tool
+            </button>
+            <button
+              type="button"
+              className="btn-ghost btn-sm"
+              onClick={() =>
+                setNewTool({
+                  name: '',
+                  categoryId: toolCategories.find((c) => c.code === 'CUT')?.id ?? '',
+                  uom: 'nos',
+                })
+              }
+            >
+              <Plus size={15} /> New tool item
+            </button>
+          </div>
+
+          {newTool && (
+            <div className="rounded-lg border border-brand-200 bg-brand-50/50 p-3">
+              <p className="mb-2 text-xs font-semibold text-brand-700">
+                New tool item (e.g. insert, drill, tap)
+              </p>
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr,10rem,7rem,auto]">
+                <Input
+                  placeholder="Tool name"
+                  value={newTool.name}
+                  onChange={(e) => setNewTool({ ...newTool, name: e.target.value })}
+                />
+                <Select
+                  value={newTool.categoryId}
+                  onChange={(e) => setNewTool({ ...newTool, categoryId: e.target.value })}
+                >
+                  <option value="">Category…</option>
+                  {toolCategories.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                    </option>
+                  ))}
+                </Select>
+                <Input
+                  placeholder="UOM"
+                  value={newTool.uom}
+                  onChange={(e) => setNewTool({ ...newTool, uom: e.target.value })}
+                />
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    className="btn-primary btn-sm"
+                    onClick={saveNewTool}
+                    disabled={createTool.isPending}
+                  >
+                    Add
+                  </button>
+                  <button
+                    type="button"
+                    className="btn-secondary btn-sm"
+                    onClick={() => setNewTool(null)}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          <div className="flex items-center justify-between rounded-lg bg-slate-50 px-3 py-2 text-sm">
+            <span className="text-slate-600">Purchase total (qty × unit cost)</span>
+            <span className="font-semibold text-slate-900">{currency(toolTotal)}</span>
+          </div>
+          <Field label="Notes">
+            <Textarea rows={2} value={form.notes} onChange={(e) => set('notes', e.target.value)} />
+          </Field>
+        </div>
+      )}
+
+      {/* ---------- OTHER EXPENSE (or editing) ---------- */}
+      {(expense || mode === 'expense') && (
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <Field label="Date" required>
             <DateInput value={form.date} onChange={(v) => set('date', v)} />

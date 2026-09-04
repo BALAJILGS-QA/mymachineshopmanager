@@ -151,6 +151,57 @@ export async function createOwnPurchase(input: OwnPurchaseInput): Promise<OwnMat
   return fromRow<OwnMaterialPurchase>((data as Row[])[0], maps.ownPurchases)
 }
 
+// ---- Multi-line own purchase (one combined expense + N stock receipts) ----
+export interface OwnPurchaseLine {
+  materialId: string
+  quantity: number
+  unit: string
+  totalCost: number
+  totalGst: number
+}
+export interface OwnPurchaseMultiInput {
+  supplier?: string
+  purchaseDate: string
+  method: PaymentMethod
+  notes?: string
+  category?: string
+  lines: OwnPurchaseLine[]
+}
+
+// Records several material purchases as ONE purchase: a single combined expense
+// plus one Shop stock receipt per line (atomic via create_own_purchase_multi).
+export async function createOwnPurchaseMulti(
+  input: OwnPurchaseMultiInput,
+): Promise<{ expense_id: string; expense_no: string; lines: number; total: number }> {
+  // Client-generated ids + receipt numbers, one per line (sequential to keep the
+  // receipt numbers ordered).
+  const lines: Record<string, unknown>[] = []
+  for (const l of input.lines) {
+    lines.push({
+      material_id: l.materialId,
+      quantity: l.quantity,
+      unit: l.unit,
+      total_cost: l.totalCost,
+      total_gst: l.totalGst,
+      receipt_id: uid('rcp_'),
+      receipt_no: await nextNumberedDoc('receipt'),
+      opur_id: uid('opur_'),
+    })
+  }
+  const { data, error } = await sb().rpc('create_own_purchase_multi', {
+    p_expense_id: uid('exp_'),
+    p_expense_no: await nextNumberedDoc('expense'),
+    p_date: input.purchaseDate,
+    p_supplier: input.supplier ?? null,
+    p_method: input.method,
+    p_notes: input.notes ?? null,
+    p_category: input.category ?? 'Material Purchase',
+    p_lines: lines,
+  })
+  if (error) throw error
+  return data as { expense_id: string; expense_no: string; lines: number; total: number }
+}
+
 // ---- Per-source stock (material_receipt_stock view) ----
 export interface ReceiptStockFilter {
   scope?: string // undefined = all, SHOP_SCOPE = own/shop, else a company id

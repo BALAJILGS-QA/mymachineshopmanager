@@ -139,6 +139,18 @@ export function useCreateOwnPurchase() {
   })
 }
 
+// Multi-line own purchase: one combined expense + a stock receipt per line.
+export function useCreateOwnPurchaseMulti() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (input: api.OwnPurchaseMultiInput) => api.createOwnPurchaseMulti(input),
+    onSuccess: () => {
+      invalidateStock(qc)
+      qc.invalidateQueries({ queryKey: qk.expenses.all })
+    },
+  })
+}
+
 export function useLedger(filter: api.LedgerFilter = {}) {
   return useQuery({
     queryKey: [...qk.stock.ledger, filter],
