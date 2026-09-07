@@ -169,7 +169,7 @@ export function PayrollPage() {
         }
       />
 
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-4 lg:grid-cols-4">
         {/* Periods list */}
         <Card className="p-3 lg:col-span-1">
           <h3 className="mb-2 px-1 text-xs font-bold uppercase tracking-wide text-slate-500">

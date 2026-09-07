@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { clsx } from 'clsx'
 import { ClipboardList, Download, Pencil, Plus, Trash2 } from 'lucide-react'
 import type { JobOrder } from '@/types'
 import { useJobs, useDeleteJob } from './hooks/useJobs'
@@ -135,70 +136,119 @@ export function JobsPage() {
             description="Create a job order to begin tracking production."
           />
         ) : (
-          <ResponsiveTable>
-            <thead>
-              <tr className="border-b border-slate-100">
-                <th className="th">Job No</th>
-                <th className="th">Company</th>
-                <th className="th">Part</th>
-                <th className="th text-right">Ord</th>
-                <th className="th text-right">Comp</th>
-                <th className="th text-right">Pend</th>
-                <th className="th">Priority</th>
-                <th className="th">Status</th>
-                <th className="th">Due</th>
-                <th className="th text-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-50">
-              {pg.pageItems.map((j) => {
-                const overdue =
-                  j.dueDate &&
-                  j.dueDate < today &&
-                  !['Completed', 'Delivered', 'Cancelled'].includes(j.status)
-                return (
-                  <tr key={j.id} className="hover:bg-slate-50/60">
-                    <td className="td font-mono text-xs font-semibold text-slate-700">{j.jobNo}</td>
-                    <td className="td">{companyName(j.companyId)}</td>
-                    <td className="td">
-                      <div className="font-medium text-slate-800">{j.partName}</div>
-                      {j.partNumber && (
-                        <div className="text-2xs text-slate-500">{j.partNumber}</div>
-                      )}
-                    </td>
-                    <td className="td text-right">{qty(j.orderedQty)}</td>
-                    <td className="td text-right">{qty(j.completedQty)}</td>
-                    <td className="td text-right font-semibold">
-                      {qty(jobPendingQty(j.orderedQty, j.completedQty))}
-                    </td>
-                    <td className="td">
-                      <PriorityBadge priority={j.priority} />
-                    </td>
-                    <td className="td">
-                      <JobStatusBadge status={j.status} />
-                    </td>
-                    <td className={`td ${overdue ? 'font-semibold text-red-600' : ''}`}>
-                      {fmtDate(j.dueDate)}
-                      {overdue && <span className="ml-1 text-2xs">(overdue)</span>}
-                    </td>
-                    <td className="td">
-                      <div className="flex justify-end gap-1">
-                        <button className="btn-ghost btn-sm" onClick={() => setEditing(j)}>
-                          <Pencil size={15} />
-                        </button>
-                        <button
-                          className="btn-ghost btn-sm text-red-500"
-                          onClick={() => onDelete(j)}
-                        >
-                          <Trash2 size={15} />
-                        </button>
-                      </div>
-                    </td>
+          <>
+            <div className="hidden md:block">
+              <ResponsiveTable className="min-w-[64rem]">
+                <thead>
+                  <tr className="border-b border-slate-100">
+                    <th className="th">Job No</th>
+                    <th className="th">Company</th>
+                    <th className="th">Part</th>
+                    <th className="th text-right">Ord</th>
+                    <th className="th text-right">Comp</th>
+                    <th className="th text-right">Pend</th>
+                    <th className="th">Priority</th>
+                    <th className="th">Status</th>
+                    <th className="th">Due</th>
+                    <th className="th text-right">Actions</th>
                   </tr>
-                )
-              })}
-            </tbody>
-          </ResponsiveTable>
+                </thead>
+                <tbody className="divide-y divide-slate-50">
+                  {pg.pageItems.map((j) => {
+                    const overdue =
+                      j.dueDate &&
+                      j.dueDate < today &&
+                      !['Completed', 'Delivered', 'Cancelled'].includes(j.status)
+                    return (
+                      <tr key={j.id} className="hover:bg-slate-50/60">
+                        <td className="td font-mono text-xs font-semibold text-slate-700">
+                          {j.jobNo}
+                        </td>
+                        <td className="td">{companyName(j.companyId)}</td>
+                        <td className="td">
+                          <div className="font-medium text-slate-800">{j.partName}</div>
+                          {j.partNumber && (
+                            <div className="text-2xs text-slate-500">{j.partNumber}</div>
+                          )}
+                        </td>
+                        <td className="td text-right">{qty(j.orderedQty)}</td>
+                        <td className="td text-right">{qty(j.completedQty)}</td>
+                        <td className="td text-right font-semibold">
+                          {qty(jobPendingQty(j.orderedQty, j.completedQty))}
+                        </td>
+                        <td className="td">
+                          <PriorityBadge priority={j.priority} />
+                        </td>
+                        <td className="td">
+                          <JobStatusBadge status={j.status} />
+                        </td>
+                        <td className={`td ${overdue ? 'font-semibold text-red-600' : ''}`}>
+                          {fmtDate(j.dueDate)}
+                          {overdue && <span className="ml-1 text-2xs">(overdue)</span>}
+                        </td>
+                        <td className="td">
+                          <div className="flex justify-end gap-1">
+                            <button className="btn-ghost btn-sm" onClick={() => setEditing(j)}>
+                              <Pencil size={15} />
+                            </button>
+                            <button
+                              className="btn-ghost btn-sm text-red-500"
+                              onClick={() => onDelete(j)}
+                            >
+                              <Trash2 size={15} />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </ResponsiveTable>
+            </div>
+
+            {/* Mobile: condensed list-row table (tap a row to edit the job) */}
+            <table className="w-full table-fixed border-collapse md:hidden">
+              <tbody className="divide-y divide-slate-100">
+                {pg.pageItems.map((j) => {
+                  const overdue =
+                    j.dueDate &&
+                    j.dueDate < today &&
+                    !['Completed', 'Delivered', 'Cancelled'].includes(j.status)
+                  return (
+                    <tr
+                      key={j.id}
+                      className="cursor-pointer align-top transition-colors active:bg-slate-50"
+                      onClick={() => setEditing(j)}
+                    >
+                      <td className="px-3 py-2.5">
+                        <p className="truncate font-semibold text-slate-800">{j.partName}</p>
+                        <p className="truncate font-mono text-2xs text-slate-400">
+                          {j.jobNo} · {companyName(j.companyId)}
+                        </p>
+                        <p
+                          className={clsx(
+                            'truncate text-2xs',
+                            overdue ? 'font-semibold text-red-600' : 'text-slate-400',
+                          )}
+                        >
+                          Due {fmtDate(j.dueDate)}
+                          {overdue && ' (overdue)'}
+                        </p>
+                      </td>
+                      <td className="w-24 px-3 py-2.5">
+                        <div className="flex flex-col items-end gap-1">
+                          <JobStatusBadge status={j.status} />
+                          <span className="truncate text-2xs text-slate-500">
+                            {qty(jobPendingQty(j.orderedQty, j.completedQty))} pend
+                          </span>
+                        </div>
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </>
         )}
         <Pagination pg={pg} />
       </Card>

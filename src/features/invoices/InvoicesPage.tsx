@@ -210,7 +210,7 @@ export function InvoicesPage() {
       <div className="mb-2 text-2xs font-semibold uppercase tracking-wide text-slate-500">
         This month — {thisMonthLabel()}
       </div>
-      <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <div className="mb-4 grid grid-cols-2 gap-3 md:grid-cols-4 lg:grid-cols-4">
         <StatTile
           icon={<FileText size={18} />}
           label="Invoices"
@@ -268,7 +268,7 @@ export function InvoicesPage() {
       <div className="mb-2 text-2xs font-semibold uppercase tracking-wide text-slate-500">
         GST Summary
       </div>
-      <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <div className="mb-4 grid grid-cols-2 gap-3 md:grid-cols-4 lg:grid-cols-4">
         <StatTile
           icon={<IndianRupee size={18} />}
           label="Taxable value"
@@ -342,84 +342,118 @@ export function InvoicesPage() {
             description="Create an invoice from completed jobs or manually."
           />
         ) : (
-          <ResponsiveTable>
-            <thead>
-              <tr className="border-b border-slate-100">
-                <th className="th">Invoice</th>
-                <th className="th">Date</th>
-                <th className="th">Company</th>
-                <th className="th text-right">Total</th>
-                <th className="th text-right">Paid</th>
-                <th className="th text-right">Outstanding</th>
-                <th className="th">Status</th>
-                <th className="th text-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-50">
-              {pg.pageItems.map(({ inv, c }) => (
-                <tr key={inv.id} className="hover:bg-slate-50/60">
-                  <td className="td font-mono text-xs font-semibold text-slate-700">
-                    {inv.invoiceNo}
-                  </td>
-                  <td className="td">{fmtDate(inv.date)}</td>
-                  <td className="td">{companyName(inv.companyId)}</td>
-                  <td className="td text-right font-medium">{currency(c.total)}</td>
-                  <td className="td text-right text-emerald-600">{currency(c.paid)}</td>
-                  <td className="td text-right font-semibold text-amber-600">
-                    {currency(c.outstanding)}
-                  </td>
-                  <td className="td">
-                    <InvoiceStatusBadge status={inv.status} />
-                  </td>
-                  <td className="td">
-                    <div className="flex justify-end gap-1">
-                      {inv.status !== 'Cancelled' && inv.status !== 'Paid' && (
-                        <button
-                          className="btn-ghost btn-sm text-emerald-600"
-                          title="Record payment"
-                          onClick={() => setPayFor(inv)}
-                        >
-                          <Wallet size={15} />
-                        </button>
-                      )}
-                      <button
-                        className="btn-ghost btn-sm"
-                        title="Download PDF"
-                        onClick={() => downloadInvoicePdf(inv.id)}
-                      >
-                        <FileDown size={15} />
-                      </button>
-                      <button
-                        className="btn-ghost btn-sm"
-                        title="Print"
-                        onClick={() => navigate(`/app/invoices/${inv.id}/print`)}
-                      >
-                        <Printer size={15} />
-                      </button>
-                      {inv.status !== 'Paid' && inv.status !== 'Cancelled' && (
-                        <button
-                          className="btn-ghost btn-sm"
-                          title="Edit"
-                          onClick={() => setEditing(inv)}
-                        >
-                          <Pencil size={15} />
-                        </button>
-                      )}
-                      {inv.status !== 'Cancelled' && (
-                        <button
-                          className="btn-ghost btn-sm text-red-500"
-                          title="Cancel invoice"
-                          onClick={() => cancel(inv)}
-                        >
-                          <Ban size={15} />
-                        </button>
-                      )}
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </ResponsiveTable>
+          <>
+            <div className="hidden md:block">
+              <ResponsiveTable className="min-w-[56rem]">
+                <thead>
+                  <tr className="border-b border-slate-100">
+                    <th className="th">Invoice</th>
+                    <th className="th">Date</th>
+                    <th className="th">Company</th>
+                    <th className="th text-right">Total</th>
+                    <th className="th text-right">Paid</th>
+                    <th className="th text-right">Outstanding</th>
+                    <th className="th">Status</th>
+                    <th className="th text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-50">
+                  {pg.pageItems.map(({ inv, c }) => (
+                    <tr key={inv.id} className="hover:bg-slate-50/60">
+                      <td className="td font-mono text-xs font-semibold text-slate-700">
+                        {inv.invoiceNo}
+                      </td>
+                      <td className="td">{fmtDate(inv.date)}</td>
+                      <td className="td">{companyName(inv.companyId)}</td>
+                      <td className="td text-right font-medium">{currency(c.total)}</td>
+                      <td className="td text-right text-emerald-600">{currency(c.paid)}</td>
+                      <td className="td text-right font-semibold text-amber-600">
+                        {currency(c.outstanding)}
+                      </td>
+                      <td className="td">
+                        <InvoiceStatusBadge status={inv.status} />
+                      </td>
+                      <td className="td">
+                        <div className="flex justify-end gap-1">
+                          {inv.status !== 'Cancelled' && inv.status !== 'Paid' && (
+                            <button
+                              className="btn-ghost btn-sm text-emerald-600"
+                              title="Record payment"
+                              onClick={() => setPayFor(inv)}
+                            >
+                              <Wallet size={15} />
+                            </button>
+                          )}
+                          <button
+                            className="btn-ghost btn-sm"
+                            title="Download PDF"
+                            onClick={() => downloadInvoicePdf(inv.id)}
+                          >
+                            <FileDown size={15} />
+                          </button>
+                          <button
+                            className="btn-ghost btn-sm"
+                            title="Print"
+                            onClick={() => navigate(`/app/invoices/${inv.id}/print`)}
+                          >
+                            <Printer size={15} />
+                          </button>
+                          {inv.status !== 'Paid' && inv.status !== 'Cancelled' && (
+                            <button
+                              className="btn-ghost btn-sm"
+                              title="Edit"
+                              onClick={() => setEditing(inv)}
+                            >
+                              <Pencil size={15} />
+                            </button>
+                          )}
+                          {inv.status !== 'Cancelled' && (
+                            <button
+                              className="btn-ghost btn-sm text-red-500"
+                              title="Cancel invoice"
+                              onClick={() => cancel(inv)}
+                            >
+                              <Ban size={15} />
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </ResponsiveTable>
+            </div>
+
+            {/* Mobile: condensed list-row table (tap a row to open the invoice) */}
+            <table className="w-full table-fixed border-collapse md:hidden">
+              <tbody className="divide-y divide-slate-100">
+                {pg.pageItems.map(({ inv, c }) => (
+                  <tr
+                    key={inv.id}
+                    className="cursor-pointer align-top transition-colors active:bg-slate-50"
+                    onClick={() => navigate(`/app/invoices/${inv.id}/print`)}
+                  >
+                    <td className="px-3 py-2.5">
+                      <p className="truncate font-semibold text-slate-800">
+                        {companyName(inv.companyId)}
+                      </p>
+                      <p className="truncate font-mono text-2xs text-slate-400">
+                        {inv.invoiceNo} · {fmtDate(inv.date)}
+                      </p>
+                    </td>
+                    <td className="w-32 px-2 py-2.5 text-right">
+                      <p className="truncate font-semibold text-amber-600">
+                        {currency(c.outstanding)}
+                      </p>
+                      <div className="mt-0.5 flex justify-end">
+                        <InvoiceStatusBadge status={inv.status} />
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </>
         )}
         <Pagination pg={pg} />
       </Card>

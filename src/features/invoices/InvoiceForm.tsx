@@ -613,7 +613,7 @@ export function InvoiceForm({
             </button>
           </div>
         </div>
-        <div className="overflow-x-auto rounded-lg border border-slate-200">
+        <div className="hidden overflow-x-auto rounded-lg border border-slate-200 md:block">
           <table className="w-full min-w-[36rem]">
             <thead>
               <tr className="bg-slate-50">
@@ -717,6 +717,98 @@ export function InvoiceForm({
               })}
             </tbody>
           </table>
+        </div>
+
+        {/* Mobile: one editable card per line (avoids horizontal scroll in the modal) */}
+        <div className="space-y-2 md:hidden">
+          {lines.map((l) => {
+            const stockLocked = false
+            const fromChallan =
+              prefillLineIds.current.has(l.id) ||
+              [...dcLineMap.current.values()].some((ids) => ids.includes(l.id))
+            return (
+              <div key={l.id} className="rounded-lg border border-slate-200 p-3">
+                <div className="mb-2 flex items-start gap-2">
+                  <input
+                    className="input flex-1"
+                    placeholder="Item / service"
+                    value={l.description}
+                    onChange={(e) => updateLine(l.id, { description: e.target.value })}
+                  />
+                  {!stockLocked && (
+                    <button
+                      className="btn-ghost btn-sm shrink-0 text-red-500"
+                      onClick={() => removeLine(l.id)}
+                      aria-label="Remove line"
+                    >
+                      <Trash2 size={15} />
+                    </button>
+                  )}
+                </div>
+                <div className="mb-2">
+                  <label className="label mb-0.5 text-2xs">Stock item (deducts)</label>
+                  {fromChallan ? (
+                    <span className="block text-2xs text-slate-400">
+                      From challan (already deducted)
+                    </span>
+                  ) : (
+                    <select
+                      className="input h-8 py-1 text-xs"
+                      aria-label="Stock source to deduct"
+                      value={l.sourceReceiptId ?? ''}
+                      onChange={(e) => pickSource(l.id, e.target.value)}
+                    >
+                      <option value="">No stock deduction</option>
+                      {(() => {
+                        const opts = [...sources]
+                        if (
+                          l.sourceReceiptId &&
+                          !opts.some((r) => r.receiptId === l.sourceReceiptId)
+                        ) {
+                          const sel = sourceById.get(l.sourceReceiptId)
+                          if (sel) opts.unshift(sel)
+                        }
+                        return opts.map((r) => (
+                          <option key={r.receiptId} value={r.receiptId}>
+                            {sourceLabel(r)}
+                          </option>
+                        ))
+                      })()}
+                    </select>
+                  )}
+                </div>
+                <div className="grid grid-cols-3 gap-2">
+                  <div>
+                    <label className="label mb-0.5 text-2xs">Qty</label>
+                    <input
+                      type="number"
+                      step="0.001"
+                      className="input text-right"
+                      value={l.quantity}
+                      disabled={stockLocked}
+                      onChange={(e) => updateLine(l.id, { quantity: Number(e.target.value) })}
+                    />
+                  </div>
+                  <div>
+                    <label className="label mb-0.5 text-2xs">Rate</label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      className="input text-right"
+                      value={l.rate}
+                      onChange={(e) => updateLine(l.id, { rate: Number(e.target.value) })}
+                    />
+                  </div>
+                  <div>
+                    <label className="label mb-0.5 text-2xs">Amount</label>
+                    <div className="input flex items-center justify-end bg-slate-50 font-medium">
+                      {currency(l.quantity * l.rate)}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )
+          })}
         </div>
       </div>
 

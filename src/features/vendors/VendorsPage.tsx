@@ -84,7 +84,7 @@ export function VendorsPage() {
             description="Add a supplier or subcontractor to use in purchases and job work."
           />
         ) : (
-          <ResponsiveTable>
+          <ResponsiveTable className="min-w-[44rem]">
             <thead>
               <tr className="border-b border-slate-100">
                 <th className="th">Code</th>

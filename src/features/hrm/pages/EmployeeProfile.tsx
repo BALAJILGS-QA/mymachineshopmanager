@@ -128,7 +128,7 @@ export function EmployeeProfile({ employeeId }: { employeeId: string }) {
       </div>
 
       {tab === 'Overview' && (
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-2">
           <Card className="p-5">
             <h3 className="mb-2 text-sm font-bold text-slate-800">Snapshot</h3>
             <Row

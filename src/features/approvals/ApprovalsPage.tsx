@@ -125,7 +125,7 @@ export function ApprovalsPage() {
             }
           />
         ) : (
-          <ResponsiveTable>
+          <ResponsiveTable className="min-w-[52rem]">
             <thead>
               <tr className="border-b border-slate-100">
                 <th className="th">Applicant</th>

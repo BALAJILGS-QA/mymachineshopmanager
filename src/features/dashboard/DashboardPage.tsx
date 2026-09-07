@@ -333,7 +333,7 @@ export function DashboardPage() {
       />
 
       {/* Activity + financial summary (command-center glance) */}
-      <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
         <PanelCard title="Shop-floor activity" to="/app/jobs" className="lg:col-span-2">
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
             <BigStat label="Open Jobs" value={kpi.open} tone="amber" to="/app/jobs" />
@@ -384,7 +384,7 @@ export function DashboardPage() {
       </div>
 
       {/* Job status + stock health + purchase (reference-style detail panels) */}
-      <div className="mt-3 grid grid-cols-1 gap-3 lg:grid-cols-3">
+      <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
         <PanelCard title="Job orders by status" to="/app/jobs">
           <div className="divide-y divide-slate-100">
             <SummaryRow label="Pending" value={jobStatus.pending} tone="amber" to="/app/jobs" />
@@ -443,7 +443,7 @@ export function DashboardPage() {
       </div>
 
       {/* Charts row 1 */}
-      <div className="mt-4 grid grid-cols-1 gap-3 lg:grid-cols-3">
+      <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
         <ChartCard
           title="Invoices raised vs Payments received (6 months)"
           className="lg:col-span-2"
@@ -482,7 +482,7 @@ export function DashboardPage() {
       </div>
 
       {/* Charts row 2 */}
-      <div className="mt-3 grid grid-cols-1 gap-3 lg:grid-cols-2">
+      <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-2">
         <ChartCard
           title="Materials dispatched per month (qty issued)"
           empty={dispatched.every((d) => d.qty === 0)}
@@ -510,7 +510,7 @@ export function DashboardPage() {
       </div>
 
       {/* Lists */}
-      <div className="mt-4 grid grid-cols-1 gap-3 lg:grid-cols-2">
+      <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-2">
         <Card className="p-4">
           <ListHeader title="Priority jobs" to="/app/jobs" />
           {pendingJobs.length === 0 ? (

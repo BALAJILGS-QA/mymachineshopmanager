@@ -283,7 +283,7 @@ export function ReportsPage() {
             No data for the selected filters.
           </p>
         ) : (
-          <ResponsiveTable>
+          <ResponsiveTable className="min-w-[52rem]">
             <thead>
               <tr className="border-b border-slate-100">
                 {columns.map((c) => (

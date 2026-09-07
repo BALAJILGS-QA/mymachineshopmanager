@@ -161,7 +161,7 @@ export function FinancialStatementsPage() {
           </div>
         </Card>
       ) : (
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-2">
           <Card className="p-5">
             <Section title="Assets" lines={model.asset} total={model.totalAssets} />
           </Card>

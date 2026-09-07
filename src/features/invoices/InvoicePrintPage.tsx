@@ -51,7 +51,7 @@ export function InvoicePrintPage({ id }: { id?: string }) {
         </div>
       </div>
 
-      <div className="mx-auto max-w-3xl rounded-xl border border-slate-200 bg-white p-8 shadow-sm print:border-0 print:shadow-none">
+      <div className="mx-auto max-w-3xl rounded-xl border border-slate-200 bg-white p-4 shadow-sm print:border-0 print:shadow-none sm:p-8">
         <div className="flex items-start justify-between border-b border-slate-200 pb-5">
           <div className="flex items-start gap-3">
             <img

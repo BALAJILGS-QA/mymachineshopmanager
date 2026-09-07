@@ -138,7 +138,7 @@ export function StockHistoryPage() {
         </Card>
       ) : (
         <>
-          <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
+          <div className="mb-4 grid grid-cols-2 gap-3 md:grid-cols-4 lg:grid-cols-4">
             {cards.map((c) => (
               <div key={c.label} className={`rounded-xl border px-4 py-3 ${c.chip}`}>
                 <p className="text-2xs font-semibold uppercase tracking-wide text-slate-500">

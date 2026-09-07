@@ -230,7 +230,7 @@ export function ExpensesPage() {
         }
       />
 
-      <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <div className="mb-4 grid grid-cols-2 gap-3 md:grid-cols-4 lg:grid-cols-4">
         <StatTile
           icon={<Wallet size={18} />}
           label="Total (filtered)"
@@ -535,7 +535,7 @@ function ExpenseCategoryDetail({
           <EmptyState icon={<Receipt size={40} />} title="No entries match the filters" />
         ) : (
           <>
-            <ResponsiveTable>
+            <ResponsiveTable className="min-w-[56rem]">
               <thead>
                 <tr className="border-b border-slate-100">
                   <th className="th">Expense</th>

@@ -107,7 +107,7 @@ export function SubcontractingPage() {
         }
       />
 
-      <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-3">
+      <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-3">
         <StatTile
           icon={<Factory size={18} />}
           label="Subcontracts"

@@ -23,7 +23,7 @@ export function SearchBox({
 }) {
   const id = useId()
   return (
-    <div className="relative min-w-[10rem] flex-1">
+    <div className="relative min-w-full flex-1 sm:min-w-[10rem]">
       <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
       <input
         id={id}

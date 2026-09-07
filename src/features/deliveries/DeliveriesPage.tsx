@@ -226,7 +226,7 @@ export function DeliveriesPage() {
       <div className="mb-2 text-2xs font-semibold uppercase tracking-wide text-slate-500">
         This month — {thisMonthLabel()}
       </div>
-      <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <div className="mb-4 grid grid-cols-2 gap-3 md:grid-cols-4 lg:grid-cols-4">
         <StatTile
           icon={<Truck size={18} />}
           label="Challans"
@@ -300,131 +300,186 @@ export function DeliveriesPage() {
             description="Create a challan for dispatched goods, then raise an invoice against it."
           />
         ) : (
-          <ResponsiveTable className="min-w-[48rem]">
-            <thead>
-              <tr className="border-b border-slate-100">
-                <th className="th">DC No</th>
-                <th className="th">Date</th>
-                <th className="th">Company</th>
-                <th className="th">Items &amp; Qty</th>
-                <th className="th">Status</th>
-                <th className="th text-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-50">
-              {pg.pageItems.map((d) => {
-                const inv = linkedInvoice(d)
-                const billed = Boolean(inv)
-                return (
-                  <tr
-                    key={d.id}
-                    className={clsx(
-                      'hover:bg-slate-50/60',
-                      // Billed challans are locked: greyed out with the invoice shown.
-                      billed && 'bg-slate-50 [&>td]:text-slate-400',
-                    )}
-                  >
-                    <td className="td font-mono text-xs font-semibold text-slate-700">{d.dcNo}</td>
-                    <td className="td">{fmtDate(d.date)}</td>
-                    <td className="td">{companyName(d.companyId)}</td>
-                    <td className="td">
-                      <div className="flex flex-col gap-0.5">
-                        {d.lines.map((l) => (
-                          <span key={l.id} className="text-xs text-slate-700">
-                            {l.description || '—'}
-                            <span className="ml-1 text-2xs text-slate-500">
-                              · {qty(l.quantity)} {l.unit}
-                            </span>
-                          </span>
-                        ))}
-                      </div>
-                    </td>
-                    <td className="td">
-                      {billed ? (
-                        <div className="flex flex-col gap-0.5">
-                          <Badge tone="green">Invoiced</Badge>
-                          <AppLink
-                            to={`/app/invoices/${inv!.id}/print`}
-                            className="font-mono text-2xs font-semibold text-brand-700 hover:underline"
-                            title="View invoice for this challan"
-                          >
-                            {inv!.invoiceNo}
-                          </AppLink>
-                        </div>
-                      ) : d.status === 'Cancelled' ? (
-                        <Badge tone="red">Cancelled</Badge>
-                      ) : (
-                        <Badge tone="amber">Not Invoiced</Badge>
-                      )}
-                    </td>
-                    <td className="td">
-                      <div className="flex justify-end gap-1">
-                        <button
-                          className="btn-ghost btn-sm"
-                          title="View / Print"
-                          onClick={() => navigate(`/app/deliveries/${d.id}/print`)}
-                        >
-                          <Printer size={15} />
-                        </button>
-                        <button
-                          className="btn-ghost btn-sm"
-                          title="Download PDF"
-                          onClick={() => downloadChallanPdf(d.id)}
-                        >
-                          <FileDown size={15} />
-                        </button>
-                        {d.status === 'Open' && (
-                          <button
-                            className="btn-ghost btn-sm text-brand-600"
-                            title="Create invoice"
-                            onClick={() => startInvoice([d])}
-                          >
-                            <FileText size={15} />
-                          </button>
-                        )}
-                        {isStranded(d) && (
-                          <button
-                            className="btn-ghost btn-sm text-brand-600"
-                            title="Reopen (invoice cancelled)"
-                            onClick={() => onReopen(d)}
-                          >
-                            <RotateCcw size={15} />
-                          </button>
-                        )}
-                        {d.status !== 'Invoiced' && (
-                          <button
-                            className="btn-ghost btn-sm"
-                            title="Edit"
-                            onClick={() => setEditing(d)}
-                          >
-                            <Pencil size={15} />
-                          </button>
-                        )}
-                        {d.status === 'Open' && (
-                          <button
-                            className="btn-ghost btn-sm text-amber-600"
-                            title="Cancel"
-                            onClick={() => onCancel(d)}
-                          >
-                            <Ban size={15} />
-                          </button>
-                        )}
-                        {d.status !== 'Invoiced' && (
-                          <button
-                            className="btn-ghost btn-sm text-red-500"
-                            title="Delete"
-                            onClick={() => onDelete(d)}
-                          >
-                            <Trash2 size={15} />
-                          </button>
-                        )}
-                      </div>
-                    </td>
+          <>
+            <div className="hidden md:block">
+              <ResponsiveTable className="min-w-[48rem]">
+                <thead>
+                  <tr className="border-b border-slate-100">
+                    <th className="th">DC No</th>
+                    <th className="th">Date</th>
+                    <th className="th">Company</th>
+                    <th className="th">Items &amp; Qty</th>
+                    <th className="th">Status</th>
+                    <th className="th text-right">Actions</th>
                   </tr>
-                )
-              })}
-            </tbody>
-          </ResponsiveTable>
+                </thead>
+                <tbody className="divide-y divide-slate-50">
+                  {pg.pageItems.map((d) => {
+                    const inv = linkedInvoice(d)
+                    const billed = Boolean(inv)
+                    return (
+                      <tr
+                        key={d.id}
+                        className={clsx(
+                          'hover:bg-slate-50/60',
+                          // Billed challans are locked: greyed out with the invoice shown.
+                          billed && 'bg-slate-50 [&>td]:text-slate-400',
+                        )}
+                      >
+                        <td className="td font-mono text-xs font-semibold text-slate-700">
+                          {d.dcNo}
+                        </td>
+                        <td className="td">{fmtDate(d.date)}</td>
+                        <td className="td">{companyName(d.companyId)}</td>
+                        <td className="td">
+                          <div className="flex flex-col gap-0.5">
+                            {d.lines.map((l) => (
+                              <span key={l.id} className="text-xs text-slate-700">
+                                {l.description || '—'}
+                                <span className="ml-1 text-2xs text-slate-500">
+                                  · {qty(l.quantity)} {l.unit}
+                                </span>
+                              </span>
+                            ))}
+                          </div>
+                        </td>
+                        <td className="td">
+                          {billed ? (
+                            <div className="flex flex-col gap-0.5">
+                              <Badge tone="green">Invoiced</Badge>
+                              <AppLink
+                                to={`/app/invoices/${inv!.id}/print`}
+                                className="font-mono text-2xs font-semibold text-brand-700 hover:underline"
+                                title="View invoice for this challan"
+                              >
+                                {inv!.invoiceNo}
+                              </AppLink>
+                            </div>
+                          ) : d.status === 'Cancelled' ? (
+                            <Badge tone="red">Cancelled</Badge>
+                          ) : (
+                            <Badge tone="amber">Not Invoiced</Badge>
+                          )}
+                        </td>
+                        <td className="td">
+                          <div className="flex justify-end gap-1">
+                            <button
+                              className="btn-ghost btn-sm"
+                              title="View / Print"
+                              onClick={() => navigate(`/app/deliveries/${d.id}/print`)}
+                            >
+                              <Printer size={15} />
+                            </button>
+                            <button
+                              className="btn-ghost btn-sm"
+                              title="Download PDF"
+                              onClick={() => downloadChallanPdf(d.id)}
+                            >
+                              <FileDown size={15} />
+                            </button>
+                            {d.status === 'Open' && (
+                              <button
+                                className="btn-ghost btn-sm text-brand-600"
+                                title="Create invoice"
+                                onClick={() => startInvoice([d])}
+                              >
+                                <FileText size={15} />
+                              </button>
+                            )}
+                            {isStranded(d) && (
+                              <button
+                                className="btn-ghost btn-sm text-brand-600"
+                                title="Reopen (invoice cancelled)"
+                                onClick={() => onReopen(d)}
+                              >
+                                <RotateCcw size={15} />
+                              </button>
+                            )}
+                            {d.status !== 'Invoiced' && (
+                              <button
+                                className="btn-ghost btn-sm"
+                                title="Edit"
+                                onClick={() => setEditing(d)}
+                              >
+                                <Pencil size={15} />
+                              </button>
+                            )}
+                            {d.status === 'Open' && (
+                              <button
+                                className="btn-ghost btn-sm text-amber-600"
+                                title="Cancel"
+                                onClick={() => onCancel(d)}
+                              >
+                                <Ban size={15} />
+                              </button>
+                            )}
+                            {d.status !== 'Invoiced' && (
+                              <button
+                                className="btn-ghost btn-sm text-red-500"
+                                title="Delete"
+                                onClick={() => onDelete(d)}
+                              >
+                                <Trash2 size={15} />
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </ResponsiveTable>
+            </div>
+
+            {/* Mobile: condensed list-row table (tap a row to view the challan) */}
+            <table className="w-full table-fixed border-collapse md:hidden">
+              <tbody className="divide-y divide-slate-100">
+                {pg.pageItems.map((d) => {
+                  const inv = linkedInvoice(d)
+                  const billed = Boolean(inv)
+                  return (
+                    <tr
+                      key={d.id}
+                      className={clsx(
+                        'cursor-pointer align-top transition-colors active:bg-slate-50',
+                        billed && 'bg-slate-50',
+                      )}
+                      onClick={() => navigate(`/app/deliveries/${d.id}/print`)}
+                    >
+                      <td className="px-3 py-2.5">
+                        <p className="truncate font-semibold text-slate-800">
+                          {companyName(d.companyId)}
+                        </p>
+                        <p className="truncate font-mono text-2xs text-slate-400">
+                          {d.dcNo} · {fmtDate(d.date)} · {d.lines.length} item
+                          {d.lines.length === 1 ? '' : 's'}
+                        </p>
+                      </td>
+                      <td className="w-28 px-3 py-2.5">
+                        <div className="flex flex-col items-end gap-0.5">
+                          {billed ? (
+                            <>
+                              <Badge tone="green">Invoiced</Badge>
+                              <AppLink
+                                to={`/app/invoices/${inv!.id}/print`}
+                                className="truncate font-mono text-2xs font-semibold text-brand-700 hover:underline"
+                              >
+                                {inv!.invoiceNo}
+                              </AppLink>
+                            </>
+                          ) : d.status === 'Cancelled' ? (
+                            <Badge tone="red">Cancelled</Badge>
+                          ) : (
+                            <Badge tone="amber">Not Invoiced</Badge>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </>
         )}
         <Pagination pg={pg} />
       </Card>
