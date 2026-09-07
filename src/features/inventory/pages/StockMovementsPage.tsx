@@ -18,14 +18,19 @@ const TYPE_TONE: Record<string, string> = { Receipt: 'green', Issue: 'amber', Ad
 // Friendly transaction label: an Issue linked to a challan/invoice is a Dispatch;
 // linked to a job it is Consumption. Derived from the ledger's reference_type.
 function txnLabel(r: InventoryLedgerRow): string {
-  if (r.txnType === 'Receipt') return 'Received'
+  if (r.txnType === 'Receipt') return 'Material Received'
   if (r.txnType === 'Issue') {
-    if (r.referenceType === 'DELIVERY_CHALLAN') return 'Dispatch · Challan'
-    if (r.referenceType === 'INVOICE') return 'Dispatch · Invoice'
     if (r.referenceType === 'JOB_ORDER') return 'Consumption'
-    return 'Issue'
+    return 'Dispatch'
   }
   return r.txnType
+}
+
+// Source document kind, shown in the Reference column
+// (MATERIAL RECEIPT / INVOICE / DELIVERY CHALLAN / …).
+function refLabel(r: InventoryLedgerRow): string {
+  if (r.txnType === 'Receipt') return 'MATERIAL RECEIPT'
+  return r.referenceType?.replace(/_/g, ' ') ?? '—'
 }
 
 export function StockMovementsPage() {
@@ -122,27 +127,28 @@ export function StockMovementsPage() {
       render: (r) => <Badge tone={TYPE_TONE[r.txnType] ?? 'slate'}>{txnLabel(r)}</Badge>,
     },
     {
-      key: 'in',
-      header: 'In',
+      key: 'qty',
+      header: 'Quantity',
       headerClassName: 'text-right',
-      cellClassName: 'text-right tabular-nums text-emerald-600',
-      render: (r) => (r.qtyIn ? qty(r.qtyIn) : ''),
-    },
-    {
-      key: 'out',
-      header: 'Out',
-      headerClassName: 'text-right',
-      cellClassName: 'text-right tabular-nums text-red-600',
-      render: (r) => (r.qtyOut ? qty(r.qtyOut) : ''),
+      cellClassName: 'text-right tabular-nums',
+      render: (r) => {
+        const amount = r.qtyIn || r.qtyOut || 0
+        if (!amount) return ''
+        const isIn = (r.qtyIn || 0) > 0
+        return (
+          <span className={isIn ? 'text-emerald-600' : 'text-red-600'}>
+            {qty(amount)} {r.unit}
+          </span>
+        )
+      },
     },
     {
       key: 'bal',
       header: 'Balance',
       headerClassName: 'text-right',
       cellClassName: 'text-right tabular-nums font-semibold',
-      render: (r) => (balanceById ? qty(balanceById.get(r.id) ?? 0) : '—'),
+      render: (r) => (balanceById ? `${qty(balanceById.get(r.id) ?? 0)} ${r.unit}` : '—'),
     },
-    { key: 'unit', header: 'Unit', render: (r) => r.unit },
     {
       key: 'owner',
       header: 'Owner',
@@ -152,7 +158,7 @@ export function StockMovementsPage() {
       key: 'ref',
       header: 'Reference',
       cellClassName: 'text-xs text-slate-500',
-      render: (r) => r.referenceType?.replace(/_/g, ' ') ?? '—',
+      render: (r) => refLabel(r),
     },
   ]
 
@@ -179,7 +185,7 @@ export function StockMovementsPage() {
           value: (r) => (r.ownership === 'Shop' ? 'Own / Shop' : companyName(r.companyId ?? '')),
           width: 20,
         },
-        { header: 'Reference', value: (r) => r.referenceType ?? '', width: 18 },
+        { header: 'Reference', value: (r) => refLabel(r), width: 18 },
         { header: 'Note', value: (r) => r.note ?? '', width: 28 },
       ],
       'Stock Movements',
