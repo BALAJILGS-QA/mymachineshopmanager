@@ -83,22 +83,48 @@ export function StockMovementsPage() {
     )
   }, [filtered, fMaterial])
 
-  // Running-balance track (single material only). `rows` is already FIFO-ascending,
-  // so each row's balance is the cumulative (in − out) up to and including it.
+  // Per-material (+ owner) running balance over the full loaded ledger, so EVERY
+  // movement — receipt, invoice dispatch AND delivery-challan dispatch — shows the
+  // stock balance after it, in any view. Computed on the whole ledger (not the
+  // type/date-filtered rows) so each balance sits in true chronological context.
   const { balanceById, totalIn, totalOut } = useMemo(() => {
-    if (!fMaterial) return { balanceById: null, totalIn: 0, totalOut: 0 }
+    const rankOf = (r: InventoryLedgerRow) => (r.txnType === 'Receipt' ? 0 : 1)
+    const groups = new Map<string, InventoryLedgerRow[]>()
+    for (const r of ledger) {
+      const key = `${r.materialId}::${r.companyId ?? 'shop'}`
+      const g = groups.get(key)
+      if (g) g.push(r)
+      else groups.set(key, [r])
+    }
     const m = new Map<string, number>()
-    let bal = 0
+    for (const list of groups.values()) {
+      const asc = [...list].sort((a, b) =>
+        a.date !== b.date
+          ? a.date < b.date
+            ? -1
+            : 1
+          : rankOf(a) !== rankOf(b)
+            ? rankOf(a) - rankOf(b)
+            : (a.docNo ?? '') < (b.docNo ?? '')
+              ? -1
+              : 1,
+      )
+      let bal = 0
+      for (const r of asc) {
+        bal += (r.qtyIn || 0) - (r.qtyOut || 0)
+        m.set(r.id, bal)
+      }
+    }
+    // Totals for the single-material summary (ledger holds just that material then).
     let tin = 0
     let tout = 0
-    for (const r of rows) {
-      tin += r.qtyIn || 0
-      tout += r.qtyOut || 0
-      bal += (r.qtyIn || 0) - (r.qtyOut || 0)
-      m.set(r.id, bal)
-    }
+    if (fMaterial)
+      for (const r of ledger) {
+        tin += r.qtyIn || 0
+        tout += r.qtyOut || 0
+      }
     return { balanceById: m, totalIn: tin, totalOut: tout }
-  }, [rows, fMaterial])
+  }, [ledger, fMaterial])
 
   const pg = usePagination(rows)
 
@@ -147,7 +173,10 @@ export function StockMovementsPage() {
       header: 'Balance',
       headerClassName: 'text-right',
       cellClassName: 'text-right tabular-nums font-semibold',
-      render: (r) => (balanceById ? `${qty(balanceById.get(r.id) ?? 0)} ${r.unit}` : '—'),
+      render: (r) => {
+        const b = balanceById.get(r.id)
+        return b === undefined ? '—' : `${qty(b)} ${r.unit}`
+      },
     },
     {
       key: 'owner',
@@ -176,7 +205,7 @@ export function StockMovementsPage() {
         { header: 'Qty Out', value: (r) => r.qtyOut || '', width: 12 },
         {
           header: 'Balance',
-          value: (r) => (balanceById ? (balanceById.get(r.id) ?? '') : ''),
+          value: (r) => balanceById.get(r.id) ?? '',
           width: 12,
         },
         { header: 'Unit', value: (r) => r.unit, width: 10 },
@@ -292,8 +321,8 @@ export function StockMovementsPage() {
 
       {!fMaterial && (
         <p className={clsx('mt-2 text-2xs text-slate-400')}>
-          Tip: filter by a single material to see the FIFO received → dispatched flow with a running
-          balance.
+          Tip: filter by a single material to see its movements in clean FIFO (received →
+          dispatched) order with a full-history running balance.
         </p>
       )}
     </div>
