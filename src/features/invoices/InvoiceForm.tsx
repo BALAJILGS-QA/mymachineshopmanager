@@ -170,16 +170,25 @@ export function InvoiceForm({
 
   // Per-source stock available for direct billing: this customer's materials +
   // own/shop stock, only sources with available quantity (business rule §7, §11).
-  const allSources = useSourceStock({ availableOnly: true })
+  // All received stock (incl. depleted) so an existing invoice line can still
+  // show — and keep — the batch it was billed from after that batch is fully
+  // dispatched. `sources` is the pickable subset (this company / own, in stock).
+  const allReceipts = useSourceStock({})
   const sources = useMemo(
-    () => allSources.filter((r) => r.companyId === companyId || r.ownerType === 'Shop'),
-    [allSources, companyId],
+    () =>
+      allReceipts.filter(
+        (r) => (r.companyId === companyId || r.ownerType === 'Shop') && r.available > 0,
+      ),
+    [allReceipts, companyId],
   )
   const sourceById = useMemo(() => {
-    const m = new Map<string, (typeof allSources)[number]>()
-    for (const r of allSources) m.set(r.receiptId, r)
+    const m = new Map<string, (typeof allReceipts)[number]>()
+    for (const r of allReceipts) m.set(r.receiptId, r)
     return m
-  }, [allSources])
+  }, [allReceipts])
+  // Dropdown label: material — received date · doc no | Recd <qty> | Bal <avail>.
+  const sourceLabel = (r: (typeof allReceipts)[number]) =>
+    `${materialName(r.materialId)}${r.ownerType === 'Shop' ? ' · Own' : ''} — ${fmtDate(r.date)} · ${r.sourceDocNo || r.receiptNo} | Recd ${qty(r.received)} | Bal ${qty(r.available)} ${r.unit}`
 
   function updateLine(id: string, patch: Partial<InvoiceLine>) {
     setLines((ls) => ls.map((l) => (l.id === id ? { ...l, ...patch } : l)))
@@ -609,7 +618,7 @@ export function InvoiceForm({
             <thead>
               <tr className="bg-slate-50">
                 <th className="th">Description</th>
-                <th className="th w-56">Stock item (deducts)</th>
+                <th className="th w-72">Stock item (deducts)</th>
                 <th className="th w-24 text-right">Qty</th>
                 <th className="th w-28 text-right">Rate</th>
                 <th className="th w-28 text-right">Amount</th>
@@ -651,13 +660,24 @@ export function InvoiceForm({
                           onChange={(e) => pickSource(l.id, e.target.value)}
                         >
                           <option value="">No stock deduction</option>
-                          {sources.map((r) => (
-                            <option key={r.receiptId} value={r.receiptId}>
-                              {materialName(r.materialId)}
-                              {r.ownerType === 'Shop' ? ' · Own' : ''} —{' '}
-                              {r.sourceDocNo || r.receiptNo} (avail {qty(r.available)} {r.unit})
-                            </option>
-                          ))}
+                          {(() => {
+                            // Show the pickable sources, plus this line's linked
+                            // received stock even if it is now fully dispatched, so
+                            // an existing invoice always shows the batch it deducted.
+                            const opts = [...sources]
+                            if (
+                              l.sourceReceiptId &&
+                              !opts.some((r) => r.receiptId === l.sourceReceiptId)
+                            ) {
+                              const sel = sourceById.get(l.sourceReceiptId)
+                              if (sel) opts.unshift(sel)
+                            }
+                            return opts.map((r) => (
+                              <option key={r.receiptId} value={r.receiptId}>
+                                {sourceLabel(r)}
+                              </option>
+                            ))
+                          })()}
                         </select>
                       )}
                     </td>
