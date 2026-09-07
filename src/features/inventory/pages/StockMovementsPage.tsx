@@ -64,13 +64,13 @@ export function StockMovementsPage() {
     })
   }, [ledger, search, fMaterial, fType, from, to, materialName])
 
-  // With a single material selected, order oldest → newest (FIFO): a day's
-  // receipts sit above the dispatches that consume them, so the running balance
-  // reads as a clean top-to-bottom track. Otherwise keep newest-first ledger order.
+  // Order by transaction date (not write time). With a single material selected,
+  // oldest → newest (FIFO) so a day's receipts sit above the dispatches that
+  // consume them; otherwise newest → oldest. Either way the balance column tracks
+  // cleanly, since each row carries its own material's balance-after-movement.
   const rows = useMemo(() => {
-    if (!fMaterial) return filtered
     const rank = (r: InventoryLedgerRow) => (r.txnType === 'Receipt' ? 0 : 1)
-    return [...filtered].sort((a, b) =>
+    const ascending = [...filtered].sort((a, b) =>
       a.date !== b.date
         ? a.date < b.date
           ? -1
@@ -81,6 +81,7 @@ export function StockMovementsPage() {
             ? -1
             : 1,
     )
+    return fMaterial ? ascending : ascending.reverse()
   }, [filtered, fMaterial])
 
   // Per-material (+ owner) running balance over the full loaded ledger, so EVERY
