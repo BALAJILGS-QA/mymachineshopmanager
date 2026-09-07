@@ -18,15 +18,17 @@ const TYPE_TONE: Record<string, string> = { Receipt: 'green', Issue: 'amber', Ad
 // Friendly transaction label: an Issue linked to a challan/invoice is a Dispatch;
 // linked to a job it is Consumption. Derived from the ledger's reference_type.
 function txnLabel(r: InventoryLedgerRow): string {
+  if (r.txnType === 'Receipt') return 'Received'
   if (r.txnType === 'Issue') {
-    if (r.referenceType === 'DELIVERY_CHALLAN' || r.referenceType === 'INVOICE') return 'Dispatch'
+    if (r.referenceType === 'DELIVERY_CHALLAN') return 'Dispatch · Challan'
+    if (r.referenceType === 'INVOICE') return 'Dispatch · Invoice'
     if (r.referenceType === 'JOB_ORDER') return 'Consumption'
+    return 'Issue'
   }
   return r.txnType
 }
 
 export function StockMovementsPage() {
-  const { data: ledger = [], isLoading } = useLedger()
   const { data: materials = [] } = useMaterials()
   const materialName = useMaterialName()
   const companyName = useCompanyName()
@@ -38,7 +40,12 @@ export function StockMovementsPage() {
   const [from, setFrom] = useState('')
   const [to, setTo] = useState('')
 
-  const rows = useMemo(() => {
+  // When a single material is selected, fetch that material's full ledger from
+  // the server so the FIFO running balance covers every movement — not just the
+  // 500 newest rows across all materials.
+  const { data: ledger = [], isLoading } = useLedger(fMaterial ? { materialId: fMaterial } : {})
+
+  const filtered = useMemo(() => {
     const s = search.toLowerCase()
     return ledger.filter((r) => {
       if (fMaterial && r.materialId !== fMaterial) return false
@@ -52,17 +59,40 @@ export function StockMovementsPage() {
     })
   }, [ledger, search, fMaterial, fType, from, to, materialName])
 
-  // Running balance is only meaningful for a single material (oldest → newest).
-  const balanceById = useMemo(() => {
-    if (!fMaterial) return null
-    const asc = [...rows].sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0))
+  // With a single material selected, order oldest → newest (FIFO): a day's
+  // receipts sit above the dispatches that consume them, so the running balance
+  // reads as a clean top-to-bottom track. Otherwise keep newest-first ledger order.
+  const rows = useMemo(() => {
+    if (!fMaterial) return filtered
+    const rank = (r: InventoryLedgerRow) => (r.txnType === 'Receipt' ? 0 : 1)
+    return [...filtered].sort((a, b) =>
+      a.date !== b.date
+        ? a.date < b.date
+          ? -1
+          : 1
+        : rank(a) !== rank(b)
+          ? rank(a) - rank(b)
+          : (a.docNo ?? '') < (b.docNo ?? '')
+            ? -1
+            : 1,
+    )
+  }, [filtered, fMaterial])
+
+  // Running-balance track (single material only). `rows` is already FIFO-ascending,
+  // so each row's balance is the cumulative (in − out) up to and including it.
+  const { balanceById, totalIn, totalOut } = useMemo(() => {
+    if (!fMaterial) return { balanceById: null, totalIn: 0, totalOut: 0 }
     const m = new Map<string, number>()
     let bal = 0
-    for (const r of asc) {
+    let tin = 0
+    let tout = 0
+    for (const r of rows) {
+      tin += r.qtyIn || 0
+      tout += r.qtyOut || 0
       bal += (r.qtyIn || 0) - (r.qtyOut || 0)
       m.set(r.id, bal)
     }
-    return m
+    return { balanceById: m, totalIn: tin, totalOut: tout }
   }, [rows, fMaterial])
 
   const pg = usePagination(rows)
@@ -138,6 +168,11 @@ export function StockMovementsPage() {
         { header: 'Type', value: (r) => txnLabel(r), width: 14 },
         { header: 'Qty In', value: (r) => r.qtyIn || '', width: 12 },
         { header: 'Qty Out', value: (r) => r.qtyOut || '', width: 12 },
+        {
+          header: 'Balance',
+          value: (r) => (balanceById ? (balanceById.get(r.id) ?? '') : ''),
+          width: 12,
+        },
         { header: 'Unit', value: (r) => r.unit, width: 10 },
         {
           header: 'Owner',
@@ -155,7 +190,7 @@ export function StockMovementsPage() {
     <div>
       <PageHeader
         title="Stock Movements"
-        subtitle="Every inventory transaction — receipts, issues, dispatches, consumption and adjustments"
+        subtitle="Every inventory transaction — receipts, issues, dispatches, consumption and adjustments. Filter by a material for a FIFO received → dispatched track with a running balance."
         actions={
           <button className="btn-ghost btn-sm" onClick={exportRows}>
             <Download size={15} /> Export Excel
@@ -210,6 +245,29 @@ export function StockMovementsPage() {
         </div>
       </Card>
 
+      {fMaterial && (
+        <div className="mb-3 grid grid-cols-3 gap-2">
+          <Card className="p-3">
+            <div className="text-2xs uppercase tracking-wide text-slate-500">
+              Total Received (In)
+            </div>
+            <div className="text-lg font-semibold tabular-nums text-emerald-600">
+              {qty(totalIn)}
+            </div>
+          </Card>
+          <Card className="p-3">
+            <div className="text-2xs uppercase tracking-wide text-slate-500">
+              Total Dispatched (Out)
+            </div>
+            <div className="text-lg font-semibold tabular-nums text-red-600">{qty(totalOut)}</div>
+          </Card>
+          <Card className="p-3">
+            <div className="text-2xs uppercase tracking-wide text-slate-500">Closing Balance</div>
+            <div className="text-lg font-semibold tabular-nums">{qty(totalIn - totalOut)}</div>
+          </Card>
+        </div>
+      )}
+
       <Card>
         <DataTable
           columns={columns}
@@ -228,7 +286,8 @@ export function StockMovementsPage() {
 
       {!fMaterial && (
         <p className={clsx('mt-2 text-2xs text-slate-400')}>
-          Tip: filter by a single material to see a running balance.
+          Tip: filter by a single material to see the FIFO received → dispatched flow with a running
+          balance.
         </p>
       )}
     </div>
