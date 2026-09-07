@@ -52,6 +52,104 @@ export function computeInvoice(inv: Invoice, payments: Payment[]): InvoiceComput
   return { subtotal, taxAmount, total, paid, outstanding }
 }
 
+// Invoice statuses that represent a real, collectible customer sales invoice.
+// Draft (not yet issued) and Cancelled/void invoices are excluded from every
+// receivables money total.
+const ELIGIBLE_INVOICE_STATUSES: ReadonlyArray<Invoice['status']> = [
+  'Unpaid',
+  'Partially Paid',
+  'Paid',
+]
+
+export function isEligibleInvoice(inv: Invoice): boolean {
+  return ELIGIBLE_INVOICE_STATUSES.includes(inv.status)
+}
+
+function withinRange(date: string, from?: string, to?: string): boolean {
+  if (from && date < from) return false
+  if (to && date > to) return false
+  return true
+}
+
+export interface ReceivablesFilter {
+  companyId?: string
+  from?: string // inclusive ISO date
+  to?: string // inclusive ISO date
+}
+
+export interface ReceivablesSummary {
+  totalInvoiced: number
+  totalReceived: number
+  totalOutstanding: number
+  totalAdvances: number
+  invoiceCount: number
+  paymentCount: number
+}
+
+// Accounting-safe receivables roll-up for the Payments dashboard. Derives every
+// figure from the authoritative invoice + payment records — nothing is stored
+// denormalised — reusing `computeInvoice` (the single source of invoice math) so
+// there is no parallel financial logic.
+//
+//   totalInvoiced    Σ grand total of eligible invoices (issued/posted/paid),
+//                    excluding Draft & Cancelled, filtered by INVOICE date.
+//   totalReceived    Σ of all valid customer receipts (allocated + advances),
+//                    filtered by PAYMENT/receipt date — actual money in.
+//   totalOutstanding Σ max(invoiceTotal − paymentsAllocatedToThatInvoice, 0)
+//                    over the same eligible invoices. Unallocated advances are
+//                    NEVER netted against an invoice they aren't applied to.
+//   totalAdvances    Σ of advance / unallocated receipts (no invoice link),
+//                    filtered by PAYMENT date — money received but not yet
+//                    applied to any invoice.
+//
+// Company filter constrains all four; date filter uses invoice date for
+// invoiced/outstanding and payment date for received/advances (see FILTER docs).
+export function receivablesSummary(
+  invoices: Invoice[],
+  payments: Payment[],
+  filter: ReceivablesFilter = {},
+): ReceivablesSummary {
+  const { companyId, from, to } = filter
+  const matchCompany = (cid: string) => !companyId || cid === companyId
+
+  let totalInvoiced = 0
+  let totalOutstanding = 0
+  let invoiceCount = 0
+  for (const inv of invoices) {
+    if (!isEligibleInvoice(inv)) continue
+    if (!matchCompany(inv.companyId)) continue
+    if (!withinRange(inv.date, from, to)) continue
+    // `computeInvoice` already nets ALL payments allocated to this invoice; the
+    // clamp keeps an over-paid invoice from producing negative outstanding.
+    const c = computeInvoice(inv, payments)
+    totalInvoiced += c.total
+    totalOutstanding += Math.max(c.outstanding, 0)
+    invoiceCount += 1
+  }
+
+  let totalReceived = 0
+  let totalAdvances = 0
+  let paymentCount = 0
+  for (const p of payments) {
+    if (!matchCompany(p.companyId)) continue
+    if (!withinRange(p.date, from, to)) continue
+    totalReceived += p.amount
+    paymentCount += 1
+    // An advance is any receipt not applied to an invoice (explicit flag or a
+    // missing invoice link) — it stays counted here until it is allocated.
+    if (p.isAdvance || !p.invoiceId) totalAdvances += p.amount
+  }
+
+  return {
+    totalInvoiced: roundMoney(totalInvoiced),
+    totalReceived: roundMoney(totalReceived),
+    totalOutstanding: roundMoney(totalOutstanding),
+    totalAdvances: roundMoney(totalAdvances),
+    invoiceCount,
+    paymentCount,
+  }
+}
+
 // Derive the effective status from payments (Draft/Cancelled are preserved).
 export function deriveInvoiceStatus(inv: Invoice, payments: Payment[]): Invoice['status'] {
   if (inv.status === 'Draft' || inv.status === 'Cancelled') return inv.status

@@ -5,6 +5,7 @@ import {
   paidForInvoice,
   computeInvoice,
   deriveInvoiceStatus,
+  receivablesSummary,
   materialStock,
   receiptStock,
   jobPendingQty,
@@ -380,5 +381,157 @@ describe('jobPendingQty', () => {
   it('is ordered minus completed, floored at zero', () => {
     expect(jobPendingQty(100, 30)).toBe(70)
     expect(jobPendingQty(100, 120)).toBe(0)
+  })
+})
+
+// ---- receivablesSummary (Payments dashboard KPIs) --------------------------
+
+describe('receivablesSummary', () => {
+  // Every fixture invoice defaults to subtotal 1000 (10 × 100), taxPercent 0 →
+  // grand total 1000, so amounts read as whole rupees below.
+
+  it('is all-zero with no invoices and no payments', () => {
+    expect(receivablesSummary([], [])).toEqual({
+      totalInvoiced: 0,
+      totalReceived: 0,
+      totalOutstanding: 0,
+      totalAdvances: 0,
+      invoiceCount: 0,
+      paymentCount: 0,
+    })
+  })
+
+  it('Scenario 1 — one fully paid invoice: outstanding 0', () => {
+    const inv = invoice({ id: 'inv_1', status: 'Paid' })
+    const pays = [payment({ id: 'p1', invoiceId: 'inv_1', amount: 1000 })]
+    const s = receivablesSummary([inv], pays)
+    expect(s.totalInvoiced).toBe(1000)
+    expect(s.totalReceived).toBe(1000)
+    expect(s.totalOutstanding).toBe(0)
+    expect(s.totalAdvances).toBe(0)
+  })
+
+  it('Scenario 2 — one partially paid invoice: outstanding = remainder', () => {
+    const inv = invoice({ id: 'inv_1', status: 'Partially Paid' })
+    const pays = [payment({ id: 'p1', invoiceId: 'inv_1', amount: 400 })]
+    const s = receivablesSummary([inv], pays)
+    expect(s.totalInvoiced).toBe(1000)
+    expect(s.totalReceived).toBe(400)
+    expect(s.totalOutstanding).toBe(600)
+    expect(s.totalAdvances).toBe(0)
+  })
+
+  it('sums multiple invoices for the same customer', () => {
+    const invs = [
+      invoice({ id: 'inv_1', status: 'Paid' }),
+      invoice({ id: 'inv_2', status: 'Unpaid' }),
+    ]
+    const pays = [payment({ id: 'p1', invoiceId: 'inv_1', amount: 1000 })]
+    const s = receivablesSummary(invs, pays)
+    expect(s.totalInvoiced).toBe(2000)
+    expect(s.totalOutstanding).toBe(1000)
+    expect(s.invoiceCount).toBe(2)
+  })
+
+  it('applies the company filter to all four figures', () => {
+    const invs = [
+      invoice({ id: 'inv_1', companyId: 'cmp_1', status: 'Unpaid' }),
+      invoice({ id: 'inv_2', companyId: 'cmp_2', status: 'Unpaid' }),
+    ]
+    const pays = [
+      payment({ id: 'p1', companyId: 'cmp_1', invoiceId: 'inv_1', amount: 300 }),
+      payment({ id: 'p2', companyId: 'cmp_2', invoiceId: 'inv_2', amount: 500 }),
+      payment({ id: 'p3', companyId: 'cmp_2', invoiceId: undefined, isAdvance: true, amount: 200 }),
+    ]
+    const s = receivablesSummary(invs, pays, { companyId: 'cmp_1' })
+    expect(s.totalInvoiced).toBe(1000)
+    expect(s.totalReceived).toBe(300)
+    expect(s.totalOutstanding).toBe(700)
+    expect(s.totalAdvances).toBe(0)
+  })
+
+  it('filters invoiced/outstanding by invoice date and received by payment date', () => {
+    const invs = [
+      invoice({ id: 'inv_jan', date: '2026-01-10', status: 'Unpaid' }),
+      invoice({ id: 'inv_mar', date: '2026-03-10', status: 'Unpaid' }),
+    ]
+    const pays = [
+      // Received in Feb against the January invoice.
+      payment({ id: 'p1', invoiceId: 'inv_jan', date: '2026-02-05', amount: 400 }),
+    ]
+    const s = receivablesSummary(invs, pays, { from: '2026-01-01', to: '2026-02-28' })
+    // Only the January invoice falls in range for invoiced/outstanding.
+    expect(s.totalInvoiced).toBe(1000)
+    expect(s.totalOutstanding).toBe(600) // 1000 − 400 allocated
+    // The Feb payment falls in the received window.
+    expect(s.totalReceived).toBe(400)
+  })
+
+  it('Scenario 3 — an unallocated advance never reduces invoice outstanding', () => {
+    const inv = invoice({ id: 'inv_1', status: 'Unpaid' })
+    const pays = [payment({ id: 'p1', invoiceId: undefined, isAdvance: true, amount: 300 })]
+    const s = receivablesSummary([inv], pays)
+    expect(s.totalInvoiced).toBe(1000)
+    expect(s.totalReceived).toBe(300)
+    expect(s.totalOutstanding).toBe(1000) // NOT 700
+    expect(s.totalAdvances).toBe(300)
+  })
+
+  it('treats a payment with no invoice link as an advance even without the flag', () => {
+    const pays = [payment({ id: 'p1', invoiceId: undefined, isAdvance: false, amount: 250 })]
+    const s = receivablesSummary([], pays)
+    expect(s.totalReceived).toBe(250)
+    expect(s.totalAdvances).toBe(250)
+  })
+
+  it('excludes Draft and Cancelled invoices from invoiced & outstanding', () => {
+    const invs = [
+      invoice({ id: 'inv_ok', status: 'Unpaid' }),
+      invoice({ id: 'inv_draft', status: 'Draft' }),
+      invoice({ id: 'inv_void', status: 'Cancelled' }),
+    ]
+    const s = receivablesSummary(invs, [])
+    expect(s.totalInvoiced).toBe(1000)
+    expect(s.totalOutstanding).toBe(1000)
+    expect(s.invoiceCount).toBe(1)
+  })
+
+  it('Scenario 5 — overpayment: invoice square, remainder counts as advance', () => {
+    // Modelled as the app records it: the allocated part and the surplus advance
+    // are two payment rows.
+    const inv = invoice({ id: 'inv_1', status: 'Paid' })
+    const pays = [
+      payment({ id: 'p1', invoiceId: 'inv_1', amount: 1000 }),
+      payment({ id: 'p2', invoiceId: undefined, isAdvance: true, amount: 200 }),
+    ]
+    const s = receivablesSummary([inv], pays)
+    expect(s.totalInvoiced).toBe(1000)
+    expect(s.totalReceived).toBe(1200)
+    expect(s.totalOutstanding).toBe(0)
+    expect(s.totalAdvances).toBe(200)
+  })
+
+  it('clamps a single over-allocated invoice to zero outstanding', () => {
+    const inv = invoice({ id: 'inv_1', status: 'Paid' })
+    const pays = [payment({ id: 'p1', invoiceId: 'inv_1', amount: 1500 })]
+    const s = receivablesSummary([inv], pays)
+    expect(s.totalOutstanding).toBe(0) // never negative
+  })
+
+  it('keeps paise accuracy across many partial receipts', () => {
+    const inv = invoice({
+      id: 'inv_1',
+      status: 'Partially Paid',
+      lines: [{ id: 'l', description: 'x', quantity: 1, rate: 100.1 }],
+    })
+    const pays = [
+      payment({ id: 'p1', invoiceId: 'inv_1', amount: 33.37 }),
+      payment({ id: 'p2', invoiceId: 'inv_1', amount: 33.37 }),
+      payment({ id: 'p3', invoiceId: 'inv_1', amount: 33.36 }),
+    ]
+    const s = receivablesSummary([inv], pays)
+    expect(s.totalInvoiced).toBe(100.1)
+    expect(s.totalReceived).toBe(100.1)
+    expect(s.totalOutstanding).toBe(0)
   })
 })
