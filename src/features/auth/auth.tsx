@@ -10,7 +10,16 @@
 //  • Local mode — a salted SHA-256 super-admin credential in localStorage;
 //    registered users (with approval state) live in the local data store.
 
-import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import { supabase, isSupabaseEnabled, makeAnonClient } from '@/data/supabase'
 import { userRepo, BusinessRuleError } from '@/data/repo'
 import type { AppUser } from '@/types'
@@ -135,6 +144,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   })
   const [loading, setLoading] = useState(supabaseMode)
+
+  // Tenant/session cache isolation: the React Query cache is shared for the life
+  // of the browser tab, so data fetched by one account must never survive into a
+  // different account's session. Whenever the authenticated identity changes
+  // (login, account switch, or logout → null) drop the ENTIRE query cache so no
+  // other tenant's customers/invoices/etc. can be served from a stale cache.
+  const queryClient = useQueryClient()
+  const prevEmailRef = useRef<string | null>(null)
+  useEffect(() => {
+    const email = session?.email?.toLowerCase() ?? null
+    if (prevEmailRef.current !== null && prevEmailRef.current !== email) {
+      queryClient.clear()
+    }
+    prevEmailRef.current = email
+  }, [session?.email, queryClient])
 
   useEffect(() => {
     if (!supabaseMode) {
