@@ -410,7 +410,10 @@ export interface Settings {
 
 // ----- Users & registration approval ----------------------------------------
 
-export type UserRole = 'SuperAdmin' | 'User'
+// SuperAdmin — the platform owner (email-based, see auth.tsx); above all users.
+// Admin — an approved shop user with access to every module. User — an approved
+// shop user restricted to the modules the super admin granted (see `permissions`).
+export type UserRole = 'SuperAdmin' | 'Admin' | 'User'
 export type UserStatus = 'pending' | 'approved' | 'rejected'
 
 // A registered account. Regular users sign up and start as 'pending' — they
@@ -426,6 +429,11 @@ export interface AppUser {
   address: string
   gstin: string
   role: UserRole
+  // Top-level module keys this user may access (see src/features/access/modules.ts).
+  // Only meaningful for role 'User'. Undefined = never configured by the super
+  // admin → treated as full access (legacy accounts are not locked out); an empty
+  // array means "no modules beyond the always-on Dashboard".
+  permissions?: string[]
   status: UserStatus
   passwordHash?: string
   createdAt: ISODate

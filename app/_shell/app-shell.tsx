@@ -6,9 +6,9 @@
 // next/link `Link`(href) + `usePathname()` with active state computed inline.
 // nav.ts (data + moduleGroupForPath) and all hooks are reused from src.
 
-import { useEffect, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import Link from 'next/link'
-import { usePathname } from 'next/navigation'
+import { usePathname, useRouter } from 'next/navigation'
 import {
   ChevronDown,
   ChevronRight,
@@ -22,13 +22,14 @@ import {
 } from 'lucide-react'
 import { clsx } from 'clsx'
 import {
-  NAV_ITEMS,
   NAV_GROUPS,
   MOBILE_PRIMARY,
   moduleGroupForPath,
+  moduleKeyForPath,
   type NavGroup,
   type MenuAccent,
 } from '@/components/layout/nav'
+import { effectiveModuleKeys, filterGroupsByAccess } from '@/features/access/modules'
 import { useAuth } from '@/features/auth/auth'
 import { useSettings } from '@/features/settings/hooks/useSettings'
 import { useUsers } from '@/features/approvals/hooks/useUsers'
@@ -294,12 +295,40 @@ export function AppShell({ children }: { children: ReactNode }) {
     })
   const ml = collapsed ? 'lg:ml-16' : 'lg:ml-60'
   const pathname = usePathname() ?? '/app'
+  const router = useRouter()
 
-  const navItems = NAV_ITEMS.filter((n) => !n.superAdmin || isSuperAdmin)
-  const navGroups = NAV_GROUPS.map((g) => ({
-    ...g,
-    items: g.items.filter((n) => !n.superAdmin || isSuperAdmin),
-  })).filter((g) => g.items.length > 0)
+  // The current user's AppUser record (undefined for the email-based super
+  // admin, who has no row) → their effective top-level module access.
+  const me = useMemo(
+    () => users.find((u) => u.email.toLowerCase() === (session?.email ?? '').toLowerCase()),
+    [users, session?.email],
+  )
+  const access = useMemo(() => effectiveModuleKeys({ isSuperAdmin, user: me }), [isSuperAdmin, me])
+  // An Admin can delegate module access to their own shop's users.
+  const canManageAccess = isSuperAdmin || me?.role === 'Admin'
+
+  // Filter the sidebar by module access first, then by the per-item role flags:
+  // `superAdmin` items are super-admin-only; `manageAccess` items also show to Admins.
+  const navGroups = filterGroupsByAccess(NAV_GROUPS, access)
+    .map((g) => ({
+      ...g,
+      items: g.items.filter((n) => {
+        if (n.superAdmin && !isSuperAdmin) return false
+        if (n.manageAccess && !canManageAccess) return false
+        return true
+      }),
+    }))
+    .filter((g) => g.items.length > 0)
+  const navItems = navGroups.flatMap((g) => g.items)
+
+  // Route guard: if the user opens a module they aren't granted (e.g. via a
+  // bookmarked URL), send them back to the dashboard. Data is RLS-protected
+  // server-side regardless; this is the matching UX-level redirect.
+  useEffect(() => {
+    if (access === 'all') return
+    const key = moduleKeyForPath(pathname)
+    if (key && !access.includes(key)) router.replace('/app')
+  }, [access, pathname, router])
 
   const currentLabel =
     navItems.find((n) =>
@@ -423,7 +452,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           <div className="hidden text-right leading-tight sm:block">
             <p className="text-xs font-semibold text-slate-900">{session?.username}</p>
             <p className="text-2xs text-slate-500">
-              {session?.role === 'SuperAdmin' ? 'Super Admin' : 'User'}
+              {isSuperAdmin ? 'Super Admin' : me?.role === 'Admin' ? 'Admin' : 'User'}
             </p>
           </div>
           <div className="flex h-8 w-8 items-center justify-center rounded-full bg-brand-100 text-sm font-bold text-brand-800 ring-1 ring-brand-200">
@@ -443,23 +472,25 @@ export function AppShell({ children }: { children: ReactNode }) {
 
       {/* Mobile bottom navigation */}
       <nav className="fixed inset-x-0 bottom-0 z-20 flex items-stretch border-t border-slate-300 bg-white lg:hidden">
-        {NAV_ITEMS.filter((n) => MOBILE_PRIMARY.includes((n.to as string) ?? '')).map((item) => {
-          const to = item.to as string
-          const active = isLinkActive(pathname, to)
-          return (
-            <Link
-              key={to}
-              href={to}
-              className={clsx(
-                'flex flex-1 flex-col items-center gap-0.5 py-2 text-2xs font-medium',
-                active ? 'text-brand-700' : 'text-slate-600',
-              )}
-            >
-              <item.icon size={20} />
-              {item.short}
-            </Link>
-          )
-        })}
+        {navItems
+          .filter((n) => MOBILE_PRIMARY.includes((n.to as string) ?? ''))
+          .map((item) => {
+            const to = item.to as string
+            const active = isLinkActive(pathname, to)
+            return (
+              <Link
+                key={to}
+                href={to}
+                className={clsx(
+                  'flex flex-1 flex-col items-center gap-0.5 py-2 text-2xs font-medium',
+                  active ? 'text-brand-700' : 'text-slate-600',
+                )}
+              >
+                <item.icon size={20} />
+                {item.short}
+              </Link>
+            )
+          })}
         <button
           onClick={() => setMoreOpen(true)}
           className="flex flex-1 flex-col items-center gap-0.5 py-2 text-2xs font-medium text-slate-600"

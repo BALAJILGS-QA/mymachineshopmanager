@@ -3,7 +3,7 @@
 // the server-side approval registry (RLS gate) via the set_user_approval RPC.
 
 import { sb } from '@/lib/api/supabaseCrud'
-import type { AppUser } from '@/types'
+import type { AppUser, UserRole } from '@/types'
 
 async function readAppState(): Promise<{ cur: Record<string, unknown>; users: AppUser[] }> {
   const { data, error } = await sb()
@@ -45,6 +45,23 @@ async function decide(
     .upsert({ id: 'singleton', data: { ...cur, users } })
   if (error) throw error
   await setRemoteApproval(email, status === 'approved')
+  return users[idx]
+}
+
+// Update a user's role and/or granted modules (super-admin only, enforced by the
+// app_state RLS policy). Reuses the read-modify-write on the users JSON array.
+export async function updateUserAccess(
+  id: string,
+  patch: { role?: UserRole; permissions?: string[] },
+): Promise<AppUser> {
+  const { cur, users } = await readAppState()
+  const idx = users.findIndex((u) => u.id === id)
+  if (idx < 0) throw new Error('User not found')
+  users[idx] = { ...users[idx], ...patch }
+  const { error } = await sb()
+    .from('app_state')
+    .upsert({ id: 'singleton', data: { ...cur, users } })
+  if (error) throw error
   return users[idx]
 }
 

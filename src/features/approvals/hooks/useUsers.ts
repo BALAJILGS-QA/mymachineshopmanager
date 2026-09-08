@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { qk } from '@/lib/api/queryKeys'
+import type { UserRole } from '@/types'
 import * as api from '../api/usersApi'
 
 export function useUsers() {
@@ -20,6 +21,15 @@ export function useRejectUser() {
   return useMutation({
     mutationFn: ({ id, by, email }: { id: string; by: string; email: string }) =>
       api.rejectUser(id, by, email),
+    onSuccess: () => qc.invalidateQueries({ queryKey: qk.users.all }),
+  })
+}
+
+export function useUpdateUserAccess() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, ...patch }: { id: string; role?: UserRole; permissions?: string[] }) =>
+      api.updateUserAccess(id, patch),
     onSuccess: () => qc.invalidateQueries({ queryKey: qk.users.all }),
   })
 }

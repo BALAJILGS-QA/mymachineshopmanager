@@ -39,6 +39,7 @@ export interface NavItem {
   icon: LucideIcon
   short: string
   superAdmin?: boolean // visible only to the super admin
+  manageAccess?: boolean // visible to the super admin OR an Admin (access delegation)
 }
 
 // Per-module semantic icon accent (inactive sidebar state only — the active
@@ -46,11 +47,26 @@ export interface NavItem {
 // in the app shell so colours stay centralised (no scattered hex).
 export type MenuAccent = 'blue' | 'orange' | 'emerald' | 'violet' | 'amber' | 'cyan' | 'slate'
 
+// Stable identity of a top-level module. Drives per-user access control: the
+// super admin grants a set of these to each 'User', and the sidebar/route guard
+// filter on them (see src/features/access). Keep in sync with MODULES there.
+export type ModuleKey =
+  | 'dashboard'
+  | 'production'
+  | 'inventory'
+  | 'sales'
+  | 'crm'
+  | 'hrm'
+  | 'accounts'
+  | 'supply_chain'
+  | 'configuration'
+
 // A titled section of the sidebar. An untitled group renders as standalone
 // links with no header (Dashboard, Sales). When `to` is set the title is a
 // clickable link to that group's hub landing page (which shows its items as
 // buttons).
 export interface NavGroup {
+  key: ModuleKey // top-level module this group belongs to (access control)
   title?: string
   to?: string
   icon?: LucideIcon // parent-module icon shown in the sidebar accordion header
@@ -64,10 +80,12 @@ export interface NavGroup {
 // Management sits with Accounts & Finance, and Tool Room sits under Production.
 export const NAV_GROUPS: NavGroup[] = [
   {
+    key: 'dashboard',
     accent: 'blue',
     items: [{ to: '/app', label: 'Dashboard', icon: LayoutDashboard, short: 'Home' }],
   },
   {
+    key: 'production',
     title: 'Production Planning',
     to: '/app/production-planning',
     icon: Factory,
@@ -84,6 +102,7 @@ export const NAV_GROUPS: NavGroup[] = [
     // Inventory — the source of truth for material stock. Materials & Stock moved
     // here out of Production Planning; everything else is a view over the existing
     // stock tables (no duplicate stock model).
+    key: 'inventory',
     title: 'Inventory',
     to: '/app/inventory',
     icon: Boxes,
@@ -114,11 +133,17 @@ export const NAV_GROUPS: NavGroup[] = [
     ],
   },
   {
+    key: 'sales',
     accent: 'emerald',
     items: [{ to: '/app/sales', label: 'Sales', icon: TrendingUp, short: 'Sales' }],
   },
-  { accent: 'violet', items: [{ to: '/app/crm', label: 'CRM', icon: Users, short: 'CRM' }] },
   {
+    key: 'crm',
+    accent: 'violet',
+    items: [{ to: '/app/crm', label: 'CRM', icon: Users, short: 'CRM' }],
+  },
+  {
+    key: 'hrm',
     title: 'Human Resources',
     to: '/app/hrm',
     icon: UserCog,
@@ -136,6 +161,7 @@ export const NAV_GROUPS: NavGroup[] = [
     ],
   },
   {
+    key: 'accounts',
     title: 'Accounts & Finance',
     to: '/app/accounts',
     icon: Landmark,
@@ -186,6 +212,7 @@ export const NAV_GROUPS: NavGroup[] = [
     ],
   },
   {
+    key: 'supply_chain',
     title: 'Supply Chain',
     to: '/app/supply-chain',
     icon: Warehouse,
@@ -201,6 +228,7 @@ export const NAV_GROUPS: NavGroup[] = [
     ],
   },
   {
+    key: 'configuration',
     title: 'Configuration & Settings',
     to: '/app/configuration',
     icon: SettingsIcon,
@@ -213,6 +241,13 @@ export const NAV_GROUPS: NavGroup[] = [
         icon: ShieldCheck,
         short: 'Approvals',
         superAdmin: true,
+      },
+      {
+        to: '/app/roles',
+        label: 'Roles & Permissions',
+        icon: UserCog,
+        short: 'Roles',
+        manageAccess: true,
       },
       { to: '/app/reports', label: 'Reports', icon: BarChart3, short: 'Reports' },
       { to: '/app/settings', label: 'Settings', icon: SettingsIcon, short: 'Settings' },
@@ -231,6 +266,18 @@ export function moduleGroupForPath(pathname: string): NavGroup | undefined {
   return NAV_GROUPS.find(
     (g) => g.title && (g.items.some((i) => within(i.to as string)) || within(g.to as string)),
   )
+}
+
+// The top-level module a path belongs to (for access control / route guarding).
+// Matches a group's own hub path or any of its items by prefix. Dashboard's
+// `/app` only matches exactly, so it never swallows every /app/* route.
+export function moduleKeyForPath(pathname: string): ModuleKey | undefined {
+  const within = (to?: string) => {
+    if (!to) return false
+    if (to === '/app') return pathname === '/app'
+    return pathname === to || pathname.startsWith(`${to}/`)
+  }
+  return NAV_GROUPS.find((g) => within(g.to) || g.items.some((i) => within(i.to)))?.key
 }
 
 // Items shown in the mobile bottom bar (most-used shop-floor screens); the rest

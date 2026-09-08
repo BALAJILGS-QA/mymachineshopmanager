@@ -36,8 +36,10 @@ export function ApprovalsPage() {
     () =>
       users
         .filter((u) => (filter === 'all' ? true : u.status === filter))
-        .filter((u) => inRange(u.createdAt.slice(0, 10), from, to))
-        .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1)),
+        // Legacy/seed accounts (e.g. the super admin) may lack a createdAt, so
+        // guard the string ops — an undefined date otherwise crashes the render.
+        .filter((u) => inRange((u.createdAt ?? '').slice(0, 10), from, to))
+        .sort((a, b) => ((a.createdAt ?? '') < (b.createdAt ?? '') ? 1 : -1)),
     [users, filter, from, to],
   )
   const pendingCount = users.filter((u) => u.status === 'pending').length

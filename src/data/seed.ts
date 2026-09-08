@@ -49,7 +49,7 @@ export const DEFAULT_SETTINGS: Settings = {
     dc: 'DC-{FY}-{####}',
   },
   company: {
-    name: 'Machine Shop Management',
+    name: 'My Machine Shop Manager',
     address: '',
     phone: '',
     email: '',
