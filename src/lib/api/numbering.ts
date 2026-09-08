@@ -31,12 +31,10 @@ export async function getNumbering(): Promise<Numbering> {
     numberingCache = DEFAULT_SETTINGS.numbering
     return numberingCache
   }
-  const { data } = await supabase
-    .from('app_state')
-    .select('data')
-    .eq('id', 'singleton')
-    .maybeSingle()
-  const n = (data?.data as { settings?: Settings } | null)?.settings?.numbering
+  // Read the caller-tenant settings (migration 0054); the numbering patterns
+  // live under the settings blob. Falls back to the standard default patterns.
+  const { data } = await supabase.rpc('get_tenant_settings')
+  const n = (data as { numbering?: Numbering } | null)?.numbering
   numberingCache = { ...DEFAULT_SETTINGS.numbering, ...(n ?? {}) }
   return numberingCache
 }

@@ -50,6 +50,9 @@ export const DEFAULT_SETTINGS: Settings = {
   },
   company: {
     name: 'My Machine Shop Manager',
+    // Neutral MSM brand mark shown by default; a tenant overrides it with its own
+    // logo in Settings → Shop Profile. Points at the MSM favicon SVG asset.
+    logoUrl: '/favicon.svg',
     address: '',
     phone: '',
     email: '',

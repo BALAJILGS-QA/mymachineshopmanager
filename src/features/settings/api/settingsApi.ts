@@ -1,5 +1,9 @@
-// Settings (app_state singleton JSON) + products (rate list) - Supabase-direct.
-// Settings persist under app_state.data.settings; products are a normal table.
+// Settings (per-tenant) + products (rate list) - Supabase-direct.
+// Shop settings persist in the per-tenant `tenant_settings` table via the
+// get_tenant_settings/set_tenant_settings RPCs (migration 0054), so each tenant
+// sees only its own shop profile/branding — a brand-new tenant starts from
+// DEFAULT_SETTINGS ("Machine Shop Manager") until its owner configures it.
+// Products are a normal (tenant-isolated) table.
 
 import { uid } from '@/lib/id'
 import { maps } from '@/lib/api/rowMap'
@@ -24,30 +28,24 @@ function mergeSettings(stored: Partial<Settings> | undefined): Settings {
 }
 
 export async function getSettings(): Promise<Settings> {
-  const { data, error } = await sb()
-    .from('app_state')
-    .select('data')
-    .eq('id', 'singleton')
-    .maybeSingle()
+  const { data, error } = await sb().rpc('get_tenant_settings')
   if (error) throw error
-  const merged = mergeSettings((data?.data as { settings?: Settings } | null)?.settings)
+  const merged = mergeSettings((data as Partial<Settings> | null) ?? undefined)
   setNumberingCache(merged.numbering)
   return merged
 }
 
 export async function updateSettings(patch: SettingsPatch): Promise<Settings> {
-  const { data } = await sb().from('app_state').select('data').eq('id', 'singleton').maybeSingle()
-  const cur = (data?.data as Record<string, unknown> | null) ?? {}
-  const curSettings = mergeSettings(cur.settings as Settings | undefined)
+  const { data, error: readErr } = await sb().rpc('get_tenant_settings')
+  if (readErr) throw readErr
+  const curSettings = mergeSettings((data as Partial<Settings> | null) ?? undefined)
   const next: Settings = {
     ...curSettings,
     ...patch,
     numbering: { ...curSettings.numbering, ...(patch.numbering ?? {}) },
     company: { ...curSettings.company, ...(patch.company ?? {}) },
   }
-  const { error } = await sb()
-    .from('app_state')
-    .upsert({ id: 'singleton', data: { ...cur, settings: next } })
+  const { error } = await sb().rpc('set_tenant_settings', { p_data: next })
   if (error) throw error
   setNumberingCache(next.numbering)
   return next
