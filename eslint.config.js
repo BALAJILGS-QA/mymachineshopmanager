@@ -15,6 +15,7 @@ export default tseslint.config(
       'coverage',
       'playwright-report',
       'test-results',
+      'qa/reports',
       'tailwind.config.js',
       'postcss.config.js',
       'eslint.config.js',

@@ -1,0 +1,341 @@
+{
+  "module": "approvals",
+  "component": "User Approvals",
+  "understanding": "The User Approvals module (route /app/approvals) is a super-admin-only screen for reviewing and actioning new account registrations. Verified against src/features/approvals (ApprovalsPage.tsx, hooks/useUsers.ts, api/usersApi.ts), the route wrapper app/app/approvals/page.tsx (thin 'use client' wrapper rendering <ApprovalsPage/>), src/features/auth/auth.tsx (approval gate + SUPER_ADMIN_EMAILS), src/constants/domain.ts (USER_STATUS_TONE) and src/lib/format.ts (inRange, fmtDate).\n\nAccess gate: The page reads isSuperAdmin from useAuth(). All hooks run first (stable hook order), THEN an effect redirects non-super-admins: useEffect(() => { if (!isSuperAdmin) navigate('/app', {replace:true}) }); and the component returns null when !isSuperAdmin. So a non-super-admin never sees content and is bounced to /app. Super-admin identity = session.role==='SuperAdmin', which in Supabase mode is any email in SUPER_ADMIN_EMAILS ['admin@sreebalajiindustries.com','balajin04@outlook.com'] (case-insensitive). Footnote on the page: 'Only the super admin can see and action this page.' The app shell (app/app/layout.tsx) already redirects unauthenticated users to '/'.\n\nData model: AppUser records live in app_state.data.users (a JSON array in the single app_state row id='singleton'); there is no dedicated users table. Fields: id, email, fullName, companyName, phone, address, gstin, role, permissions?, status ('pending'|'approved'|'rejected'), createdAt (ISODate), decidedAt?, decidedBy?. usersApi.readAppState() reads app_state.data; listUsers returns the users array (useUsers -> qk.users.all). decide(id,status,by,email) does a read-modify-write: finds the user by id (throws 'User not found' if absent), sets status + decidedAt=new Date().toISOString() + decidedBy=by, upserts app_state, then mirrors the decision via setRemoteApproval -> sb().rpc('set_user_approval',{p_email,p_approved}). The RPC error is swallowed ONLY when it matches /function .* does not exist|not find the function/ (missing migration is a no-op); any other RPC error is thrown. approveUser/rejectUser wrap decide with status 'approved'/'rejected'. Both mutations onSuccess invalidate qk.users.all.\n\nUI: PageHeader title 'User Approvals'; subtitle is dynamic — when pendingCount>0 it reads '{n} registration(s) awaiting approval' (singular 'registration' when n===1, else plural), otherwise 'Review and approve new account registrations'. FilterBar has a Status label with four filter buttons: Pending / Approved / Rejected / All (FILTERS array; default filter state = 'pending'). The active button is highlighted (bg-brand-600 white). The Pending button shows an amber pill badge with pendingCount when pendingCount>0. A DateRangeFilter (from/to) sits beside it. Table (ResponsiveTable min-w-[52rem]) columns: Applicant (fullName || '—' bold, email small), Company (companyName || '—', optional address line), Contact (phone || '—'), GSTIN (|| '—'), Requested (fmtDate(createdAt)), Status (Badge with tone from USER_STATUS_TONE: pending=amber, approved=green, rejected=red; text is the raw status word), Actions (right-aligned). Actions: an 'Approve' primary button (Check icon) shown only when status !== 'approved'; a 'Reject' secondary red button (X icon) shown only when status !== 'rejected'. So an approved user shows only Reject, a rejected user shows only Approve, a pending user shows both.\n\nEmpty state (EmptyState, UserCheck icon): when rows.length===0 — for filter==='pending' title 'No pending registrations' / description 'New sign-ups will appear here for your approval.'; for every other filter title 'No records' / description 'Nothing to show for this filter.'\n\nRows computation (useMemo): filter by status (all = no status filter), then .filter(u => inRange((u.createdAt ?? '').slice(0,10), from, to)), then .sort by (a.createdAt ?? '') vs (b.createdAt ?? '') descending (newest first). inRange('' bounds = unbounded; inclusive string compare of yyyy-MM-dd). pendingCount = users with status==='pending'.\n\nWorkflow: onApprove -> approveUser.mutateAsync({id, by: session?.username ?? 'admin', email}); success toast `${fullName || email} approved`; error toast toUserMessage(e,'Approve failed'). onReject -> confirm() dialog FIRST (title 'Reject registration', message `Reject {fullName || email}? They will not be able to sign in.`, danger:true, confirmLabel 'Reject'); if cancelled, no-op; on confirm rejectUser.mutateAsync(...); success toast 'Registration rejected'; error toast toUserMessage(e,'Reject failed'). Downstream effect (auth.tsx login): a pending user login is blocked with 'Your account is awaiting super-admin approval.'; a rejected user with 'Your registration was not approved. Please contact the administrator.'; an approved user can sign in.\n\nREGRESSION (bug fixed this session): rows previously used u.createdAt.slice(0,10) directly, which threw when a listed user had no createdAt — crashing the whole page (client error '<html id=\"__next_error__\">' / 'This page couldn't load'). This surfaced on the Approved and All filters because legacy/seed accounts (including the super admin) lack createdAt while fresh sign-ups always have it. Now guarded with (u.createdAt ?? '') in BOTH the inRange filter and the sort comparator, so the page renders without crashing regardless of the selected filter.\n\nDestructive: Approve/Reject write to app_state.data.users and mirror to set_user_approval — these are destructive:true against real accounts and stay Manual. Reads, the gate, filters and the empty-state/validation checks are non-destructive.",
+  "cases": [
+    {
+      "key": "MSM-APPROVALS-UI-001",
+      "name": "Approvals page renders header, filter bar and table columns",
+      "category": "UI",
+      "priority": "High",
+      "status": "Approved",
+      "objective": "Verify the User Approvals page shows the correct header/subtitle, the four status filter buttons, the date-range filter, the pending-count badge, and all seven table columns.",
+      "precondition": "Logged in as QA super-admin; at least one pending registration exists in the current tenant.",
+      "testData": "",
+      "steps": [
+        "Navigate to /app/approvals.",
+        "Observe the PageHeader title 'User Approvals' and its subtitle.",
+        "Observe the Status filter row with buttons Pending, Approved, Rejected, All and the date-range (from/to) inputs.",
+        "Inspect the amber count pill on the Pending button.",
+        "Inspect the table header row and one pending data row."
+      ],
+      "expectedResult": "Header title is 'User Approvals'. With pending rows present the subtitle reads 'N registration(s) awaiting approval' (singular 'registration' when exactly 1). The Pending button is highlighted by default and carries an amber pill showing the pending count. Table columns are Applicant (name + email), Company, Contact, GSTIN, Requested, Status, Actions (right-aligned). Empty fields render as '—'. Footer reads 'Only the super admin can see and action this page.'",
+      "labels": ["smoke", "regression"],
+      "destructive": false,
+      "automation": "Manual",
+      "automatedTest": ""
+    },
+    {
+      "key": "MSM-APPROVALS-UI-002",
+      "name": "Status badge tone and conditional action buttons per status",
+      "category": "UI",
+      "priority": "Normal",
+      "status": "Approved",
+      "objective": "Verify each user's Status badge uses the correct tone and that Approve/Reject buttons are shown or hidden according to the user's current status.",
+      "precondition": "Logged in as QA super-admin; the tenant has one pending, one approved and one rejected user (use the All filter to see all three).",
+      "testData": "",
+      "steps": [
+        "Navigate to /app/approvals and click the All filter.",
+        "Locate the pending, approved and rejected rows.",
+        "Inspect the Status badge colour/text on each.",
+        "Inspect the Actions cell on each row."
+      ],
+      "expectedResult": "Status badges: pending = amber, approved = green, rejected = red, each showing the raw status word. Pending row shows BOTH Approve (primary, Check icon) and Reject (red secondary, X icon). Approved row shows ONLY Reject (Approve hidden). Rejected row shows ONLY Approve (Reject hidden).",
+      "labels": ["regression"],
+      "destructive": false,
+      "automation": "Manual",
+      "automatedTest": ""
+    },
+    {
+      "key": "MSM-APPROVALS-UI-003",
+      "name": "Rows sorted newest-first by requested date",
+      "category": "UI",
+      "priority": "Low",
+      "status": "Approved",
+      "objective": "Verify the pending list is ordered by createdAt descending (most recent registration at the top).",
+      "precondition": "Logged in as QA super-admin; at least two pending registrations with distinct createdAt values exist.",
+      "testData": "",
+      "steps": [
+        "Navigate to /app/approvals (Pending filter is active by default).",
+        "Read the Requested column top-to-bottom."
+      ],
+      "expectedResult": "Rows are sorted by Requested date descending — the newest sign-up appears first. Rows missing a createdAt sort to the bottom and still display '—' in the Requested column without breaking the order.",
+      "labels": [],
+      "destructive": false,
+      "automation": "Manual",
+      "automatedTest": ""
+    },
+    {
+      "key": "MSM-APPROVALS-VAL-001",
+      "name": "Reject requires explicit confirmation dialog",
+      "category": "Validation",
+      "priority": "High",
+      "status": "Approved",
+      "objective": "Verify clicking Reject opens a danger confirmation dialog with the correct copy and that cancelling makes no change.",
+      "precondition": "Logged in as QA super-admin; at least one non-rejected user is listed.",
+      "testData": "",
+      "steps": [
+        "Navigate to /app/approvals.",
+        "Click Reject on a pending or approved user.",
+        "Read the confirmation dialog title, message and buttons.",
+        "Click Cancel (dismiss without confirming).",
+        "Observe the user's status."
+      ],
+      "expectedResult": "A confirm dialog appears with title 'Reject registration', message 'Reject {name or email}? They will not be able to sign in.', a danger-styled 'Reject' confirm button and a Cancel button. Cancelling closes the dialog and leaves the user's status unchanged (no toast, no data write).",
+      "labels": ["negative"],
+      "destructive": false,
+      "automation": "Manual",
+      "automatedTest": ""
+    },
+    {
+      "key": "MSM-APPROVALS-VAL-002",
+      "name": "Date-range filter includes and excludes by requested date",
+      "category": "Validation",
+      "priority": "Normal",
+      "status": "Approved",
+      "objective": "Verify the from/to date-range filter inclusively bounds rows by createdAt and that empty bounds mean unbounded.",
+      "precondition": "Logged in as QA super-admin; at least two users with createdAt dates on different days exist.",
+      "testData": "from = the earlier user's date; to = same earlier date",
+      "steps": [
+        "Navigate to /app/approvals and select the All filter.",
+        "Note the Requested dates of the visible users.",
+        "Set the 'from' and 'to' dates to bracket only the earlier user's date.",
+        "Clear both date fields."
+      ],
+      "expectedResult": "With a bracketing range only users whose createdAt falls inside the inclusive range remain; users outside the range disappear. Users lacking a createdAt are excluded whenever a 'from' is set (empty date fails the lower bound). Clearing both dates restores the full list (unbounded).",
+      "labels": [],
+      "destructive": false,
+      "automation": "Manual",
+      "automatedTest": ""
+    },
+    {
+      "key": "MSM-APPROVALS-FUNC-001",
+      "name": "All four status filters plus empty-state copy per filter",
+      "category": "Functionality",
+      "priority": "High",
+      "status": "Approved",
+      "objective": "Verify each status filter (Pending / Approved / Rejected / All) narrows the list to the matching status, the date-range filter composes with it, and the correct empty-state copy shows per filter.",
+      "precondition": "Logged in as QA super-admin. Ideally have at least one user in each status; for the empty-state checks use a tenant/filter combination that yields zero rows.",
+      "testData": "",
+      "steps": [
+        "Navigate to /app/approvals; confirm Pending is the default active filter.",
+        "Click Approved, then Rejected, then All, inspecting the Status column each time.",
+        "With All selected, apply a date range that matches no user and observe the empty state.",
+        "Switch to Pending on a tenant/date-range that yields no pending rows and read the empty-state title and description.",
+        "Switch to Approved (or Rejected/All) on a filter that yields no rows and read the empty-state title and description."
+      ],
+      "expectedResult": "Pending shows only pending users, Approved only approved, Rejected only rejected, All shows every user regardless of status. The date-range filter further narrows any selection. When no rows match: the Pending filter shows title 'No pending registrations' with description 'New sign-ups will appear here for your approval.'; every other filter shows title 'No records' with description 'Nothing to show for this filter.'",
+      "labels": ["smoke"],
+      "destructive": false,
+      "automation": "Manual",
+      "automatedTest": ""
+    },
+    {
+      "key": "MSM-APPROVALS-FUNC-002",
+      "name": "Approve a pending registration",
+      "category": "Functionality",
+      "priority": "Highest",
+      "status": "Approved",
+      "objective": "Verify approving a pending user updates status to approved, shows a success toast, refreshes the list, and hides the Approve button.",
+      "precondition": "Logged in as QA super-admin; a disposable pending registration exists (create one via /signup if needed).",
+      "testData": "Pending applicant with a known fullName/email",
+      "steps": [
+        "Navigate to /app/approvals (Pending filter).",
+        "Click Approve on the target pending user.",
+        "Observe the toast.",
+        "Observe the row after the list refreshes (it drops off the Pending filter); switch to Approved to confirm.",
+        "Inspect the Actions cell for the now-approved user."
+      ],
+      "expectedResult": "A success toast '{fullName or email} approved' appears. The users query is invalidated and refetched: the user's status becomes 'approved' (green badge under Approved/All), it no longer appears under Pending, the pending count decreases, and the Approve button is hidden for that user (only Reject remains).",
+      "labels": ["smoke"],
+      "destructive": true,
+      "automation": "Manual",
+      "automatedTest": ""
+    },
+    {
+      "key": "MSM-APPROVALS-FUNC-003",
+      "name": "Reject a registration after confirming",
+      "category": "Functionality",
+      "priority": "High",
+      "status": "Approved",
+      "objective": "Verify confirming the Reject dialog sets status to rejected, shows a success toast, refreshes the list, and hides the Reject button.",
+      "precondition": "Logged in as QA super-admin; a disposable pending (or approved) registration exists.",
+      "testData": "Disposable applicant",
+      "steps": [
+        "Navigate to /app/approvals.",
+        "Click Reject on the target user and confirm 'Reject' in the dialog.",
+        "Observe the toast.",
+        "Switch to the Rejected filter and locate the user.",
+        "Inspect the Actions cell for the rejected user."
+      ],
+      "expectedResult": "Success toast 'Registration rejected' appears. The list refreshes and the user's status becomes 'rejected' (red badge under Rejected/All). The Reject button is hidden for that user (only Approve remains).",
+      "labels": [],
+      "destructive": true,
+      "automation": "Manual",
+      "automatedTest": ""
+    },
+    {
+      "key": "MSM-APPROVALS-FUNC-004",
+      "name": "Approved/All filters render without a client crash when a user lacks a created date",
+      "category": "Functionality",
+      "priority": "Highest",
+      "status": "Approved",
+      "objective": "Regression: verify switching to the Approved and All filters renders the table without a client-side crash even when a listed user (e.g. a legacy/seed account or the super admin) has no createdAt.",
+      "precondition": "Logged in as QA super-admin. The users list includes at least one account with no createdAt (the super-admin/legacy seed account qualifies) — visible under Approved and/or All.",
+      "testData": "",
+      "steps": [
+        "Navigate to /app/approvals.",
+        "Click the Approved filter and wait for the table to render.",
+        "Click the All filter and wait for the table to render.",
+        "Open the browser console / inspect the DOM root.",
+        "Confirm the created-date-less user appears with '—' in the Requested column."
+      ],
+      "expectedResult": "Both the Approved and All views render normally — the page does NOT crash: no '<html id=\"__next_error__\">', no 'This page couldn't load' error screen, no console error from calling .slice on undefined. Users without a createdAt display '—' in the Requested column and sort to the bottom. (Guarded by (u.createdAt ?? '') in the inRange filter and sort comparator.)",
+      "labels": ["regression"],
+      "destructive": false,
+      "automation": "Manual",
+      "automatedTest": ""
+    },
+    {
+      "key": "MSM-APPROVALS-API-001",
+      "name": "Approve/Reject mirror decision to set_user_approval and refresh cache",
+      "category": "API",
+      "priority": "High",
+      "status": "Approved",
+      "objective": "Verify an approve/reject writes app_state via upsert and issues the set_user_approval RPC, and that the users query is invalidated so the UI reflects the new state.",
+      "precondition": "Logged in as QA super-admin with browser DevTools Network tab open; a disposable pending user exists.",
+      "testData": "",
+      "steps": [
+        "Open DevTools > Network and filter to Supabase REST/RPC calls.",
+        "Navigate to /app/approvals and Approve the disposable user.",
+        "Inspect the network calls made during the action.",
+        "Observe whether the users list refetches."
+      ],
+      "expectedResult": "An upsert to the app_state table (id 'singleton') persists the users array with the user's status='approved', decidedAt (ISO timestamp) and decidedBy set. An RPC POST to set_user_approval with { p_email, p_approved: true } is sent (a 'function does not exist' error is silently ignored; any other RPC error surfaces an error toast). After success the qk.users.all query is invalidated and refetched, updating the table without a manual reload.",
+      "labels": ["regression"],
+      "destructive": true,
+      "automation": "Manual",
+      "automatedTest": ""
+    },
+    {
+      "key": "MSM-APPROVALS-API-002",
+      "name": "Approve/Reject failure surfaces an error toast",
+      "category": "API",
+      "priority": "Normal",
+      "status": "Approved",
+      "objective": "Verify a failed approve/reject mutation shows the correct fallback error toast and does not falsely report success.",
+      "precondition": "Logged in as QA super-admin; ability to force a backend failure (e.g. block the app_state upsert / set_user_approval RPC via DevTools request blocking, or go offline).",
+      "testData": "",
+      "steps": [
+        "Open DevTools and block the Supabase app_state upsert (or the set_user_approval RPC) request, or disable the network.",
+        "Navigate to /app/approvals and click Approve on a user.",
+        "Repeat with Reject (confirm the dialog first).",
+        "Observe the toast and the row status."
+      ],
+      "expectedResult": "Approve failure shows an error toast defaulting to 'Approve failed' (or the mapped server message via toUserMessage); Reject failure shows 'Reject failed'. No success toast appears and the user's displayed status is unchanged.",
+      "labels": ["negative"],
+      "destructive": false,
+      "automation": "Manual",
+      "automatedTest": ""
+    },
+    {
+      "key": "MSM-APPROVALS-SEC-001",
+      "name": "Non-super-admin is redirected away from /app/approvals",
+      "category": "Security",
+      "priority": "Highest",
+      "status": "Approved",
+      "objective": "Verify a regular approved (non-super-admin) user cannot view the approvals page and is redirected to /app.",
+      "precondition": "Logged in as a regular approved User (NOT a SUPER_ADMIN_EMAILS account).",
+      "testData": "Regular user session",
+      "steps": [
+        "While logged in as a regular user, navigate directly to /app/approvals.",
+        "Observe the resulting page/route."
+      ],
+      "expectedResult": "The approvals content never renders (component returns null) and the app navigates (replace) to /app. No user list, filters or action buttons are shown to the non-super-admin.",
+      "labels": ["security"],
+      "destructive": false,
+      "automation": "Manual",
+      "automatedTest": ""
+    },
+    {
+      "key": "MSM-APPROVALS-SEC-002",
+      "name": "Unauthenticated access to /app/approvals is blocked by the shell",
+      "category": "Security",
+      "priority": "High",
+      "status": "Approved",
+      "objective": "Verify an unauthenticated visitor cannot reach the approvals page and is redirected to the public landing by the portal shell.",
+      "precondition": "No active session (logged out / fresh browser).",
+      "testData": "",
+      "steps": [
+        "Ensure you are logged out.",
+        "Navigate directly to /app/approvals.",
+        "Observe the redirect target."
+      ],
+      "expectedResult": "The authenticated portal shell (app/app/layout.tsx) redirects to '/' (not /login). No approvals data is exposed to an unauthenticated request.",
+      "labels": ["security"],
+      "destructive": false,
+      "automation": "Manual",
+      "automatedTest": ""
+    },
+    {
+      "key": "MSM-APPROVALS-SEC-003",
+      "name": "Super-admin identity limited to SUPER_ADMIN_EMAILS",
+      "category": "Security",
+      "priority": "Normal",
+      "status": "Approved",
+      "objective": "Verify only accounts whose email is in SUPER_ADMIN_EMAILS are treated as super admin and can see/action approvals.",
+      "precondition": "Access to both a SUPER_ADMIN_EMAILS account (QA super-admin) and a regular approved account.",
+      "testData": "Super-admin email vs. a non-listed email",
+      "steps": [
+        "Log in as the QA super-admin (email in SUPER_ADMIN_EMAILS) and open /app/approvals.",
+        "Log out and log in as a regular approved user, then open /app/approvals."
+      ],
+      "expectedResult": "The SUPER_ADMIN_EMAILS account sees the full approvals page (session.role SuperAdmin, isSuperAdmin true). The non-listed account is treated as a regular User (isSuperAdmin false) and is redirected to /app with no access. Email matching is case-insensitive.",
+      "labels": ["security"],
+      "destructive": false,
+      "automation": "Manual",
+      "automatedTest": ""
+    },
+    {
+      "key": "MSM-APPROVALS-DB-001",
+      "name": "Approval decision persists in app_state.data.users",
+      "category": "Database",
+      "priority": "High",
+      "status": "Approved",
+      "objective": "Verify approve/reject decisions persist to app_state.data.users (status, decidedAt, decidedBy) and survive a page reload.",
+      "precondition": "Logged in as QA super-admin; a disposable pending user exists.",
+      "testData": "",
+      "steps": [
+        "Navigate to /app/approvals and Approve the disposable user.",
+        "Hard-reload the page (or re-open /app/approvals).",
+        "Switch to the Approved filter and confirm the user's state.",
+        "(Optional) Inspect app_state.data.users in Supabase to confirm the stored fields."
+      ],
+      "expectedResult": "After reload the user is still status 'approved' under the Approved filter. The persisted record carries status='approved', a decidedAt ISO timestamp and decidedBy = the super-admin username (falling back to 'admin'). The decision is not lost on refresh (written to the singleton app_state row, not just client state).",
+      "labels": ["regression"],
+      "destructive": true,
+      "automation": "Manual",
+      "automatedTest": ""
+    },
+    {
+      "key": "MSM-APPROVALS-DB-002",
+      "name": "Approval decision gates downstream login",
+      "category": "Database",
+      "priority": "Normal",
+      "status": "Approved",
+      "objective": "Verify the persisted status is enforced at login — pending cannot sign in, rejected is refused, approved can sign in.",
+      "precondition": "Logged in as QA super-admin; access to a disposable applicant's credentials (created via /signup).",
+      "testData": "Disposable applicant email/password",
+      "steps": [
+        "As super-admin, leave the applicant pending; attempt to log in as that applicant.",
+        "As super-admin, Reject the applicant; attempt to log in again.",
+        "As super-admin, Approve the applicant; attempt to log in again."
+      ],
+      "expectedResult": "Pending login is blocked with 'Your account is awaiting super-admin approval.'; rejected login is refused with 'Your registration was not approved. Please contact the administrator.'; approved login succeeds and reaches /app. This confirms the approvals decision (mirrored to set_user_approval and reflected by resolveSupabaseSession) drives access.",
+      "labels": ["security"],
+      "destructive": true,
+      "automation": "Manual",
+      "automatedTest": ""
+    }
+  ]
+}

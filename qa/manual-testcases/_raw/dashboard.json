@@ -1,0 +1,343 @@
+{
+  "module": "dashboard",
+  "component": "Dashboard",
+  "understanding": "The Dashboard (id \"dashboard\", route /app, source src/features/dashboard/DashboardPage.tsx, mounted at app/app/page.tsx inside the client auth shell) is a read-only command-center / analytics screen. It has NO forms, NO Zod validation, NO create/update/delete mutations and NO write RPCs — it only aggregates and visualizes existing domain data via TanStack Query hooks (useJobs, useInvoices, usePayments, useExpenses, useIssues, useMaterials, useCompanies, useReceipts, useAdjustments) plus useCompanyName / useMaterialName lookups. Each hook defaults data to [].\n\nThe single interactive control is a native company <Select> in the PageHeader (value \"\" = All companies; one option per company). Selecting a company filters jobs/invoices/payments/expenses/issues by companyId (jobsF/invoicesF/paymentsF/expensesF/issuesF via useMemo) and re-scopes every computed figure. Stock figures re-derive balances with company scope via materialStock(db, id, company || undefined); raw-material value switches between totalRawMaterialValue (all) and companyMaterialValue(db, company). The subtitle shows today's date (fmtDate) + ' · ' + scope label ('All companies' or company name).\n\nVerified behavior details that shape the cases: (1) Monthly figures use monthStart = startOfMonth(today) formatted yyyy-MM-dd and compare i.date/p.date/e.date >= monthStart. Invoiced(month)/GST(month) sum computeInvoice over non-Cancelled invoices dated this month. Payments(month)/Expenses(month) sum this-month rows. Net(month) = paymentsThisMonth - expensesThisMonth (tone red when negative, green otherwise). (2) 'Pending payments' (kpi.pending) is ALL-TIME, not month-scoped: sum of computeInvoice(i, payments).outstanding over ALL non-Cancelled in-scope invoices (Cancelled → paid=0, outstanding=0). (3) computeInvoice: subtotal=Σ qty*rate; taxable=max(0, subtotal-discount); taxPct = (cgst+sgst) when either present else taxPercent; total=taxable+tax; paid/outstanding=0 when Cancelled. (4) stockHealth classifies EACH material (over the full materials list, balance re-scoped by company) in this order: bal<=0 → out; else reorderLevel!=undefined && bal<=reorderLevel → low; else healthy. pct = total ? round(healthy/total*100) : 0. (5) The Low/negative stock LIST uses a slightly different filter (bal<0 OR (reorderLevel!=undefined && bal<=reorderLevel)) and slice 6 — so a material at exactly bal=0 with no reorderLevel counts as 'out' in the gauge but does NOT appear in the list. Negative balances render red, others amber. (6) flow.inStock / 'Materials in stock' counts materials with company-scoped balance>0. materialStock balance = received - issued + adjusted (company-scoped). (7) Workflow stepper counts (jobsF): Material Stock=inStock →/app/inventory/materials; Job Orders=Pending+Draft →/app/jobs; In Machining=In Progress →/app/production; Ready to Dispatch=Completed →/app/production; Dispatched=Delivered →/app/deliveries. (8) Shop-floor BigStats: Open Jobs(Pending+Draft)→/app/jobs, In Production(In Progress)→/app/production, Ready to Dispatch(Completed=flow.ready)→/app/production, Dispatched(Delivered=flow.dispatched)→/app/deliveries. (9) Financial SummaryRows link: Invoiced→/app/invoices, GST→/app/reports, Payments→/app/payments, Pending→/app/invoices, Net→/app/reports; panel headers link to /app/jobs, /app/reports, /app/expenses, /app/inventory/materials. (10) Charts (recharts): Invoices vs Payments (6mo bar, currency tooltip, Invoiced/Received legend) and Cash flow Payments vs Expenses (6mo bar, currency tooltip, legend) have NO empty state (render zero bars). Expenses by category (this-month pie) empty when 0 categories → 'No expenses this month'. Materials dispatched per month (bar, qty tooltip) empty when every bucket qty===0 → 'No material issues in this period'. lastMonths(6) buckets keyed yyyy-MM. (11) Lists: Priority jobs = jobsF in Pending/In Progress/On Hold sorted by rank Urgent(0)<High(1)<Normal(2)<Low(3), slice 6, empty 'No pending jobs'; Recent payments = paymentsF sorted date desc slice 5 (company/date/method/currency), empty 'No payments yet'; Recent material dispatches = issuesF sorted date desc slice 5 (material name/date/issueNo/qty+unit), empty 'No material issues yet'; each list header has a 'View all' AppLink (Priority→/app/jobs, Low stock→/app/inventory/materials, Recent payments→/app/payments, Recent dispatches→/app/inventory/materials). Since the screen is read-only, all functional/DB cases are non-destructive except DB-001 which writes rows in OTHER modules to prove derivation. Pure math lives in src/data/computations.ts (26 unit tests): computeInvoice, materialStock, companyMaterialValue, totalRawMaterialValue.",
+  "cases": [
+    {
+      "key": "MSM-DASHBOARD-UI-001",
+      "name": "Dashboard renders all sections with header, scope subtitle and company filter",
+      "category": "UI",
+      "priority": "High",
+      "status": "Approved",
+      "objective": "Verify the /app dashboard loads and displays the page header, today's date + scope label, company filter, workflow stepper, all panel cards, charts and lists.",
+      "precondition": "Logged in as QA super-admin; account has seeded jobs, invoices, payments, expenses, materials and companies.",
+      "testData": "",
+      "steps": [
+        "Navigate to /app.",
+        "Observe the PageHeader title 'Dashboard' and subtitle.",
+        "Confirm the subtitle shows today's date (formatted via fmtDate) followed by ' · All companies'.",
+        "Confirm the company filter <Select> (aria-label 'Filter dashboard by company') is present with 'All companies' selected.",
+        "Scroll and confirm the WorkflowStepper (5 stages), Shop-floor activity, Financial summary, Job orders by status, Stock health, Purchase & raw material panels, all four charts, and the four lists render."
+      ],
+      "expectedResult": "The dashboard renders fully with no crash (the live DOM does not contain <html id=\"__next_error__\">); header, subtitle scoped to 'All companies', company filter, stepper, panels, charts and lists are all visible.",
+      "labels": ["smoke", "regression"],
+      "destructive": false,
+      "automation": "Automated",
+      "automatedTest": "e2e/generated/dashboard.spec.ts"
+    },
+    {
+      "key": "MSM-DASHBOARD-UI-002",
+      "name": "Workflow stepper, KPI tiles, summary rows and 'View all' links navigate to correct routes",
+      "category": "UI",
+      "priority": "Normal",
+      "status": "Approved",
+      "objective": "Verify each WorkflowStepper stage, BigStat tile, financial SummaryRow and list 'View all' link navigates via AppLink to its documented route without a full-page error.",
+      "precondition": "Logged in as QA super-admin.",
+      "testData": "",
+      "steps": [
+        "On /app, click the 'Material Stock' stepper stage -> /app/inventory/materials, then go back.",
+        "Click 'Job Orders' -> /app/jobs; 'In Machining' -> /app/production; 'Ready to Dispatch' -> /app/production; 'Dispatched' -> /app/deliveries, returning to /app each time.",
+        "Click the 'Open Jobs' BigStat -> /app/jobs and the 'Dispatched' BigStat -> /app/deliveries.",
+        "Click the Financial summary 'Payments (month)' row -> /app/payments and 'Pending payments' row -> /app/invoices.",
+        "Click 'View all' on Recent payments -> /app/payments and on Recent material dispatches -> /app/inventory/materials (note: NOT /app/deliveries)."
+      ],
+      "expectedResult": "Every linked element navigates to its documented route (stepper/BigStat/SummaryRow/View-all targets above) without a full page error; the app shell remains intact after each navigation.",
+      "labels": ["regression", "navigation"],
+      "destructive": false,
+      "automation": "Automated",
+      "automatedTest": "e2e/generated/dashboard.spec.ts"
+    },
+    {
+      "key": "MSM-DASHBOARD-UI-003",
+      "name": "Empty-state messages render for charts and lists that have no in-scope data",
+      "category": "UI",
+      "priority": "Normal",
+      "status": "Approved",
+      "objective": "Verify empty states for the expenses pie, dispatched bar and the four lists when there is no data in scope, and that the two 6-month money bar charts still render (they have no empty state).",
+      "precondition": "Logged in as QA super-admin; select a company (or use a scope) that has no expenses this month, no material issues, no pending jobs and no payments.",
+      "testData": "Company with no current-month/recent activity.",
+      "steps": [
+        "On /app, choose a company from the filter that has no in-scope activity.",
+        "Inspect 'Expenses by category (month)' and 'Materials dispatched per month'.",
+        "Inspect the Priority jobs, Low/negative stock, Recent payments and Recent material dispatches lists.",
+        "Inspect 'Invoices raised vs Payments received (6 months)' and 'Cash flow: Payments vs Expenses (6 months)'."
+      ],
+      "expectedResult": "Expenses pie shows 'No expenses this month'; dispatched bar shows 'No material issues in this period'; lists show 'No pending jobs', 'All stock above reorder levels', 'No payments yet' and 'No material issues yet' respectively. The two 6-month money bar charts render their axes/legends with zero-height bars (they have no empty-state text).",
+      "labels": ["regression", "empty-state"],
+      "destructive": false,
+      "automation": "Automated",
+      "automatedTest": "e2e/generated/dashboard.spec.ts"
+    },
+    {
+      "key": "MSM-DASHBOARD-UI-004",
+      "name": "Charts render bars, pie, legends, tooltips and the stock-health gauge percentage",
+      "category": "UI",
+      "priority": "Normal",
+      "status": "Approved",
+      "objective": "Verify recharts visuals render correctly and the Stock health donut shows the centered whole-number percentage with 'in stock' caption.",
+      "precondition": "Logged in as QA super-admin with seeded invoices, payments, expenses and material issues across recent months.",
+      "testData": "",
+      "steps": [
+        "On /app, hover a bar in 'Invoices raised vs Payments received (6 months)' and confirm a currency-formatted tooltip and the Invoiced/Received legend.",
+        "Hover 'Cash flow: Payments vs Expenses (6 months)' and confirm the Payments/Expenses legend and currency-formatted tooltip.",
+        "Hover 'Materials dispatched per month' and confirm the tooltip shows a quantity (qty format, not currency) and there is no legend/second series.",
+        "Confirm the Stock health donut shows a whole-number percentage in the center with the 'in stock' caption."
+      ],
+      "expectedResult": "All charts render with correct axes/legends; tooltips use currency for the money charts and qty for the dispatched chart; the gauge shows the computed healthy-stock percentage as a whole number.",
+      "labels": ["regression", "charts"],
+      "destructive": false,
+      "automation": "Automated",
+      "automatedTest": "e2e/generated/dashboard.spec.ts"
+    },
+    {
+      "key": "MSM-DASHBOARD-FUNC-001",
+      "name": "Company filter re-scopes every KPI, chart and list",
+      "category": "Functionality",
+      "priority": "Highest",
+      "status": "Approved",
+      "objective": "Verify selecting a company filters jobs/invoices/payments/expenses/issues and re-computes all figures (including company-scoped stock balances) for that company only.",
+      "precondition": "Logged in as QA super-admin; at least two companies exist with distinct jobs, invoices, payments, expenses and material data.",
+      "testData": "Company A and Company B with known, differing figures.",
+      "steps": [
+        "On /app with 'All companies', note Open Jobs, Invoiced (month), Pending payments, Raw material value and the Priority jobs / Recent payments lists.",
+        "Select Company A in the filter.",
+        "Confirm the subtitle scope label changes to Company A's name.",
+        "Confirm KPI tiles, financial summary, job-status counts, stock health, charts and all four lists now reflect only Company A's data.",
+        "Switch to 'All companies' and confirm figures revert to the aggregate."
+      ],
+      "expectedResult": "All KPIs, charts and lists recompute to the selected company's scope; subtitle updates to the company name; clearing the filter restores the aggregate view. Note: stock panels iterate the full materials list but re-derive each balance in company scope, so materials with no company-scoped movement show balance 0 (counted as 'Out of stock' in the gauge) and Raw material value uses companyMaterialValue.",
+      "labels": ["regression", "smoke"],
+      "destructive": false,
+      "automation": "Automated",
+      "automatedTest": "e2e/generated/dashboard.spec.ts"
+    },
+    {
+      "key": "MSM-DASHBOARD-FUNC-002",
+      "name": "Monthly financial figures, Net(month) tone, and Cancelled/all-time exclusions are correct",
+      "category": "Functionality",
+      "priority": "High",
+      "status": "Approved",
+      "objective": "Verify Invoiced/GST/Payments/Expenses (month) reflect only current-calendar-month records, Cancelled invoices are excluded, Net(month)=payments-expenses with red tone when negative, and 'Pending payments' is all-time (not month-scoped).",
+      "precondition": "Logged in as QA super-admin; seeded invoices in the current month and prior months (incl. at least one Cancelled this month), plus payments and expenses this month and in prior months.",
+      "testData": "Invoices dated this month (mix of statuses incl. Cancelled) and last month; payments and expenses this month and prior; a scope where this-month expenses exceed this-month payments.",
+      "steps": [
+        "On /app, read Invoiced (month), GST (month), Payments (month), Expenses (month) and Net (month).",
+        "Compare against the sum of only current-month, non-Cancelled invoice totals/tax (via computeInvoice) and current-month payments/expenses.",
+        "Confirm a Cancelled invoice dated this month adds nothing to Invoiced, GST or Pending payments.",
+        "Confirm prior-month invoices/payments/expenses do not contribute to the (month) figures, but DO contribute to 'Pending payments' if outstanding (pending is all-time over non-Cancelled invoices).",
+        "For the negative scope, confirm Net (month) equals payments-expenses and is shown with the red tone (green when non-negative)."
+      ],
+      "expectedResult": "Monthly figures equal the current-month totals derived by computeInvoice; Cancelled invoices contribute nothing to invoiced/GST/pending; prior-month records are excluded from the (month) figures; Pending payments is the all-time outstanding over non-Cancelled in-scope invoices; Net(month)=payments-expenses with red tone when negative and green otherwise.",
+      "labels": ["regression", "finance"],
+      "destructive": false,
+      "automation": "Automated",
+      "automatedTest": "e2e/generated/dashboard.spec.ts"
+    },
+    {
+      "key": "MSM-DASHBOARD-FUNC-003",
+      "name": "Job-status counts, workflow stepper and priority-jobs ordering are consistent",
+      "category": "Functionality",
+      "priority": "High",
+      "status": "Approved",
+      "objective": "Verify job counts (Open, In Production, Ready, Dispatched, by-status) match job records and Priority jobs are sorted Urgent>High>Normal>Low and limited to 6.",
+      "precondition": "Logged in as QA super-admin; jobs seeded across statuses Draft/Pending/In Progress/On Hold/Completed/Delivered/Cancelled and priorities Urgent/High/Normal/Low, with more than 6 Pending/In Progress/On Hold jobs.",
+      "testData": "Known job set with mixed statuses/priorities (>6 pending-type jobs).",
+      "steps": [
+        "On /app, note Open Jobs (should equal Pending+Draft), In Production (In Progress), Ready to Dispatch (Completed), Dispatched (Delivered).",
+        "Cross-check with 'Job orders by status' rows (Pending/In progress/On hold/Completed/Cancelled) and the workflow stepper counts.",
+        "Inspect the Priority jobs list and confirm it contains only Pending/In Progress/On Hold jobs, is ordered by priority rank (Urgent, High, Normal, Low), and shows at most 6 entries."
+      ],
+      "expectedResult": "Open Jobs=Pending+Draft, In Production=In Progress, Ready to Dispatch(stepper)=Completed, Dispatched=Delivered, and by-status rows agree with the underlying records and each other; Priority jobs are correctly filtered to Pending/In Progress/On Hold, priority-ordered and capped at 6.",
+      "labels": ["regression"],
+      "destructive": false,
+      "automation": "Automated",
+      "automatedTest": "e2e/generated/dashboard.spec.ts"
+    },
+    {
+      "key": "MSM-DASHBOARD-FUNC-004",
+      "name": "Stock health gauge, low/negative stock list and raw-material value reflect the stock ledger",
+      "category": "Functionality",
+      "priority": "High",
+      "status": "Approved",
+      "objective": "Verify stock balances (received - issued + adjusted) drive the gauge percentage and healthy/low/out classification, the low-stock list, and raw-material value, honoring the exact classification order and the gauge-vs-list filter difference.",
+      "precondition": "Logged in as QA super-admin; materials seeded to yield at least one healthy (bal>0 and above reorder), one low (reorderLevel set and 0<bal<=reorderLevel), one out (bal<=0), plus one material at exactly bal=0 with no reorderLevel and one with a negative balance.",
+      "testData": "Materials with known receipts/issues/adjustments and reorderLevel values (including one with reorderLevel undefined).",
+      "steps": [
+        "On /app, read the Stock health gauge percentage and the Healthy / Low stock / Out of stock counts.",
+        "Confirm the classification order: bal<=0 counts as Out first; else (reorderLevel defined and bal<=reorderLevel) counts as Low; else Healthy; and pct = round(healthy/total*100).",
+        "Inspect the Low/negative stock list; confirm it lists materials with balance<0 OR (reorderLevel defined and balance<=reorderLevel), negative balances shown in red and others amber, capped at 6.",
+        "Confirm the gauge-vs-list edge: a material at exactly bal=0 with NO reorderLevel is counted as 'Out of stock' in the gauge but does NOT appear in the low-stock list.",
+        "Confirm Raw material value equals totalRawMaterialValue (or companyMaterialValue when scoped) and 'Materials in stock' equals the count of materials with company-scoped balance>0."
+      ],
+      "expectedResult": "Gauge percentage and healthy/low/out counts follow the documented classification order; the low-stock list contents/coloring and the bal=0/no-reorderLevel edge match the code; raw-material value and materials-in-stock count match src/data/computations.ts.",
+      "labels": ["regression", "inventory"],
+      "destructive": false,
+      "automation": "Automated",
+      "automatedTest": "e2e/generated/dashboard.spec.ts"
+    },
+    {
+      "key": "MSM-DASHBOARD-FUNC-005",
+      "name": "Recent payments and recent material dispatches show latest records first, capped at 5",
+      "category": "Functionality",
+      "priority": "Normal",
+      "status": "Approved",
+      "objective": "Verify the Recent payments and Recent material dispatches lists sort by date descending and are limited to 5, showing correct labels/amounts/units.",
+      "precondition": "Logged in as QA super-admin; more than 5 payments and more than 5 material issues seeded with varying dates.",
+      "testData": "6+ payments and 6+ issues with known dates.",
+      "steps": [
+        "On /app, inspect Recent payments; confirm at most 5 rows, newest first, each showing company name (resolved), date, method and currency amount.",
+        "Inspect Recent material dispatches; confirm at most 5 rows, newest first, each showing material name (resolved), date, issue number and quantity + unit."
+      ],
+      "expectedResult": "Both lists show at most 5 entries in descending date order with correctly resolved company/material names and correctly formatted amounts (currency) and quantities (qty + unit).",
+      "labels": ["regression"],
+      "destructive": false,
+      "automation": "Automated",
+      "automatedTest": "e2e/generated/dashboard.spec.ts"
+    },
+    {
+      "key": "MSM-DASHBOARD-VAL-001",
+      "name": "Dashboard handles empty/absent datasets without errors (default [] guards)",
+      "category": "Validation",
+      "priority": "Normal",
+      "status": "Approved",
+      "objective": "Verify the read-only screen degrades gracefully when queries return no data — hooks default to [] so no NaN/undefined leaks into KPIs or charts and the gauge guards total=0.",
+      "precondition": "Logged in as a QA super-admin on a fresh/empty tenant or an account with no jobs/invoices/payments/expenses/materials.",
+      "testData": "Empty dataset.",
+      "steps": [
+        "Navigate to /app with no seeded data.",
+        "Confirm the page renders without crashing (no <html id=\"__next_error__\">).",
+        "Confirm numeric count KPIs show 0 and currency KPIs show the zero-value currency format (not NaN/undefined).",
+        "Confirm the stock-health gauge shows 0% (total=0 guard) and all lists and the empty-capable charts show their empty states."
+      ],
+      "expectedResult": "No runtime error; counts render as 0, currency figures are valid zero amounts (no NaN/undefined), the gauge shows 0%, and empty-state text appears for the expenses pie, dispatched bar and all four lists.",
+      "labels": ["regression", "edge-case"],
+      "destructive": false,
+      "automation": "Automated",
+      "automatedTest": "e2e/generated/dashboard.spec.ts"
+    },
+    {
+      "key": "MSM-DASHBOARD-VAL-002",
+      "name": "Company filter only accepts the provided options",
+      "category": "Validation",
+      "priority": "Low",
+      "status": "Approved",
+      "objective": "Verify the company filter is a constrained native <select> whose only values are '' (All companies) and existing company ids, so no arbitrary/invalid scope can be entered.",
+      "precondition": "Logged in as QA super-admin with several companies.",
+      "testData": "",
+      "steps": [
+        "On /app, open the company filter and confirm the first option is 'All companies' (empty value) followed by exactly one option per company.",
+        "Confirm there is no free-text input for the scope (it is a native <select>).",
+        "Select each option in turn and confirm the subtitle scope label updates accordingly."
+      ],
+      "expectedResult": "The filter exposes only the empty 'All companies' option plus one option per existing company; no invalid/free-form value is possible and the subtitle reflects each selection.",
+      "labels": ["regression"],
+      "destructive": false,
+      "automation": "Automated",
+      "automatedTest": "e2e/generated/dashboard.spec.ts"
+    },
+    {
+      "key": "MSM-DASHBOARD-API-001",
+      "name": "Dashboard issues only read queries to Supabase and does not write",
+      "category": "API",
+      "priority": "High",
+      "status": "Approved",
+      "objective": "Verify loading /app triggers the expected read-only data hooks (jobs, invoices, payments, expenses, issues, materials, companies, receipts, adjustments) and performs no mutating requests or RPC writes, and that changing the filter does not fetch.",
+      "precondition": "Logged in as QA super-admin; browser DevTools/Network panel available.",
+      "testData": "",
+      "steps": [
+        "Open DevTools Network, clear it, then navigate to /app.",
+        "Confirm read requests for jobs, invoices, payments, expenses, material issues, materials, companies, receipts and adjustments are issued (GET/select).",
+        "Confirm there are no POST/PATCH/DELETE table writes and no create_/transition_ RPC calls triggered by the dashboard.",
+        "Change the company filter and confirm no new network requests occur (filtering is client-side over cached data)."
+      ],
+      "expectedResult": "Only read/select requests are made to Supabase; the company filter recomputes client-side with no extra fetches for the cached data; no mutations or write RPCs occur.",
+      "labels": ["regression", "api"],
+      "destructive": false,
+      "automation": "Automated",
+      "automatedTest": "e2e/generated/dashboard.spec.ts"
+    },
+    {
+      "key": "MSM-DASHBOARD-API-002",
+      "name": "Dashboard tolerates a failing query and does not render a client-side crash page",
+      "category": "API",
+      "priority": "Normal",
+      "status": "Approved",
+      "objective": "Verify the dashboard tolerates a failing/slow query (hook data falls back to []) and does not render a client-side crash page.",
+      "precondition": "Logged in as QA super-admin; ability to simulate a failed request (e.g. block one Supabase endpoint in DevTools).",
+      "testData": "",
+      "steps": [
+        "Open DevTools and block/force-fail one of the dashboard endpoints (e.g. expenses).",
+        "Navigate to /app.",
+        "Observe rendering of the sections that depend on the failed endpoint (e.g. Expenses(month), expenses pie, cash flow, Net).",
+        "Confirm the live DOM does not contain <html id=\"__next_error__\">."
+      ],
+      "expectedResult": "The dashboard still renders; sections backed by the failed query fall back to empty/zero states rather than crashing the whole page.",
+      "labels": ["regression", "resilience"],
+      "destructive": false,
+      "automation": "Automated",
+      "automatedTest": "e2e/generated/dashboard.spec.ts"
+    },
+    {
+      "key": "MSM-DASHBOARD-SEC-001",
+      "name": "Dashboard route requires authentication",
+      "category": "Security",
+      "priority": "Highest",
+      "status": "Approved",
+      "objective": "Verify /app is gated by the app-shell auth layout and unauthenticated users cannot view dashboard data.",
+      "precondition": "No active session (logged out / fresh browser).",
+      "testData": "",
+      "steps": [
+        "Clear the session and navigate directly to /app.",
+        "Observe the app-shell auth gate behavior (redirect/block).",
+        "Confirm no dashboard KPIs, charts or lists (customer/financial data) are rendered while unauthenticated."
+      ],
+      "expectedResult": "Unauthenticated access to /app is blocked/redirected by the auth gate; no dashboard data is exposed before authentication.",
+      "labels": ["regression", "security", "auth"],
+      "destructive": false,
+      "automation": "Automated",
+      "automatedTest": "e2e/generated/dashboard.spec.ts"
+    },
+    {
+      "key": "MSM-DASHBOARD-SEC-002",
+      "name": "Dashboard data is tenant/RLS scoped to the signed-in account",
+      "category": "Security",
+      "priority": "High",
+      "status": "Approved",
+      "objective": "Verify the dashboard only aggregates data the authenticated user is entitled to (RLS/tenant isolation), so no other tenant's companies, jobs, invoices or payments appear.",
+      "precondition": "Two isolated accounts/tenants exist, each with distinct data.",
+      "testData": "Tenant A and Tenant B with known, non-overlapping records.",
+      "steps": [
+        "Log in as Tenant A and record the dashboard figures and company filter options.",
+        "Log out and log in as Tenant B.",
+        "Compare the dashboard figures and company filter list.",
+        "Confirm Tenant B never sees Tenant A's companies, jobs, invoices or payment totals."
+      ],
+      "expectedResult": "Each account's dashboard reflects only its own data; the company filter lists only that account's companies; no cross-tenant leakage occurs (enforced by Supabase RLS).",
+      "labels": ["regression", "security", "multi-tenant"],
+      "destructive": false,
+      "automation": "Automated",
+      "automatedTest": "e2e/generated/dashboard.spec.ts"
+    },
+    {
+      "key": "MSM-DASHBOARD-DB-001",
+      "name": "Dashboard money/stock figures are derived, not denormalised — recompute after underlying data changes",
+      "category": "Database",
+      "priority": "High",
+      "status": "Approved",
+      "objective": "Verify dashboard aggregates are computed from authoritative rows (invoices, payments, issues, receipts, adjustments) so they update correctly when source data changes, with no stale denormalised value.",
+      "precondition": "Logged in as QA super-admin; able to add a payment and a material issue through their own modules (test/staging data).",
+      "testData": "One new payment (current month, allocated to an outstanding invoice) and one new material issue in a chosen company scope.",
+      "steps": [
+        "On /app, note Payments (month), Pending payments, the Materials dispatched chart and Recent material dispatches for a company scope.",
+        "In the Payments module, record a new current-month payment allocated to an outstanding invoice for that company; return to /app (refresh/invalidate).",
+        "Confirm Payments (month) increases by the payment amount and Pending payments decreases by the allocated amount (via computeInvoice outstanding).",
+        "In the Materials module, record a new issue for that company; return to /app and confirm the dispatched chart bucket and Recent dispatches reflect it."
+      ],
+      "expectedResult": "Dashboard figures recompute from the updated ledger (payments/outstanding and dispatched quantities change to match) with no stale cached/denormalised values. Destructive because it writes payment/issue rows in other modules to validate derivation.",
+      "labels": ["regression", "database", "derivation"],
+      "destructive": true,
+      "automation": "Manual",
+      "automatedTest": ""
+    }
+  ]
+}

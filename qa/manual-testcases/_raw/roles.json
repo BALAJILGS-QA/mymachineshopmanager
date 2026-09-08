@@ -1,0 +1,553 @@
+{
+  "module": "roles",
+  "component": "Roles & Permissions",
+  "understanding": "Roles & Permissions (id \"roles\", route /app/roles, source src/features/access/RolesPage.tsx + src/features/access/modules.ts, mounted at app/app/roles/page.tsx inside the client auth shell). The feature now supports TWO-LEVEL DELEGATION — two managers share the page, gated by useAuth().isSuperAdmin and the current user's own AppUser record `me` (matched by session.email, case-insensitive):\n\n  • SUPER ADMIN (email-based, isSuperAdmin true, no app_state row): sees EVERY approved user, may change role (Admin/User) and grant ANY of the 9 modules.\n  • ADMIN (a shop user whose me.role === 'Admin' and NOT super admin): a scoped delegate — sees ONLY approved role-'User' accounts in their OWN shop, may grant only the modules they themselves hold, cannot change roles, cannot approve/reject registrations.\n  • A plain User never reaches the page.\n\nGATE: canManage = isSuperAdmin || (me?.role === 'Admin'). RolesPage runs all hooks first, then an effect navigate('/app', {replace:true}) redirects anyone where !canManage and the component returns null. isAdmin = !isSuperAdmin && me?.role === 'Admin'.\n\nSCOPED LIST (managed): approved = users.filter(status==='approved'). Super admin ⇒ all approved. Admin ⇒ approved.filter(role (?? 'User') === 'User' AND u.id !== me.id AND sameCompany(u.companyName, me.companyName)). sameCompany trims + lowercases both and requires a non-empty exact match — so other shops' users, other Admins, the super admin, and the Admin themselves are excluded. Sorted by (fullName||email).localeCompare.\n\nallowedKeys (what THIS manager may grant): effectiveModuleKeys({isSuperAdmin, user: me}); if 'all' ⇒ every MODULES key, else the resolved keys; then filtered to drop ALWAYS_ON ('dashboard'). Both super admin and today's Admin resolve to all 8 grantable module keys (production, inventory, sales, crm, hrm, accounts, supply_chain, configuration). Written generically so a future restricted Admin grants only their own subset.\n\nUI: PageHeader title 'Roles & Permissions'. Subtitle differs by manager — super admin: 'Assign roles and choose which modules each approved user can access.'; Admin: 'Grant your shop's users access to the modules you manage.' Footnote (ShieldCheck) — super admin: 'Only the super admin can manage roles and module access.'; Admin: 'You can grant module access to users in your shop. Roles and approvals are handled by the super admin.' Empty state (EmptyState, UserCog) — super admin title 'No approved users yet', description 'Approve registrations first — approved users appear here for role and module assignment.'; Admin title 'No users in your shop yet', description 'Users who register with your company name and are approved by the super admin will appear here.'\n\nTABLE (ResponsiveTable min-w-[48rem]) columns: User (fullName||'—' bold + email), Company (companyName||'—'), Role (Badge tone ROLE_TONE: SuperAdmin=violet, Admin=blue, User=slate; role defaults 'User' when null), Module Access (accessSummary — effectiveModuleKeys{isSuperAdmin:false,user:u}: 'all'⇒'All modules', else granted-non-ALWAYS_ON count ⇒ 0='Dashboard only' else 'N of 8 modules', MODULES.length===8), Actions ('Manage access' btn-secondary btn-sm, SlidersHorizontal).\n\nACCESS EDITOR (Modal size 'lg', title 'Manage access — {fullName||email}') props: user, allowedKeys, canEditRole={isSuperAdmin}, saving. Initial role: canEditRole && user.role==='Admin' ? 'Admin' : 'User' (so for an Admin, canEditRole is false ⇒ role always starts 'User'). Initial keys = (user.permissions ?? []).filter(isModuleKey).filter(k => allowedKeys.includes(k)). grantable = MODULES filtered to allowedKeys. Role selector (Admin 'Full access to every module.' / User 'Only the modules selected below.') is rendered ONLY when canEditRole — HIDDEN for an Admin. When role==='Admin' a blue note 'Admins have access to all modules — no need to select individually.' replaces the checkboxes and hides the Select/Clear all toggle. When role==='User': locked Dashboard row (Lock, 'Always available') + one checkbox per grantable module; a 'Select all'/'Clear all' toggle (label flips on allChecked) sets keys to all grantable or empty. Footer Cancel + Save access (label 'Saving…', both disabled while saving).\n\nSAVE (onSave(role, keys)): preserved = (editing.permissions ?? []).filter(k => isModuleKey(k) && !allowedKeys.includes(k)) — modules OUTSIDE this manager's allowedKeys that the user ALREADY had are kept, so a scoped Admin cannot strip access the super admin granted. permissions = role==='Admin' ? [] : [...new Set([...preserved, ...keys])]. updateAccess.mutateAsync({id, role, permissions}) → useUpdateUserAccess → updateUserAccess(id, patch): read app_state singleton, findIndex by id (throws 'User not found' if missing), merge patch, upsert {id:'singleton', data:{...cur, users}}. Server-side the app_state RLS policy is the real gate (a non-authorised write is rejected by RLS, not the client). onSuccess invalidates qk.users.all (table refreshes in place). Toast success 'Access updated for {fullName||email}', error toUserMessage(e,'Could not update access'); modal closes on success, stays open on error.\n\nACCESS MODEL (modules.ts) effectiveModuleKeys: isSuperAdmin OR role SuperAdmin/Admin ⇒ 'all'; a User with permissions == null (legacy/never-configured) ⇒ 'all' (NOT locked out); else Set(ALWAYS_ON 'dashboard') + valid permission keys. canAccessModule: 'all' or includes(key); unknown key ⇒ allow. filterGroupsByAccess filters NAV_GROUPS by keys.\n\nENFORCEMENT (app/_shell/app-shell.tsx): me = users row by session.email. access = effectiveModuleKeys. canManageAccess = isSuperAdmin || me?.role==='Admin'. Sidebar = filterGroupsByAccess(NAV_GROUPS, access), then per-item flag filter: an item with superAdmin:true shows only to super admin; an item with manageAccess:true shows to super admin OR Admin. In nav.ts the '/app/roles' item now carries manageAccess:true (NOT superAdmin) — so Admins see the Roles link too; '/app/approvals' still carries superAdmin:true (approvals stay super-admin-only). Route guard effect: access !== 'all' and moduleKeyForPath(pathname) not in access ⇒ router.replace('/app'). This is UX gating over Supabase RLS (is_app_approved()+tenant_id) which protects data server-side regardless. Module keys: dashboard, production, inventory, sales, crm, hrm, accounts, supply_chain, configuration. QA runs on an ISOLATED empty tnt_qa tenant, so testers must create/approve their own user fixtures first.",
+  "cases": [
+    {
+      "key": "MSM-ROLES-UI-001",
+      "name": "Super-admin view renders header, subtitle, footnote and the approved-users table",
+      "category": "UI",
+      "priority": "High",
+      "status": "Approved",
+      "objective": "Verify /app/roles loads for the super admin with the super-admin copy and a five-column table listing ALL approved users.",
+      "precondition": "Logged in as QA super-admin; at least one APPROVED user exists in app_state.data.users (approve a registration via /app/approvals if the list is empty).",
+      "testData": "",
+      "steps": [
+        "Navigate to /app/roles.",
+        "Confirm the PageHeader title 'Roles & Permissions' and subtitle 'Assign roles and choose which modules each approved user can access.'",
+        "Confirm the footnote (ShieldCheck icon) reads 'Only the super admin can manage roles and module access.'",
+        "Confirm the table headers read User, Company, Role, Module Access, Actions.",
+        "Confirm every approved user (regardless of shop or role) appears with name (or '—') + email, company, a Role badge, an access summary and a 'Manage access' button."
+      ],
+      "expectedResult": "The page renders with no crash (no <html id=\"__next_error__\">); super-admin subtitle and footnote are shown; the table lists all approved users across every shop.",
+      "labels": ["smoke", "regression"],
+      "destructive": false,
+      "automation": "Manual",
+      "automatedTest": ""
+    },
+    {
+      "key": "MSM-ROLES-UI-002",
+      "name": "Admin view renders shop-scoped copy (subtitle and footnote differ from super admin)",
+      "category": "UI",
+      "priority": "High",
+      "status": "Approved",
+      "objective": "Verify an Admin sees the delegated-manager copy: the shop-scoped subtitle and footnote, distinct from the super-admin strings.",
+      "precondition": "Logged in as an approved Admin (me.role === 'Admin', NOT the super admin) whose companyName has at least one approved 'User' teammate.",
+      "testData": "",
+      "steps": [
+        "As the Admin, navigate to /app/roles.",
+        "Confirm the page renders (not redirected to /app).",
+        "Read the PageHeader subtitle.",
+        "Read the footnote below the card."
+      ],
+      "expectedResult": "The subtitle reads 'Grant your shop’s users access to the modules you manage.' and the footnote reads 'You can grant module access to users in your shop. Roles and approvals are handled by the super admin.' — neither matches the super-admin strings.",
+      "labels": ["regression"],
+      "destructive": false,
+      "automation": "Manual",
+      "automatedTest": ""
+    },
+    {
+      "key": "MSM-ROLES-UI-003",
+      "name": "Empty-state title/description differ between super admin and Admin",
+      "category": "UI",
+      "priority": "Normal",
+      "status": "Approved",
+      "objective": "Verify the EmptyState copy is manager-specific when there are no rows to manage.",
+      "precondition": "Logged in on the isolated tnt_qa tenant; for the super-admin run no user has status 'approved'; for the Admin run the Admin's shop has zero approved 'User' teammates.",
+      "testData": "",
+      "steps": [
+        "As the QA super-admin with no approved users, open /app/roles and read the empty state.",
+        "Then log in as an approved Admin whose shop has no approved User teammates and open /app/roles.",
+        "Read the empty state for the Admin."
+      ],
+      "expectedResult": "Super admin sees UserCog icon, title 'No approved users yet', description 'Approve registrations first — approved users appear here for role and module assignment.'; Admin sees title 'No users in your shop yet', description 'Users who register with your company name and are approved by the super admin will appear here.'; no table headers render in either case.",
+      "labels": ["regression"],
+      "destructive": false,
+      "automation": "Manual",
+      "automatedTest": ""
+    },
+    {
+      "key": "MSM-ROLES-UI-004",
+      "name": "Role badge tone and access-summary text render per user role/permissions",
+      "category": "UI",
+      "priority": "Normal",
+      "status": "Approved",
+      "objective": "Verify the Role badge tone (violet/blue/slate) and Module Access strings ('All modules', 'Dashboard only', 'N of 8 modules') are correct.",
+      "precondition": "Logged in as QA super-admin; three approved users exist: one Admin, one User with permissions [] (empty), one User with permissions ['production','sales'].",
+      "testData": "Admin user; User permissions=[]; User permissions=['production','sales']",
+      "steps": [
+        "Navigate to /app/roles.",
+        "Inspect the Admin row's Role badge and Module Access cell.",
+        "Inspect the empty-permissions User row's Module Access cell.",
+        "Inspect the two-module User row's Module Access cell."
+      ],
+      "expectedResult": "Admin row: blue 'Admin' badge and 'All modules'. Empty-permissions User: slate 'User' badge and 'Dashboard only'. Two-module User: slate 'User' badge and '2 of 8 modules'.",
+      "labels": ["regression"],
+      "destructive": false,
+      "automation": "Manual",
+      "automatedTest": ""
+    },
+    {
+      "key": "MSM-ROLES-UI-005",
+      "name": "Super-admin editor opens with role selector, locked Dashboard row and 8 module checkboxes",
+      "category": "UI",
+      "priority": "Normal",
+      "status": "Approved",
+      "objective": "Verify the AccessEditor for the super admin shows the Admin/User role selector plus the locked Dashboard row and all 8 grantable checkboxes.",
+      "precondition": "Logged in as QA super-admin; at least one approved 'User' exists.",
+      "testData": "",
+      "steps": [
+        "Navigate to /app/roles and click 'Manage access' on an approved User row.",
+        "Confirm the modal title reads 'Manage access — {name or email}'.",
+        "Confirm the Role section shows both 'Admin' (Full access to every module.) and 'User' (Only the modules selected below.), with 'User' preselected.",
+        "Confirm the Modules section shows the locked 'Dashboard' row ('Always available') then 8 checkboxes: Production Planning, Inventory, Sales, CRM, Human Resources, Accounts & Finance, Supply Chain, Configuration & Settings.",
+        "Confirm the Select all/Clear all toggle and the Cancel / Save access footer buttons are present."
+      ],
+      "expectedResult": "Modal opens with correct title, both role buttons, the locked Dashboard row, all 8 grantable checkboxes with descriptions, the Select all toggle and Cancel + Save access buttons.",
+      "labels": ["regression"],
+      "destructive": false,
+      "automation": "Manual",
+      "automatedTest": ""
+    },
+    {
+      "key": "MSM-ROLES-UI-006",
+      "name": "Choosing Admin role hides checkboxes and shows the all-modules note (super admin)",
+      "category": "UI",
+      "priority": "Normal",
+      "status": "Approved",
+      "objective": "Verify selecting Admin in the super-admin editor hides the checkbox list, locked Dashboard row and Select all/Clear all toggle and shows the informational note.",
+      "precondition": "Logged in as QA super-admin; at least one approved User exists.",
+      "testData": "",
+      "steps": [
+        "Open 'Manage access' for an approved User.",
+        "Click the 'Admin' role button.",
+        "Observe the Modules section."
+      ],
+      "expectedResult": "The checkbox list, locked Dashboard row and Select all/Clear all toggle disappear; a blue note reads 'Admins have access to all modules — no need to select individually.'",
+      "labels": ["regression"],
+      "destructive": false,
+      "automation": "Manual",
+      "automatedTest": ""
+    },
+    {
+      "key": "MSM-ROLES-UI-007",
+      "name": "Admin editor HIDES the role selector and shows only the module checkboxes",
+      "category": "UI",
+      "priority": "High",
+      "status": "Approved",
+      "objective": "Verify that when an Admin opens the editor (canEditRole=false), the Admin/User role selector is not rendered — only the locked Dashboard row and grantable module checkboxes appear.",
+      "precondition": "Logged in as an approved Admin whose shop has at least one approved 'User' teammate.",
+      "testData": "",
+      "steps": [
+        "As the Admin, navigate to /app/roles and click 'Manage access' on a teammate User row.",
+        "Confirm the modal title 'Manage access — {name or email}'.",
+        "Look for the Role section (the Admin/User two-button selector).",
+        "Inspect the Modules section."
+      ],
+      "expectedResult": "No Role selector is shown (no Admin/User buttons); the editor shows the locked Dashboard 'Always available' row, the 8 grantable module checkboxes and the Select all/Clear all toggle; Save access and Cancel are present.",
+      "labels": ["regression", "security"],
+      "destructive": false,
+      "automation": "Manual",
+      "automatedTest": ""
+    },
+    {
+      "key": "MSM-ROLES-VAL-001",
+      "name": "Editor pre-populates checked modules from the user's existing permissions",
+      "category": "Validation",
+      "priority": "Normal",
+      "status": "Approved",
+      "objective": "Verify the AccessEditor initializes its checked set from user.permissions filtered to valid module keys the manager is allowed to grant.",
+      "precondition": "Logged in as QA super-admin; an approved User with role 'User' and permissions ['inventory','crm'].",
+      "testData": "permissions=['inventory','crm']",
+      "steps": [
+        "Navigate to /app/roles and click 'Manage access' for that User.",
+        "Inspect the preselected role and which module checkboxes are checked."
+      ],
+      "expectedResult": "'User' role is preselected; exactly Inventory and CRM checkboxes are checked, all others unchecked; the Dashboard row stays locked/always-on.",
+      "labels": ["regression"],
+      "destructive": false,
+      "automation": "Manual",
+      "automatedTest": ""
+    },
+    {
+      "key": "MSM-ROLES-VAL-002",
+      "name": "Invalid/unknown permission keys are ignored when populating the editor",
+      "category": "Validation",
+      "priority": "Low",
+      "status": "Approved",
+      "objective": "Verify isModuleKey filtering drops stale/unknown keys and 'dashboard' (always-on) so the editor only checks recognised grantable modules.",
+      "precondition": "Logged in as QA super-admin; an approved User whose permissions = ['sales','legacy_module','dashboard'].",
+      "testData": "permissions=['sales','legacy_module','dashboard']",
+      "steps": [
+        "Open 'Manage access' for that User.",
+        "Inspect the checked module checkboxes.",
+        "Note that 'dashboard' is the locked always-on row (not a checkbox) and 'legacy_module' is not a real module."
+      ],
+      "expectedResult": "Only the 'Sales' checkbox is checked; 'legacy_module' and 'dashboard' produce no checkbox; no crash.",
+      "labels": ["regression", "negative"],
+      "destructive": false,
+      "automation": "Manual",
+      "automatedTest": ""
+    },
+    {
+      "key": "MSM-ROLES-VAL-003",
+      "name": "Admin list membership is case/whitespace-insensitive on company name (sameCompany)",
+      "category": "Validation",
+      "priority": "Normal",
+      "status": "Approved",
+      "objective": "Verify sameCompany trims and lowercases both sides so a User whose companyName differs from the Admin's only by case/spacing is still listed, while a truly different company is not.",
+      "precondition": "Logged in as an approved Admin with companyName e.g. 'Acme Tools'; three approved Users exist: one companyName '  acme tools ' (case+space variant), one 'Acme Tools' exact, one 'Beta Works' (different company). All have role 'User'.",
+      "testData": "Admin company 'Acme Tools'; Users: '  acme tools ', 'Acme Tools', 'Beta Works'",
+      "steps": ["As the Admin, navigate to /app/roles.", "Inspect which User rows are listed."],
+      "expectedResult": "The '  acme tools ' and 'Acme Tools' Users are both listed (matched after trim+lowercase); the 'Beta Works' User is NOT listed.",
+      "labels": ["regression"],
+      "destructive": false,
+      "automation": "Manual",
+      "automatedTest": ""
+    },
+    {
+      "key": "MSM-ROLES-FUNC-001",
+      "name": "Super admin promotes a User to Admin — persists role Admin with empty permissions and grants all modules",
+      "category": "Functionality",
+      "priority": "High",
+      "status": "Approved",
+      "objective": "Verify saving the Admin role persists role 'Admin' and permissions [], refreshes the table to 'All modules', and unlocks every module for that user.",
+      "precondition": "Logged in as QA super-admin; an approved User with a limited module set exists, with known login credentials.",
+      "testData": "",
+      "steps": [
+        "Open 'Manage access' for the User, click 'Admin', click 'Save access'.",
+        "Confirm the success toast 'Access updated for {name or email}' and that the modal closes.",
+        "Confirm the row now shows a blue 'Admin' badge and Module Access 'All modules'.",
+        "Sign out and log in as that user (or evaluate effectiveModuleKeys) and confirm every module is reachable."
+      ],
+      "expectedResult": "The user is saved as role 'Admin' with permissions [] in app_state; the table shows blue Admin / 'All modules'; when the user signs in, filterGroupsByAccess returns all NAV_GROUPS so every module is available.",
+      "labels": ["regression", "smoke"],
+      "destructive": true,
+      "automation": "Manual",
+      "automatedTest": ""
+    },
+    {
+      "key": "MSM-ROLES-FUNC-002",
+      "name": "Admin grants a shop User a subset of modules — sidebar filters and blocked routes redirect",
+      "category": "Functionality",
+      "priority": "Highest",
+      "status": "Approved",
+      "objective": "Verify an Admin (no role selector) can grant a teammate User specific modules, the keys persist, and on that user's session the sidebar filters while an ungranted module URL redirects to /app.",
+      "precondition": "Logged in as an approved Admin whose shop has an approved 'User' teammate with known login credentials.",
+      "testData": "Grant only Inventory + Sales",
+      "steps": [
+        "As the Admin, open 'Manage access' for the teammate User (note there is no role selector), check only 'Inventory' and 'Sales', click 'Save access'.",
+        "Confirm the success toast and Module Access now reads '2 of 8 modules'.",
+        "Sign out and log in as that teammate User.",
+        "Confirm the sidebar shows Dashboard, Inventory and Sales only.",
+        "Manually enter an ungranted module URL such as /app/hrm."
+      ],
+      "expectedResult": "permissions saved as ['inventory','sales']; the user's sidebar lists only Dashboard/Inventory/Sales; navigating to /app/hrm triggers the route guard which router.replace('/app').",
+      "labels": ["regression", "security"],
+      "destructive": true,
+      "automation": "Manual",
+      "automatedTest": ""
+    },
+    {
+      "key": "MSM-ROLES-FUNC-003",
+      "name": "Out-of-scope modules the user already had are PRESERVED on an Admin save",
+      "category": "Functionality",
+      "priority": "Highest",
+      "status": "Approved",
+      "objective": "Verify the `preserved` merge in onSave keeps any of the user's existing modules that fall outside the manager's allowedKeys, so a scoped manager cannot strip access another manager granted.",
+      "precondition": "Logged in as a manager whose allowedKeys is a RESTRICTED subset (e.g. a future Admin allowed only ['inventory','sales']); a teammate 'User' already has permissions ['inventory','hrm','accounts'] where hrm and accounts are OUTSIDE the manager's allowedKeys. (If no restricted Admin fixture is available, verify the same preserve logic via a code/behaviour review of onSave's `preserved` filter.)",
+      "testData": "manager allowedKeys=['inventory','sales']; user permissions=['inventory','hrm','accounts']",
+      "steps": [
+        "As the scoped manager, open 'Manage access' for that User — confirm only the grantable (in-scope) modules render as checkboxes and the pre-checked set is limited to in-scope keys (e.g. only Inventory).",
+        "Uncheck Inventory and check Sales, then click 'Save access'.",
+        "Have the super admin reopen 'Manage access' for the same user (or inspect app_state.data.users) to read the full persisted permissions."
+      ],
+      "expectedResult": "Persisted permissions become the union of preserved out-of-scope keys and the newly chosen in-scope keys — ['hrm','accounts','sales'] (order-independent). The out-of-scope 'hrm' and 'accounts' the scoped manager could not see were NOT removed; only the in-scope Inventory→Sales change applied.",
+      "labels": ["regression", "security"],
+      "destructive": true,
+      "automation": "Manual",
+      "automatedTest": ""
+    },
+    {
+      "key": "MSM-ROLES-FUNC-004",
+      "name": "Select all then Clear all toggles every grantable checkbox",
+      "category": "Functionality",
+      "priority": "Normal",
+      "status": "Approved",
+      "objective": "Verify the Select all / Clear all toggle checks all grantable modules then clears them and the label flips, without affecting the locked Dashboard row.",
+      "precondition": "Logged in as QA super-admin; an approved User with partial or no modules checked (super admin has all 8 grantable).",
+      "testData": "",
+      "steps": [
+        "Open 'Manage access' for a User, keep role 'User'.",
+        "Click 'Select all'.",
+        "Confirm all 8 grantable checkboxes become checked and the toggle now reads 'Clear all'.",
+        "Click 'Clear all'.",
+        "Confirm all 8 uncheck and the toggle reverts to 'Select all'."
+      ],
+      "expectedResult": "'Select all' checks every grantable module (label→'Clear all'); 'Clear all' unchecks them (label→'Select all'); the locked Dashboard row is unaffected throughout.",
+      "labels": ["regression"],
+      "destructive": false,
+      "automation": "Manual",
+      "automatedTest": ""
+    },
+    {
+      "key": "MSM-ROLES-FUNC-005",
+      "name": "Legacy User with permissions == null defaults to full access (not locked out)",
+      "category": "Functionality",
+      "priority": "High",
+      "status": "Approved",
+      "objective": "Verify a User whose permissions is unset/null is treated as 'all' by effectiveModuleKeys, so the table reads 'All modules' and the user is not locked out.",
+      "precondition": "Logged in as QA super-admin; an approved User whose app_state record has NO permissions key (undefined/null).",
+      "testData": "permissions = undefined",
+      "steps": [
+        "Navigate to /app/roles and read the legacy User's Module Access cell.",
+        "Sign in as that user (or evaluate effectiveModuleKeys) and inspect the sidebar."
+      ],
+      "expectedResult": "Module Access reads 'All modules'; when the user signs in every module is available and no route-guard redirect fires (permissions == null ⇒ 'all').",
+      "labels": ["regression"],
+      "destructive": false,
+      "automation": "Manual",
+      "automatedTest": ""
+    },
+    {
+      "key": "MSM-ROLES-FUNC-006",
+      "name": "Cancel discards edits without persisting",
+      "category": "Functionality",
+      "priority": "Normal",
+      "status": "Approved",
+      "objective": "Verify closing the editor via Cancel does not call updateUserAccess and leaves the user's role/permissions unchanged.",
+      "precondition": "Logged in as QA super-admin; an approved User with a known module set exists.",
+      "testData": "",
+      "steps": [
+        "Open 'Manage access' and note the current access summary.",
+        "Toggle several checkboxes and/or switch the role.",
+        "Click 'Cancel'.",
+        "Reopen 'Manage access' for the same user."
+      ],
+      "expectedResult": "No success toast; the table access summary is unchanged; reopening shows the original role and checked modules (no write occurred).",
+      "labels": ["regression"],
+      "destructive": false,
+      "automation": "Manual",
+      "automatedTest": ""
+    },
+    {
+      "key": "MSM-ROLES-API-001",
+      "name": "Save access issues an app_state upsert and invalidates the users query",
+      "category": "API",
+      "priority": "High",
+      "status": "Approved",
+      "objective": "Verify Save performs a read-modify-write on app_state (singleton) and onSuccess invalidates qk.users.all so the table refreshes without reload.",
+      "precondition": "Logged in as QA super-admin; DevTools Network open; an approved User exists.",
+      "testData": "",
+      "steps": [
+        "Open DevTools Network and filter for app_state / rest requests.",
+        "Open 'Manage access', change the module selection, click 'Save access'.",
+        "Observe a select on app_state then an upsert (POST/PATCH) writing the merged users JSON.",
+        "Confirm the table Module Access cell updates in place without a full reload."
+      ],
+      "expectedResult": "A select of app_state (id=singleton) followed by an upsert (2xx) containing the merged users array; onSuccess invalidates qk.users.all and the row's access summary refreshes automatically.",
+      "labels": ["regression", "api"],
+      "destructive": true,
+      "automation": "Manual",
+      "automatedTest": ""
+    },
+    {
+      "key": "MSM-ROLES-API-002",
+      "name": "Save failure surfaces an error toast and keeps the modal open",
+      "category": "API",
+      "priority": "Normal",
+      "status": "Approved",
+      "objective": "Verify that when updateUserAccess rejects (RLS denial, network failure), the UI shows the error toast and keeps the editor open with edits intact.",
+      "precondition": "Logged in as QA super-admin; ability to force a failure (block the app_state upsert in DevTools, or go offline).",
+      "testData": "",
+      "steps": [
+        "Open 'Manage access' and change the selection.",
+        "Force the upsert to fail (block the request or disable network).",
+        "Click 'Save access'."
+      ],
+      "expectedResult": "An error toast 'Could not update access' (or a more specific toUserMessage) appears; the modal stays open with edits intact; no success toast; the table row is unchanged.",
+      "labels": ["regression", "negative", "api"],
+      "destructive": false,
+      "automation": "Manual",
+      "automatedTest": ""
+    },
+    {
+      "key": "MSM-ROLES-SEC-001",
+      "name": "Roles nav item is visible to an Admin (manageAccess flag)",
+      "category": "Security",
+      "priority": "High",
+      "status": "Approved",
+      "objective": "Verify the '/app/roles' nav item now carries manageAccess:true so it renders for an Admin as well as the super admin (delegation entry point).",
+      "precondition": "Logged in as an approved Admin (me.role === 'Admin', NOT super admin).",
+      "testData": "",
+      "steps": [
+        "As the Admin, open the Configuration & Settings group in the sidebar.",
+        "Look for the 'Roles & Permissions' link (/app/roles).",
+        "Click it and confirm it opens the page."
+      ],
+      "expectedResult": "The 'Roles & Permissions' link IS present for the Admin (canManageAccess true) and opens /app/roles; the super-admin-only 'User Approvals' (/app/approvals, superAdmin:true) is NOT shown to the Admin.",
+      "labels": ["security", "regression"],
+      "destructive": false,
+      "automation": "Manual",
+      "automatedTest": ""
+    },
+    {
+      "key": "MSM-ROLES-SEC-002",
+      "name": "Roles nav item is hidden from a plain User",
+      "category": "Security",
+      "priority": "High",
+      "status": "Approved",
+      "objective": "Verify the manageAccess-flagged Roles link does NOT render for a regular User (canManageAccess false), matching the page-level canManage guard.",
+      "precondition": "Logged in as an approved 'User' (me.role === 'User', not Admin, not super admin).",
+      "testData": "",
+      "steps": [
+        "As the User, inspect the sidebar (and the Configuration & Settings group if visible).",
+        "Confirm there is no 'Roles & Permissions' link.",
+        "Attempt to reach /app/roles directly via the address bar."
+      ],
+      "expectedResult": "No Roles & Permissions link appears for the plain User; a direct visit to /app/roles is redirected to /app (page-level guard). NOTE: this replaces the outdated 'Roles nav item hidden from ALL non-super-admins' case — Admins now DO see it.",
+      "labels": ["security", "regression"],
+      "destructive": false,
+      "automation": "Manual",
+      "automatedTest": ""
+    },
+    {
+      "key": "MSM-ROLES-SEC-003",
+      "name": "Page-level guard redirects a plain User away from /app/roles",
+      "category": "Security",
+      "priority": "Highest",
+      "status": "Approved",
+      "objective": "Verify a user where canManage is false (a plain 'User') who navigates to /app/roles is redirected to /app and never sees the roles UI.",
+      "precondition": "Logged in as an approved 'User' (NOT Admin, NOT super admin).",
+      "testData": "",
+      "steps": [
+        "As the User, enter /app/roles directly in the address bar.",
+        "Observe the resulting page and URL."
+      ],
+      "expectedResult": "RolesPage returns null and the guard effect navigates to /app; the roles table, headers and 'Manage access' controls are never displayed to a plain User.",
+      "labels": ["security", "regression"],
+      "destructive": false,
+      "automation": "Manual",
+      "automatedTest": ""
+    },
+    {
+      "key": "MSM-ROLES-SEC-004",
+      "name": "An Admin cannot escalate a shop User to Admin (no role selector, no role change)",
+      "category": "Security",
+      "priority": "Highest",
+      "status": "Approved",
+      "objective": "Verify an Admin can never promote a User: the editor omits the role selector (canEditRole=false) and any save keeps role 'User'.",
+      "precondition": "Logged in as an approved Admin with an approved 'User' teammate.",
+      "testData": "",
+      "steps": [
+        "As the Admin, open 'Manage access' for the teammate User.",
+        "Confirm no Admin/User role selector is rendered.",
+        "Change some module checkboxes and click 'Save access'.",
+        "Reopen the row (or have the super admin inspect it) to confirm the user's role."
+      ],
+      "expectedResult": "There is no way for the Admin to choose 'Admin'; the save persists role 'User' (onSave receives role 'User' since the editor's role state can never leave 'User' without the hidden selector); the teammate remains a 'User'.",
+      "labels": ["security", "regression", "negative"],
+      "destructive": true,
+      "automation": "Manual",
+      "automatedTest": ""
+    },
+    {
+      "key": "MSM-ROLES-SEC-005",
+      "name": "Admin list never includes other shops, other Admins or the super admin",
+      "category": "Security",
+      "priority": "High",
+      "status": "Approved",
+      "objective": "Verify an Admin's managed list is strictly scoped: only approved role-'User' accounts in the same company, excluding themselves, other Admins, other shops' users and the super admin.",
+      "precondition": "Logged in as an approved Admin (company 'Acme Tools'); fixtures exist: an approved User in 'Acme Tools', an approved User in 'Beta Works', a second approved Admin in 'Acme Tools', and the super-admin account.",
+      "testData": "",
+      "steps": ["As the Admin, navigate to /app/roles.", "Enumerate the rows shown in the table."],
+      "expectedResult": "Only the same-company approved 'User' appears; the Beta Works user, the other Acme Admin, the super admin and the Admin's own row are all excluded.",
+      "labels": ["security", "regression"],
+      "destructive": false,
+      "automation": "Manual",
+      "automatedTest": ""
+    },
+    {
+      "key": "MSM-ROLES-SEC-006",
+      "name": "Client-side module gating is UX-only — RLS still protects data server-side",
+      "category": "Security",
+      "priority": "High",
+      "status": "Approved",
+      "objective": "Verify module keys and the app_state RLS policy are the real guard: a hand-crafted write or read that bypasses the client cannot escalate access or persist an unauthorised role/permission change.",
+      "precondition": "Logged in as an approved non-super-admin (Admin or limited User) with DevTools; know a user id in app_state.data.users and that a second tenant's data exists (tnt_qa isolation).",
+      "testData": "",
+      "steps": [
+        "As the limited user, confirm the route guard redirects ungranted module URLs to /app.",
+        "In DevTools, attempt a direct Supabase upsert to app_state (id=singleton) mutating another user's role/permissions.",
+        "Also attempt a direct REST read of a table behind an ungranted module or another tenant's rows.",
+        "Observe the server responses."
+      ],
+      "expectedResult": "The app_state upsert is rejected by RLS (no persisted change) and cross-scope reads return no unauthorised rows (is_app_approved()+tenant_id enforced server-side) — proving module keys and the delegation UI never grant real data access.",
+      "labels": ["security", "regression", "negative"],
+      "destructive": false,
+      "automation": "Manual",
+      "automatedTest": ""
+    },
+    {
+      "key": "MSM-ROLES-DB-001",
+      "name": "Saved role and permissions persist in app_state.data.users across reload",
+      "category": "Database",
+      "priority": "High",
+      "status": "Approved",
+      "objective": "Verify a saved role/permissions change is durably written into app_state.data.users and survives a full reload/re-query.",
+      "precondition": "Logged in as QA super-admin; an approved User exists.",
+      "testData": "role 'User' with permissions ['accounts','configuration']",
+      "steps": [
+        "Open 'Manage access', keep role 'User', check only 'Accounts & Finance' and 'Configuration & Settings', click 'Save access'.",
+        "Confirm the success toast and Module Access '2 of 8 modules'.",
+        "Hard-refresh /app/roles.",
+        "Reopen 'Manage access' for the same user."
+      ],
+      "expectedResult": "After reload permissions still read ['accounts','configuration'] (both checked, role 'User'); the write persisted in app_state.data.users.",
+      "labels": ["regression"],
+      "destructive": true,
+      "automation": "Manual",
+      "automatedTest": ""
+    },
+    {
+      "key": "MSM-ROLES-DB-002",
+      "name": "Admin role persists permissions as an empty array (overwrites prior key list)",
+      "category": "Database",
+      "priority": "Normal",
+      "status": "Approved",
+      "objective": "Verify saving the Admin role writes permissions:[] so a later switch back to User starts from zero checked modules.",
+      "precondition": "Logged in as QA super-admin; an approved User currently granted several modules (e.g. ['production','sales','crm']).",
+      "testData": "",
+      "steps": [
+        "Open 'Manage access', switch role to 'Admin', click 'Save access'.",
+        "Confirm the row shows Admin / 'All modules'.",
+        "Reopen 'Manage access', switch back to 'User', inspect the checkboxes."
+      ],
+      "expectedResult": "After the Admin save permissions is stored as []; reopening and switching to User shows NO checkboxes checked (the prior ['production','sales','crm'] was overwritten).",
+      "labels": ["regression"],
+      "destructive": true,
+      "automation": "Manual",
+      "automatedTest": ""
+    },
+    {
+      "key": "MSM-ROLES-DB-003",
+      "name": "updateUserAccess updates only the target user in the users JSON array (no collateral writes)",
+      "category": "Database",
+      "priority": "Normal",
+      "status": "Approved",
+      "objective": "Verify the read-modify-write in updateUserAccess merges the patch onto the findIndex-matched user only and preserves every other user's fields.",
+      "precondition": "Logged in as QA super-admin; at least three approved users exist with distinct roles/permissions.",
+      "testData": "",
+      "steps": [
+        "Record the role and permissions of two non-target users.",
+        "Open 'Manage access' for the third (target) user, change its module selection, click 'Save access'.",
+        "Hard-refresh and reopen the two non-target users' editors (or inspect app_state.data.users)."
+      ],
+      "expectedResult": "Only the target user's role/permissions changed; the two other users' role and permissions are exactly as before (the upsert rewrites the whole users array but merges the patch onto the single matched index).",
+      "labels": ["regression"],
+      "destructive": true,
+      "automation": "Manual",
+      "automatedTest": ""
+    }
+  ]
+}

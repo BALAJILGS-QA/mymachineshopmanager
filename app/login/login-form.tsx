@@ -5,7 +5,7 @@
 // the shared `useAuth` hook — the same login logic used by the landing AuthForm,
 // kept router-agnostic here by pushing to /app on success.
 
-import { useEffect } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useForm } from 'react-hook-form'
@@ -13,6 +13,7 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { ArrowRight, Loader2, Lock, Mail, User } from 'lucide-react'
 import { useAuth } from '@/features/auth/auth'
+import { Captcha, type CaptchaHandle } from '@/features/auth/Captcha'
 import { useToast } from '@/components/ui/Toast'
 
 const signInSchema = z.object({
@@ -33,6 +34,8 @@ export function LoginForm() {
 
   const idLabel = supabaseMode ? 'Email' : 'Username or Email'
   const IdIcon = supabaseMode ? Mail : User
+  const [captchaToken, setCaptchaToken] = useState<string | null>(null)
+  const captchaRef = useRef<CaptchaHandle>(null)
   const {
     register,
     handleSubmit,
@@ -44,11 +47,14 @@ export function LoginForm() {
 
   const onSubmit = handleSubmit(async (values) => {
     try {
-      const res = await login(values.loginId, values.password)
-      if (!res.ok) toast.error(res.message || 'Invalid credentials')
-      else router.push('/app')
+      const res = await login(values.loginId, values.password, captchaToken ?? undefined)
+      if (!res.ok) {
+        toast.error(res.message || 'Invalid credentials')
+        captchaRef.current?.reset()
+      } else router.push('/app')
     } catch {
       toast.error('Request failed. Please check your connection and try again.')
+      captchaRef.current?.reset()
     }
   })
 
@@ -104,7 +110,13 @@ export function LoginForm() {
         {errors.password && <p className="mt-1 text-xs text-red-600">{errors.password.message}</p>}
       </div>
 
-      <button type="submit" className="btn-primary w-full py-2.5" disabled={isSubmitting}>
+      <Captcha ref={captchaRef} onToken={setCaptchaToken} />
+
+      <button
+        type="submit"
+        className="btn-primary w-full py-2.5"
+        disabled={isSubmitting || !captchaToken}
+      >
         {isSubmitting ? <Loader2 size={16} className="animate-spin" /> : null}
         Login <ArrowRight size={16} />
       </button>

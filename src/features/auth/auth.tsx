@@ -40,6 +40,8 @@ export interface RegisterInput {
   phone: string
   address: string
   gstin: string
+  /** Cloudflare Turnstile token, verified server-side by Supabase (signUp). */
+  captchaToken?: string
 }
 
 interface AuthResult {
@@ -53,7 +55,7 @@ interface AuthApi {
   loading: boolean
   supabaseMode: boolean
   isSuperAdmin: boolean
-  login: (username: string, password: string) => Promise<AuthResult>
+  login: (username: string, password: string, captchaToken?: string) => Promise<AuthResult>
   register: (input: RegisterInput) => Promise<AuthResult>
   logout: () => void
   changePassword: (current: string, next: string) => Promise<boolean>
@@ -66,7 +68,7 @@ const DEFAULT_USER = 'superadmin'
 const DEFAULT_PASS = 'superadmin123'
 
 // Emails treated as super admins in Supabase mode (full access + approvals).
-const SUPER_ADMIN_EMAILS = ['admin@sreebalajiindustries.com']
+const SUPER_ADMIN_EMAILS = ['admin@sreebalajiindustries.com', 'balajin04@outlook.com']
 function isSuperAdminEmail(email?: string | null): boolean {
   return !!email && SUPER_ADMIN_EMAILS.some((e) => e.toLowerCase() === email.toLowerCase())
 }
@@ -195,10 +197,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       supabaseMode,
       isSuperAdmin: session?.role === 'SuperAdmin',
 
-      async login(username, password) {
+      async login(username, password, captchaToken) {
         if (supabaseMode) {
           const email = username.trim()
-          const { error } = await supabase!.auth.signInWithPassword({ email, password })
+          const { error } = await supabase!.auth.signInWithPassword({
+            email,
+            password,
+            options: { captchaToken },
+          })
           if (error) return { ok: false, message: 'Invalid email or password' }
           if (isSuperAdminEmail(email)) return { ok: true }
           const users = await fetchRemoteUsers()
@@ -268,7 +274,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (supabaseMode) {
           suppressGate = true
           try {
-            const { error } = await supabase!.auth.signUp({ email, password: input.password })
+            const { error } = await supabase!.auth.signUp({
+              email,
+              password: input.password,
+              options: { captchaToken: input.captchaToken },
+            })
             if (error) return { ok: false, message: error.message }
             // Record the applicant's profile via a SECURITY DEFINER RPC — app_state
             // is approval-gated, so a still-pending applicant cannot write it

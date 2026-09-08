@@ -26,6 +26,7 @@ import {
   MOBILE_PRIMARY,
   moduleGroupForPath,
   moduleKeyForPath,
+  isNavItemVisible,
   type NavGroup,
   type MenuAccent,
 } from '@/components/layout/nav'
@@ -305,18 +306,14 @@ export function AppShell({ children }: { children: ReactNode }) {
   )
   const access = useMemo(() => effectiveModuleKeys({ isSuperAdmin, user: me }), [isSuperAdmin, me])
   // An Admin can delegate module access to their own shop's users.
-  const canManageAccess = isSuperAdmin || me?.role === 'Admin'
+  const isAdmin = me?.role === 'Admin'
 
-  // Filter the sidebar by module access first, then by the per-item role flags:
-  // `superAdmin` items are super-admin-only; `manageAccess` items also show to Admins.
+  // Filter the sidebar by module access first, then by the per-item role flags
+  // (see isNavItemVisible: superAdmin-only vs. manageAccess visible to Admins too).
   const navGroups = filterGroupsByAccess(NAV_GROUPS, access)
     .map((g) => ({
       ...g,
-      items: g.items.filter((n) => {
-        if (n.superAdmin && !isSuperAdmin) return false
-        if (n.manageAccess && !canManageAccess) return false
-        return true
-      }),
+      items: g.items.filter((n) => isNavItemVisible(n, { isSuperAdmin, isAdmin })),
     }))
     .filter((g) => g.items.length > 0)
   const navItems = navGroups.flatMap((g) => g.items)

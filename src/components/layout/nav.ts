@@ -255,6 +255,18 @@ export const NAV_GROUPS: NavGroup[] = [
   },
 ]
 
+// Whether a nav item is visible to the current session, by its role flags:
+// `superAdmin` items are super-admin-only; `manageAccess` items also show to an
+// Admin (access delegation); everything else is visible to any signed-in user.
+export function isNavItemVisible(
+  item: NavItem,
+  ctx: { isSuperAdmin: boolean; isAdmin: boolean },
+): boolean {
+  if (item.superAdmin && !ctx.isSuperAdmin) return false
+  if (item.manageAccess && !(ctx.isSuperAdmin || ctx.isAdmin)) return false
+  return true
+}
+
 // Flattened list — used for the current-page label lookup and mobile nav.
 export const NAV_ITEMS: NavItem[] = NAV_GROUPS.flatMap((g) => g.items)
 

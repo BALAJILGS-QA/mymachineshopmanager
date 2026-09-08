@@ -9,7 +9,15 @@ import { PageHeader, ResponsiveTable } from '@/components/common/PageHeader'
 import { Badge, Card, EmptyState } from '@/components/ui/primitives'
 import { Modal } from '@/components/ui/Modal'
 import { useToast } from '@/components/ui/Toast'
-import { ALWAYS_ON, MODULES, effectiveModuleKeys, isModuleKey } from './modules'
+import {
+  MODULES,
+  accessSummary,
+  canManageRoles,
+  grantableKeysFor,
+  isModuleKey,
+  mergeSavedPermissions,
+  scopeUsersForManager,
+} from './modules'
 import type { ModuleKey } from '@/components/layout/nav'
 
 const ROLE_TONE: Record<UserRole, string> = {
@@ -22,20 +30,7 @@ const ROLE_TONE: Record<UserRole, string> = {
 //  • the super admin — sees every approved user, can change roles and grant any module;
 //  • an Admin (shop user) — sees only their own shop's Users (same companyName) and can
 //    grant only the modules they themselves hold; cannot change roles or approve users.
-
-function sameCompany(a?: string, b?: string): boolean {
-  const x = (a ?? '').trim().toLowerCase()
-  const y = (b ?? '').trim().toLowerCase()
-  return x !== '' && x === y
-}
-
-// Human summary of what a user can reach, for the table's Access column.
-function accessSummary(u: AppUser): string {
-  const eff = effectiveModuleKeys({ isSuperAdmin: false, user: u })
-  if (eff === 'all') return 'All modules'
-  const granted = eff.filter((k) => !ALWAYS_ON.includes(k)).length
-  return granted === 0 ? 'Dashboard only' : `${granted} of ${MODULES.length} modules`
-}
+// The scoping/grant/merge rules are pure functions in ./modules (unit-tested).
 
 export function RolesPage() {
   const { isSuperAdmin, session } = useAuth()
@@ -50,31 +45,10 @@ export function RolesPage() {
     () => users.find((u) => u.email.toLowerCase() === (session?.email ?? '').toLowerCase()),
     [users, session?.email],
   )
-  const isAdmin = !isSuperAdmin && me?.role === 'Admin'
-  const canManage = isSuperAdmin || isAdmin
-
-  // The modules this manager is allowed to grant. Super admin & Admin both resolve
-  // to every module today; computed generically so it stays correct if an Admin is
-  // ever given a restricted set. Dashboard is always-on and never a toggle.
-  const allowedKeys = useMemo<ModuleKey[]>(() => {
-    const eff = effectiveModuleKeys({ isSuperAdmin, user: me })
-    const keys = eff === 'all' ? MODULES.map((m) => m.key) : eff
-    return keys.filter((k) => !ALWAYS_ON.includes(k))
-  }, [isSuperAdmin, me])
-
-  // Super admin manages everyone; an Admin only their own shop's standard Users.
-  const managed = useMemo(() => {
-    const approved = users.filter((u) => u.status === 'approved')
-    const scoped = isSuperAdmin
-      ? approved
-      : approved.filter(
-          (u) =>
-            (u.role ?? 'User') === 'User' &&
-            u.id !== me?.id &&
-            sameCompany(u.companyName, me?.companyName),
-        )
-    return scoped.sort((a, b) => (a.fullName || a.email).localeCompare(b.fullName || b.email))
-  }, [users, isSuperAdmin, me])
+  const ctx = { isSuperAdmin, me }
+  const canManage = canManageRoles(ctx)
+  const allowedKeys = useMemo(() => grantableKeysFor(ctx), [isSuperAdmin, me])
+  const managed = useMemo(() => scopeUsersForManager(ctx, users), [users, isSuperAdmin, me])
 
   // Guard AFTER the hooks so hook order stays stable across renders.
   useEffect(() => {
@@ -85,12 +59,12 @@ export function RolesPage() {
   async function onSave(role: UserRole, keys: ModuleKey[]) {
     if (!editing) return
     try {
-      // Preserve any modules the current manager isn't allowed to touch (so a
-      // scoped Admin can't accidentally strip access granted by the super admin).
-      const preserved = (editing.permissions ?? []).filter(
-        (k) => isModuleKey(k) && !allowedKeys.includes(k),
-      )
-      const permissions = role === 'Admin' ? [] : [...new Set<string>([...preserved, ...keys])]
+      const permissions = mergeSavedPermissions({
+        role,
+        allowedKeys,
+        checked: keys,
+        existing: editing.permissions,
+      })
       await updateAccess.mutateAsync({ id: editing.id, role, permissions })
       toast.success(`Access updated for ${editing.fullName || editing.email}`)
       setEditing(null)

@@ -22,6 +22,11 @@ playwright/.cache
 PRD_extracted.txt
 dev.log
 
+# QA/e2e generated artifacts + auth state (never commit — reports are minified
+# vendor bundles; .auth/*.json holds live Supabase session tokens).
+qa/reports/
+e2e/.auth/
+
 # tsc -b composite build artifacts
 vite.config.js
 vite.config.d.ts

@@ -1,0 +1,530 @@
+{
+  "module": "invoices",
+  "component": "Invoices",
+  "understanding": "The Invoices module (route /app/invoices, source src/features/invoices) manages GST sales invoices for a single-tenant machine-shop app. Verified against InvoicesPage.tsx, InvoiceForm.tsx, InvoicePrintPage.tsx, invoicesApi.ts, invoicePdf.ts, useInvoices.ts, computations.ts and constants/domain.ts.\n\nENTITIES: Invoice { id, invoiceNo (auto via nextNumberedDoc when blank), date, companyId, billingAddress, shippingAddress, reference/PO, dcReference, discount, cgstPercent, sgstPercent, taxPercent(=cgst+sgst), status, notes, lines[], createdAt, updatedAt }. InvoiceLine { id, jobId?, description, quantity, rate, materialId?, ownerType?, sourceReceiptId?, unit? }. Lines are a child table (invoice_lines) ordered by line_no, joined on read, delete+reinsert on update.\n\nSTATUSES (constants/domain.ts): Draft, Unpaid, Partially Paid, Paid, Cancelled. computeInvoice: taxable = max(0, subtotal-discount); prefers cgst+sgst split, falls back to taxPercent; Cancelled => paid=0/outstanding=0. isEligibleInvoice = Unpaid/Partially Paid/Paid only (Draft & Cancelled excluded from receivables). roundMoney = 2dp.\n\nInvoicesPage: This-month tiles (Invoices count, Invoiced value, Received, Outstanding) with momDelta vs previous month, excluding Cancelled. GST Summary tiles (Taxable, CGST, SGST, Total GST) over FILTERED rows excluding Cancelled. Company-wise summary table (Company, Invoices, Total, Paid, Outstanding) excluding Cancelled. Filters: search (matches `${invoiceNo} ${reference}` lowercased), company, status, date range (inRange). Rows sorted date desc, paginated. Row actions gated by status: Record payment shows when status != Cancelled && != Paid (so it shows for Unpaid AND Partially Paid); Download PDF + Print always; Edit shows when != Paid && != Cancelled; Cancel shows when != Cancelled. Excel export (downloadXlsx, sheet 'Invoices') over filtered rows. Mobile = condensed tap-to-open rows navigating to print. Cancel uses a danger confirm dialog then setInvoiceStatus('Cancelled').\n\nInvoiceForm: fields Invoice Number (blank=auto, placeholder = usePreviewNo), Company (required attribute, but NO client-side block on submit), Invoice Date (required attribute, no submit block), Reference/PO, Delivery Challan Ref, shipping same-as-billing toggle, Discount, CGST %, SGST % (default to settings.defaultCgst/Sgst or half of defaultTaxPercent; editable). Live totals: subtotal=Σqty*rate (roundMoney); taxable=max(0,subtotal-discount); cgstAmount/sgstAmount = roundMoney(taxable*pct/100) shown in disabled read-only fields; total=roundMoney(taxable+cgst+sgst). Helpers: add-from-completed-job (eligible = Completed/Delivered jobs of company not already on a line; line desc=`partName (partNumber) — jobNo`, qty=completedQty||orderedQty, rate=job.rate??0); add-from-rate-list (products, qty 1, rate=p.rate); Delivery-Challan picker (new invoices only when !prefill.dcReference; lists Open challans of the company, optional material filter; imported lines rate=0 and marked From-challan / locked from stock re-link; toggling company clears DC lines + dcReference; selected DCs marked Invoiced on save via setChallanStatus); Bill-directly-from-received-stock multi-select (sources = receipts where companyId===company||ownerType==='Shop' && available>0; ticking adds line desc=materialName, qty=available, bound to sourceReceiptId; unticking removes it). On submit, empty lines are stripped (kept when description.trim() || rate>0 || materialId). Client-side per-source over-dispatch guard for NEW invoices sums qty per sourceReceiptId vs available and toast-blocks; backend RPC is final gate. Save as draft (Draft, only for new) vs Create invoice (Unpaid); edit shows Save changes and 'Last updated' timestamp.\n\nInvoicePrintPage (/app/invoices/[id]/print): shop header, Bill-To, line table, Subtotal, Discount (only when >0), CGST/SGST rows (only when the percent is truthy/non-zero) else Tax row (when taxPercent>0), Total, and Paid+Outstanding only when paid>0. The Note block (dcReference) ALWAYS renders, showing '—' when there is no DC reference. Print=window.print; Download PDF=downloadInvoicePdf.\n\nAPI (invoicesApi.ts): listInvoices (selectAll + invoice_lines ordered by line_no). createInvoice — RPC create_invoice with p_id, p_invoice_no, p_date, p_company_id, p_billing_address, p_shipping_address, p_reference, p_dc_reference, p_discount, p_tax_percent, p_cgst_percent, p_sgst_percent, p_status, p_notes, p_lines[]; inserts header+lines atomically, deducts stock server-side for lines with materialId/sourceReceiptId. updateInvoice — updateRow header ('lines' ignored, not a column) then delete invoice_lines by invoice_id + bulk insert with line_no. setInvoiceStatus — RPC set_invoice_status(p_id,p_status); cancelling frees challans + restores stock. Hooks: create invalidates invoices+stock; update invalidates invoices ONLY (not stock); setStatus invalidates invoices+deliveries+stock.\n\nPDF (invoicePdf.ts): jsPDF, ASCII money — ₹ rendered as 'Rs. '; file saved as `${invoiceNo}.pdf`; Note block prints dcReference or '-'.\n\nSECURITY: /app/** is auth-gated client tree (app/app/layout.tsx). Mutations via Postgres RPCs with RLS; anon key client-side only; single-tenant.",
+  "cases": [
+    {
+      "key": "MSM-INVOICES-UI-001",
+      "name": "Invoices list renders summary tiles, GST summary, company-wise table and invoice grid",
+      "category": "UI",
+      "priority": "High",
+      "status": "Approved",
+      "objective": "Verify the Invoices page renders the header, this-month tiles, GST summary, company-wise summary and the invoice table with all expected columns.",
+      "precondition": "Logged in as QA super-admin; at least a few invoices exist across companies.",
+      "testData": "",
+      "steps": [
+        "Navigate to /app/invoices.",
+        "Observe the page header 'Invoices' with Excel and New Invoice actions.",
+        "Observe the 'This month' section with four StatTiles: Invoices, Invoiced value, Received, Outstanding (each with a vs-last-month delta).",
+        "Observe the 'GST Summary' four tiles: Taxable value, CGST, SGST, Total GST.",
+        "Observe the Company-wise summary table with columns Company, Invoices, Total, Paid, Outstanding.",
+        "Observe the main invoice table columns: Invoice, Date, Company, Total, Paid, Outstanding, Status, Actions."
+      ],
+      "expectedResult": "All sections render without errors; tiles show currency-formatted values; the invoice table lists invoices sorted by date descending with a status badge per row.",
+      "labels": ["smoke", "regression"],
+      "destructive": false,
+      "automation": "Automated",
+      "automatedTest": "e2e/generated/invoices.spec.ts"
+    },
+    {
+      "key": "MSM-INVOICES-UI-002",
+      "name": "Row action buttons respect invoice status (Record payment / Edit / Cancel visibility)",
+      "category": "UI",
+      "priority": "Normal",
+      "status": "Approved",
+      "objective": "Verify per-row action buttons are shown/hidden based on status: Record payment shows when status is neither Cancelled nor Paid (so Unpaid and Partially Paid both show it), Edit shows when neither Paid nor Cancelled, Cancel shows when not Cancelled, and Download PDF/Print always show.",
+      "precondition": "Logged in as QA super-admin; invoices exist in Unpaid, Partially Paid, Paid and Cancelled statuses.",
+      "testData": "",
+      "steps": [
+        "Open /app/invoices.",
+        "Locate an Unpaid invoice row and note its action buttons.",
+        "Locate a Partially Paid invoice row and note its action buttons.",
+        "Locate a Paid invoice row and note its action buttons.",
+        "Locate a Cancelled invoice row and note its action buttons."
+      ],
+      "expectedResult": "Unpaid and Partially Paid rows both show Record payment, Download PDF, Print, Edit and Cancel. Paid row hides Record payment and Edit but shows Download PDF, Print and Cancel. Cancelled row shows only Download PDF and Print (Record payment, Edit and Cancel are hidden).",
+      "labels": ["regression"],
+      "destructive": false,
+      "automation": "Automated",
+      "automatedTest": "e2e/generated/invoices.spec.ts"
+    },
+    {
+      "key": "MSM-INVOICES-UI-003",
+      "name": "Empty state and filtered empty state display correctly",
+      "category": "UI",
+      "priority": "Low",
+      "status": "Approved",
+      "objective": "Verify the EmptyState and company-summary empty message appear when no invoices match.",
+      "precondition": "Logged in as QA super-admin.",
+      "testData": "Search term guaranteed to match nothing, e.g. 'zzz-no-match'.",
+      "steps": [
+        "Open /app/invoices.",
+        "Type 'zzz-no-match' into the search box.",
+        "Observe the company-wise summary section and the main invoice card."
+      ],
+      "expectedResult": "Company-wise summary shows 'No invoices for the current filters.' and the main card shows the 'No invoices' EmptyState with the create hint ('Create an invoice from completed jobs or manually.').",
+      "labels": ["regression"],
+      "destructive": false,
+      "automation": "Automated",
+      "automatedTest": "e2e/generated/invoices.spec.ts"
+    },
+    {
+      "key": "MSM-INVOICES-VAL-001",
+      "name": "Live invoice totals recompute correctly from lines, discount, CGST and SGST",
+      "category": "Validation",
+      "priority": "High",
+      "status": "Approved",
+      "objective": "Verify subtotal, taxable, CGST/SGST amounts and total are computed correctly and rounded to two decimals in the form.",
+      "precondition": "Logged in as QA super-admin; New Invoice modal open.",
+      "testData": "Line 1: qty 10, rate 100 (=1000); Line 2: qty 2, rate 250 (=500); Discount 100; CGST 9; SGST 9.",
+      "steps": [
+        "Click New Invoice.",
+        "Add two line items with the test-data quantities and rates.",
+        "Enter Discount 100, CGST 9, SGST 9.",
+        "Read the Subtotal, CGST amount, SGST amount and Total in the totals panel."
+      ],
+      "expectedResult": "Subtotal = 1500.00; taxable = 1400; CGST amount = 126.00; SGST amount = 126.00; Total = 1652.00 (all two-decimal rounded). The CGST/SGST amount fields are disabled/read-only.",
+      "labels": ["regression", "calculation"],
+      "destructive": false,
+      "automation": "Automated",
+      "automatedTest": "e2e/generated/invoices.spec.ts"
+    },
+    {
+      "key": "MSM-INVOICES-VAL-002",
+      "name": "Discount exceeding subtotal clamps taxable to zero (no negative tax/total)",
+      "category": "Validation",
+      "priority": "Normal",
+      "status": "Approved",
+      "objective": "Verify taxable value is floored at zero (max(0, subtotal-discount)) when discount exceeds subtotal so tax and total never go negative.",
+      "precondition": "Logged in as QA super-admin; New Invoice modal open.",
+      "testData": "Line: qty 1, rate 500 (=500); Discount 900; CGST 9; SGST 9.",
+      "steps": [
+        "Click New Invoice and add a single line qty 1 rate 500.",
+        "Enter Discount 900, CGST 9, SGST 9.",
+        "Read the totals panel."
+      ],
+      "expectedResult": "Taxable is treated as 0; CGST amount = 0.00, SGST amount = 0.00, Total = 0.00. No negative values displayed.",
+      "labels": ["regression", "calculation", "edge-case"],
+      "destructive": false,
+      "automation": "Automated",
+      "automatedTest": "e2e/generated/invoices.spec.ts"
+    },
+    {
+      "key": "MSM-INVOICES-VAL-003",
+      "name": "Blank invoice number auto-numbers and empty lines are stripped on save",
+      "category": "Validation",
+      "priority": "Normal",
+      "status": "Approved",
+      "objective": "Verify a blank invoice number falls back to the auto-generated number (nextNumberedDoc) and lines with no description/rate/material are filtered out on submit.",
+      "precondition": "Logged in as QA super-admin; New Invoice modal open; a company selected and date set.",
+      "testData": "One real line (description 'Machining', qty 1, rate 100); one blank line; Invoice Number left empty.",
+      "steps": [
+        "Click New Invoice; select a company and set the invoice date.",
+        "Fill one line with description 'Machining', qty 1, rate 100.",
+        "Click Add line to create a second empty line and leave it blank.",
+        "Leave Invoice Number blank (note the preview placeholder).",
+        "Click Create invoice."
+      ],
+      "expectedResult": "Invoice is created with only the single non-empty line; the invoice number matches the auto-numbering sequence (nextNumberedDoc), not blank.",
+      "labels": ["regression"],
+      "destructive": true,
+      "automation": "Manual",
+      "automatedTest": ""
+    },
+    {
+      "key": "MSM-INVOICES-VAL-004",
+      "name": "Changing company drops challan-derived lines and clears the DC reference",
+      "category": "Validation",
+      "priority": "Normal",
+      "status": "Approved",
+      "objective": "Verify that switching the selected company after importing delivery-challan lines removes those lines, resets the material filter, and clears the Delivery Challan Ref field (lines belong to the prior company).",
+      "precondition": "Logged in as QA super-admin; New Invoice modal open; two companies each with at least one Open delivery challan.",
+      "testData": "",
+      "steps": [
+        "Click New Invoice and select Company A.",
+        "In 'Add from delivery challans', tick one challan so its lines and DC number import.",
+        "Confirm the imported lines and the auto-filled Delivery Challan Ref.",
+        "Change the Company selector to Company B.",
+        "Inspect the line items and the Delivery Challan Ref field."
+      ],
+      "expectedResult": "On company change the challan-derived lines are removed, the challan selection and material filter reset, and the Delivery Challan Ref is cleared. Only non-challan lines (if any) remain.",
+      "labels": ["regression", "edge-case"],
+      "destructive": false,
+      "automation": "Automated",
+      "automatedTest": "e2e/generated/invoices.spec.ts"
+    },
+    {
+      "key": "MSM-INVOICES-VAL-005",
+      "name": "Required Company/Date are not enforced client-side; RPC is the gate",
+      "category": "Validation",
+      "priority": "Low",
+      "status": "Draft",
+      "objective": "Verify the form does not hard-block submission when Company or Date is empty (the 'required' markers are advisory); creation is rejected by the create_invoice RPC / backend rather than by a client-side validation message.",
+      "precondition": "Logged in as QA super-admin; New Invoice modal open; browser dev-tools Network tab open.",
+      "testData": "Leave Company as 'Select…' (empty) and Invoice Date empty; add one line 'Test', qty 1, rate 10.",
+      "steps": [
+        "Click New Invoice.",
+        "Clear/leave the Company as unselected and leave Invoice Date empty.",
+        "Add a single line item.",
+        "Click Create invoice and observe whether a client-side validation blocks it before any request, then observe the network request/response."
+      ],
+      "expectedResult": "No client-side validation summary blocks the click; the app attempts the create_invoice RPC which rejects the missing company/date (error toast surfaced via toUserMessage). No invalid invoice is persisted. This documents that Company/Date 'required' markers are not enforced locally.",
+      "labels": ["regression", "edge-case"],
+      "destructive": true,
+      "automation": "Manual",
+      "automatedTest": ""
+    },
+    {
+      "key": "MSM-INVOICES-FUNC-001",
+      "name": "Create a new GST invoice (Unpaid) and verify it appears in the list",
+      "category": "Functionality",
+      "priority": "Highest",
+      "status": "Approved",
+      "objective": "Verify the end-to-end create flow produces an Unpaid invoice with correct totals and it appears in the list and month tiles.",
+      "precondition": "Logged in as QA super-admin; at least one active company exists.",
+      "testData": "Company: any active; Date: today; Line: 'CNC Job', qty 5, rate 200; CGST 9; SGST 9.",
+      "steps": [
+        "Click New Invoice.",
+        "Select the company, set date to today, add the line item and set CGST 9 / SGST 9.",
+        "Click Create invoice.",
+        "Confirm the success toast and locate the new invoice in the list."
+      ],
+      "expectedResult": "Invoice is created with status Unpaid, Total = 1180.00, appears at the top of the list (date desc), and the this-month Invoices count / Invoiced value tiles reflect it.",
+      "labels": ["smoke", "regression"],
+      "destructive": true,
+      "automation": "Manual",
+      "automatedTest": ""
+    },
+    {
+      "key": "MSM-INVOICES-FUNC-002",
+      "name": "Save invoice as Draft and confirm exclusion from receivables totals",
+      "category": "Functionality",
+      "priority": "High",
+      "status": "Approved",
+      "objective": "Verify Save-as-draft creates a Draft invoice and that Draft invoices are excluded from the GST/company money summaries and month tiles.",
+      "precondition": "Logged in as QA super-admin.",
+      "testData": "Company: any active; Line: 'Draft item', qty 1, rate 1000; CGST 9; SGST 9.",
+      "steps": [
+        "Click New Invoice, fill the fields per test data.",
+        "Click Save as draft.",
+        "Filter the status dropdown to Draft and locate the invoice.",
+        "Note the invoice total, then compare the GST Summary and company-wise totals with the Draft filter cleared vs applied."
+      ],
+      "expectedResult": "Invoice is saved with status Draft. It is not counted in the this-month money tiles nor in receivables (isEligibleInvoice excludes Draft), though it is visible when filtered to Draft.",
+      "labels": ["regression"],
+      "destructive": true,
+      "automation": "Manual",
+      "automatedTest": ""
+    },
+    {
+      "key": "MSM-INVOICES-FUNC-003",
+      "name": "Cancel an invoice excludes it from outstanding but keeps it in history",
+      "category": "Functionality",
+      "priority": "High",
+      "status": "Approved",
+      "objective": "Verify cancelling an invoice via the confirm dialog sets status Cancelled, zeroes its paid/outstanding, and removes it from money summaries while remaining listed.",
+      "precondition": "Logged in as QA super-admin; at least one Unpaid invoice exists.",
+      "testData": "",
+      "steps": [
+        "On an Unpaid invoice row, click Cancel invoice.",
+        "Confirm the danger dialog ('Cancel invoice').",
+        "Observe the toast and the row status.",
+        "Check the this-month Outstanding tile and company-wise summary."
+      ],
+      "expectedResult": "Status becomes Cancelled; a 'Invoice cancelled' success toast appears; computeInvoice reports paid=0 / outstanding=0 for it; it is excluded from GST/company/month money totals but still visible in the list. Cancelling frees any linked delivery challans and restores deducted stock (invoices, deliveries and stock caches invalidated).",
+      "labels": ["regression"],
+      "destructive": true,
+      "automation": "Manual",
+      "automatedTest": ""
+    },
+    {
+      "key": "MSM-INVOICES-FUNC-004",
+      "name": "Filters (search, company, status, date range) narrow the list and summaries",
+      "category": "Functionality",
+      "priority": "Normal",
+      "status": "Approved",
+      "objective": "Verify the filter bar filters the invoice grid and that GST/company summaries reflect the filtered rows.",
+      "precondition": "Logged in as QA super-admin; invoices span multiple companies, statuses and dates.",
+      "testData": "A known invoiceNo or reference; a specific company; status Unpaid; a date range covering only some invoices.",
+      "steps": [
+        "Open /app/invoices.",
+        "Search by a known invoice number, then clear.",
+        "Search by a known reference/PO substring, then clear.",
+        "Select a specific company in the company filter.",
+        "Set status to Unpaid.",
+        "Set a from/to date range."
+      ],
+      "expectedResult": "The grid, GST Summary tiles and company-wise summary all reflect only rows matching the combined filters (Cancelled always excluded from money totals). Search matches invoiceNo and reference case-insensitively.",
+      "labels": ["regression"],
+      "destructive": false,
+      "automation": "Automated",
+      "automatedTest": "e2e/generated/invoices.spec.ts"
+    },
+    {
+      "key": "MSM-INVOICES-FUNC-005",
+      "name": "Add lines from completed job and from rate list",
+      "category": "Functionality",
+      "priority": "Normal",
+      "status": "Approved",
+      "objective": "Verify the add-from-completed-job and add-from-rate-list helpers append correctly prefilled invoice lines.",
+      "precondition": "Logged in as QA super-admin; the selected company has a Completed/Delivered job not yet on a line, and at least one active product/rate-list item exists.",
+      "testData": "",
+      "steps": [
+        "Click New Invoice and select the company that owns the completed job.",
+        "In 'Add from completed job', click the job chip.",
+        "In '+ Add from rate list…', select a product.",
+        "Inspect the resulting line rows."
+      ],
+      "expectedResult": "A line is added for the job (description = 'partName (partNumber) — jobNo', quantity = completedQty || orderedQty, rate = job.rate ?? 0) and a line for the product (description = product name, quantity 1, rate = product rate). The invoiced job no longer appears in the eligible-jobs list.",
+      "labels": ["regression"],
+      "destructive": false,
+      "automation": "Automated",
+      "automatedTest": "e2e/generated/invoices.spec.ts"
+    },
+    {
+      "key": "MSM-INVOICES-FUNC-006",
+      "name": "Bill directly from received stock imports a stock-deducting line",
+      "category": "Functionality",
+      "priority": "High",
+      "status": "Approved",
+      "objective": "Verify selecting a received-stock source in the multi-select adds a line bound to that source with quantity defaulted to available.",
+      "precondition": "Logged in as QA super-admin; the selected company (or Shop/own) has received stock with available quantity > 0.",
+      "testData": "",
+      "steps": [
+        "Click New Invoice and select the company with available received stock.",
+        "Open 'Bill directly from received stock' and tick a source.",
+        "Inspect the added line's description, quantity and the Stock item column.",
+        "Untick the source and re-inspect the lines."
+      ],
+      "expectedResult": "Ticking adds a line with description = material name, quantity = source available, and the Stock item column bound to that source. Unticking removes exactly that line. Only sources for this company or Shop-owned with available>0 are listed.",
+      "labels": ["regression"],
+      "destructive": false,
+      "automation": "Automated",
+      "automatedTest": "e2e/generated/invoices.spec.ts"
+    },
+    {
+      "key": "MSM-INVOICES-FUNC-007",
+      "name": "Delivery-challan picker imports items and marks challans Invoiced on save",
+      "category": "Functionality",
+      "priority": "High",
+      "status": "Approved",
+      "objective": "Verify picking Open challans imports their lines (locked from stock re-linking) and, on create, marks the challans as Invoiced against the new invoice.",
+      "precondition": "Logged in as QA super-admin; the selected company has one or more Open delivery challans.",
+      "testData": "",
+      "steps": [
+        "Click New Invoice and select a company with Open challans.",
+        "Open 'Add from delivery challans', optionally filter by material, and tick one or more challans.",
+        "Fill in rates for the imported lines (they import with rate 0) and set date.",
+        "Click Create invoice.",
+        "Open the Deliveries module and check the picked challans' status; open the new invoice's DC Ref."
+      ],
+      "expectedResult": "Imported lines show 'From challan (already deducted)' in the Stock item column and cannot be re-linked to stock; the DC Ref field auto-fills with the selected DC numbers; on save the challans become status Invoiced linked to the new invoice and stock is not double-deducted.",
+      "labels": ["regression"],
+      "destructive": true,
+      "automation": "Manual",
+      "automatedTest": ""
+    },
+    {
+      "key": "MSM-INVOICES-FUNC-008",
+      "name": "Edit an existing invoice replaces its lines and recomputes totals",
+      "category": "Functionality",
+      "priority": "High",
+      "status": "Approved",
+      "objective": "Verify editing an invoice (not Paid/Cancelled) updates the header and rewrites its lines, and totals recompute.",
+      "precondition": "Logged in as QA super-admin; an editable (Draft/Unpaid/Partially Paid) invoice exists.",
+      "testData": "Change one line quantity and adjust discount.",
+      "steps": [
+        "Click Edit on an Unpaid invoice (note the 'Last updated' timestamp in the modal).",
+        "Change a line quantity and the discount.",
+        "Click Save changes.",
+        "Reopen the invoice (Edit modal) / print view and verify the lines and totals."
+      ],
+      "expectedResult": "Success toast ('Invoice updated'); the header updates and its invoice_lines are fully replaced (delete + reinsert) with the new values; totals reflect the change. On reopening the Edit modal the 'Last updated' timestamp has advanced.",
+      "labels": ["regression"],
+      "destructive": true,
+      "automation": "Manual",
+      "automatedTest": ""
+    },
+    {
+      "key": "MSM-INVOICES-FUNC-009",
+      "name": "Print view and PDF download render invoice with correct totals and DC note",
+      "category": "Functionality",
+      "priority": "Normal",
+      "status": "Approved",
+      "objective": "Verify the print page and generated PDF show shop header, Bill-To, lines, totals split (CGST/SGST), DC-ref note and paid/outstanding.",
+      "precondition": "Logged in as QA super-admin; an invoice with CGST+SGST, a DC reference and at least one payment exists.",
+      "testData": "",
+      "steps": [
+        "On an invoice row click Print (or navigate to /app/invoices/[id]/print).",
+        "Verify the on-screen invoice layout, totals split and the DC-ref Note block.",
+        "Click Download PDF and open the generated file."
+      ],
+      "expectedResult": "Print page shows Bill-To, line table, Subtotal, Discount (only when >0), CGST/SGST rows (only when the respective percent is non-zero), Total, and Paid/Outstanding (only when paid>0). The Note block always renders (shows the DC number(s), or '—' when none). The PDF downloads named <invoiceNo>.pdf with amounts formatted 'Rs.' for INR and the DC number(s) in the NOTE block.",
+      "labels": ["regression"],
+      "destructive": false,
+      "automation": "Automated",
+      "automatedTest": "e2e/generated/invoices.spec.ts"
+    },
+    {
+      "key": "MSM-INVOICES-FUNC-010",
+      "name": "Export invoices to Excel reflects current filters",
+      "category": "Functionality",
+      "priority": "Low",
+      "status": "Approved",
+      "objective": "Verify the Excel export produces a file with the expected columns for the currently filtered rows.",
+      "precondition": "Logged in as QA super-admin; several invoices exist.",
+      "testData": "",
+      "steps": [
+        "Open /app/invoices and apply a company filter.",
+        "Click the Excel button.",
+        "Open the downloaded workbook."
+      ],
+      "expectedResult": "An 'invoices' workbook (sheet 'Invoices') downloads containing only the filtered rows with columns Invoice, Date, Company, Status, Subtotal, CGST, SGST, Total, Paid, Outstanding. Note: the export includes Cancelled rows if they pass the filters (unlike the on-screen money summaries), and CGST/SGST columns are computed without the max(0,...) discount floor.",
+      "labels": ["regression"],
+      "destructive": false,
+      "automation": "Automated",
+      "automatedTest": "e2e/generated/invoices.spec.ts"
+    },
+    {
+      "key": "MSM-INVOICES-FUNC-011",
+      "name": "Line stripping keeps a line if it has a description OR a rate OR a material",
+      "category": "Functionality",
+      "priority": "Low",
+      "status": "Draft",
+      "objective": "Verify the submit-time line filter keeps a line when it has a non-blank description OR rate>0 OR a materialId, and drops only fully-empty lines.",
+      "precondition": "Logged in as QA super-admin; New Invoice modal open; a company and date set.",
+      "testData": "Line A: description 'Labour', qty 1, rate 0 (kept via description). Line B: description blank, qty 1, rate 50 (kept via rate). Line C: blank description, rate 0, no material (dropped).",
+      "steps": [
+        "Click New Invoice; select company and date.",
+        "Add three lines matching Lines A, B and C in the test data.",
+        "Click Create invoice.",
+        "Open the created invoice's print view and count the lines."
+      ],
+      "expectedResult": "The saved invoice contains Line A and Line B only; the fully-empty Line C is stripped. A rate-only line (blank description) is retained.",
+      "labels": ["regression", "edge-case"],
+      "destructive": true,
+      "automation": "Manual",
+      "automatedTest": ""
+    },
+    {
+      "key": "MSM-INVOICES-API-001",
+      "name": "createInvoice invokes create_invoice RPC atomically with header and lines",
+      "category": "API",
+      "priority": "High",
+      "status": "Approved",
+      "objective": "Verify invoice creation posts to the create_invoice RPC with the correct parameters and returns the created invoice with lines.",
+      "precondition": "Logged in as QA super-admin; browser dev-tools Network tab open.",
+      "testData": "",
+      "steps": [
+        "Open Network tab and create a new invoice via the form.",
+        "Inspect the outbound request to /rest/v1/rpc/create_invoice.",
+        "Verify the payload includes p_id, p_invoice_no, p_date, p_company_id, p_discount, p_cgst_percent, p_sgst_percent, p_tax_percent, p_status and p_lines[].",
+        "Confirm the response returns the inserted invoice header."
+      ],
+      "expectedResult": "A single create_invoice RPC call inserts header + lines atomically; p_tax_percent equals cgst+sgst; lines carry material_id/source_receipt_id for stock-deducting lines; the invoices and stock query caches are invalidated on success.",
+      "labels": ["api", "regression"],
+      "destructive": true,
+      "automation": "Manual",
+      "automatedTest": ""
+    },
+    {
+      "key": "MSM-INVOICES-API-002",
+      "name": "setInvoiceStatus RPC on cancel and updateInvoice line-replacement behavior",
+      "category": "API",
+      "priority": "Normal",
+      "status": "Approved",
+      "objective": "Verify cancelling calls set_invoice_status RPC and that updateInvoice deletes then reinserts invoice_lines (only when lines are supplied) rather than patching them, and that the header PATCH ignores the non-column 'lines' field.",
+      "precondition": "Logged in as QA super-admin; Network tab open; an editable invoice exists.",
+      "testData": "",
+      "steps": [
+        "Cancel an invoice and inspect the /rest/v1/rpc/set_invoice_status request (p_id, p_status='Cancelled').",
+        "Edit a different invoice's lines and inspect the invoice_lines DELETE followed by INSERT requests.",
+        "Confirm the header PATCH does not attempt to write a 'lines' column."
+      ],
+      "expectedResult": "Cancel issues set_invoice_status RPC; edit issues a DELETE on invoice_lines by invoice_id then a bulk INSERT of the new rows with line_no ordering; the header update ignores the non-column 'lines' field. Note: the update mutation invalidates only the invoices cache (not stock/deliveries).",
+      "labels": ["api", "regression"],
+      "destructive": true,
+      "automation": "Manual",
+      "automatedTest": ""
+    },
+    {
+      "key": "MSM-INVOICES-SEC-001",
+      "name": "Unauthenticated access to /app/invoices and print route is gated",
+      "category": "Security",
+      "priority": "High",
+      "status": "Approved",
+      "objective": "Verify the authenticated portal gates invoice pages when not logged in.",
+      "precondition": "No active session (logged out / cleared storage).",
+      "testData": "",
+      "steps": [
+        "In a logged-out browser, navigate to /app/invoices.",
+        "Navigate to /app/invoices/<any-id>/print."
+      ],
+      "expectedResult": "The app-shell auth gate (app/app/layout.tsx) blocks access and redirects to login/landing; invoice data is not rendered while unauthenticated.",
+      "labels": ["security", "regression"],
+      "destructive": false,
+      "automation": "Automated",
+      "automatedTest": "e2e/generated/invoices.spec.ts"
+    },
+    {
+      "key": "MSM-INVOICES-SEC-002",
+      "name": "Over-dispatch guard prevents billing more stock than available",
+      "category": "Security",
+      "priority": "High",
+      "status": "Approved",
+      "objective": "Verify the client-side per-source over-dispatch guard blocks a new invoice that bills more than a source's available quantity (with the backend RPC as final gate).",
+      "precondition": "Logged in as QA super-admin; a received-stock source with a known small available quantity exists for the selected company.",
+      "testData": "Source with available = N units; attempt to bill N+ extra units.",
+      "steps": [
+        "Click New Invoice, select the company, and bill directly from a received-stock source.",
+        "Set the line quantity above the source's available quantity.",
+        "Click Create invoice."
+      ],
+      "expectedResult": "An error toast states the billing quantity exceeds available for that source and creation is blocked before any RPC is sent. Even if bypassed, the create_invoice RPC rejects the over-dispatch (race-safe final gate).",
+      "labels": ["security", "regression", "edge-case"],
+      "destructive": false,
+      "automation": "Automated",
+      "automatedTest": "e2e/generated/invoices.spec.ts"
+    },
+    {
+      "key": "MSM-INVOICES-DB-001",
+      "name": "Invoice lines persist as child rows and rejoin correctly on reload",
+      "category": "Database",
+      "priority": "Normal",
+      "status": "Approved",
+      "objective": "Verify invoice_lines are stored as ordered child rows and are correctly joined back to their invoice on listInvoices.",
+      "precondition": "Logged in as QA super-admin; a multi-line invoice was just created.",
+      "testData": "",
+      "steps": [
+        "Create a multi-line invoice.",
+        "Reload /app/invoices and open the invoice's print view.",
+        "Verify the number, order and values of the lines match what was entered."
+      ],
+      "expectedResult": "invoice_lines rows are keyed by invoice_id and returned ordered by line_no; the reloaded invoice shows exactly the entered lines in order with correct qty/rate and amounts.",
+      "labels": ["database", "regression"],
+      "destructive": true,
+      "automation": "Automated",
+      "automatedTest": "e2e/generated/invoices.spec.ts"
+    },
+    {
+      "key": "MSM-INVOICES-DB-002",
+      "name": "Editing an invoice does not orphan or duplicate line rows",
+      "category": "Database",
+      "priority": "Normal",
+      "status": "Approved",
+      "objective": "Verify the delete-then-reinsert update strategy leaves no stale/duplicate invoice_lines after edits.",
+      "precondition": "Logged in as QA super-admin; a multi-line editable invoice exists.",
+      "testData": "Remove one line and change another line's quantity.",
+      "steps": [
+        "Edit the invoice: remove one line and change a remaining line's quantity.",
+        "Save changes.",
+        "Reload and reopen the invoice; count and verify the lines."
+      ],
+      "expectedResult": "The invoice has exactly the remaining lines with updated values; no orphaned old rows and no duplicates; stock allocations for lines with source_receipt_id reflect the edit (source_receipt_id is persisted on reinsert).",
+      "labels": ["database", "regression"],
+      "destructive": true,
+      "automation": "Manual",
+      "automatedTest": ""
+    }
+  ]
+}

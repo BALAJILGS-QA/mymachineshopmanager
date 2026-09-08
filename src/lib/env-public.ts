@@ -10,7 +10,7 @@
 // inlined into client bundles. So each var is read via an explicit static access
 // per key. ONLY public values belong here — never a service_role key or secret.
 
-type PublicEnvKey = 'SUPABASE_URL' | 'SUPABASE_ANON_KEY'
+type PublicEnvKey = 'SUPABASE_URL' | 'SUPABASE_ANON_KEY' | 'TURNSTILE_SITE_KEY'
 
 function fromVite(key: PublicEnvKey): string | undefined {
   // Under Vite these are statically inlined. Under Next, `import.meta.env` is
@@ -18,7 +18,9 @@ function fromVite(key: PublicEnvKey): string | undefined {
   try {
     const env = (import.meta as unknown as { env?: Record<string, string | undefined> }).env
     if (!env) return undefined
-    return key === 'SUPABASE_URL' ? env.VITE_SUPABASE_URL : env.VITE_SUPABASE_ANON_KEY
+    if (key === 'SUPABASE_URL') return env.VITE_SUPABASE_URL
+    if (key === 'TURNSTILE_SITE_KEY') return env.VITE_TURNSTILE_SITE_KEY
+    return env.VITE_SUPABASE_ANON_KEY
   } catch {
     return undefined
   }
@@ -32,6 +34,9 @@ function fromProcess(key: PublicEnvKey): string | undefined {
   try {
     if (key === 'SUPABASE_URL') {
       return process.env.NEXT_PUBLIC_SUPABASE_URL ?? process.env.VITE_SUPABASE_URL
+    }
+    if (key === 'TURNSTILE_SITE_KEY') {
+      return process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY ?? process.env.VITE_TURNSTILE_SITE_KEY
     }
     return process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? process.env.VITE_SUPABASE_ANON_KEY
   } catch {

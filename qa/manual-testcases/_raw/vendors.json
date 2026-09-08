@@ -1,0 +1,343 @@
+{
+  "module": "vendors",
+  "component": "Vendors",
+  "understanding": "The Vendors module (route /app/vendors) is a single-screen master-data CRUD for suppliers/subcontractors, consumed by Purchase Management, own-material purchases, and the subcontracting (job-work) workflow. Verified against src/features/vendors (api/vendorsApi.ts, hooks/useVendors.ts, VendorsPage.tsx) and app/app/vendors/page.tsx (a thin 'use client' wrapper that just renders <VendorsPage/>). No client-side RBAC gate exists in the feature or the route wrapper; access is controlled entirely by the authenticated app shell (app/app/layout.tsx) plus RLS is_app_approved() + tenant_id.\n\nEntity Vendor (src/types): id ('ven_'+uid), code (auto-minted VEN001/VEN002 via nextCode('vendor','VEN',3) -> next_seq RPC, zero-padded width 3, unique per-tenant), name (required), gstin?, phone?, email?, address?, active (bool default true), notes?, createdAt/updatedAt (server). DB public.vendors (0013): code NOT NULL UNIQUE, name NOT NULL, RLS approved_all; tenant_id + per-tenant vendors_code_key in 0043/0044. subcontract_orders.vendor_id / subcontract_docs FK vendors -> in-use vendor cannot be deleted.\n\nUI (VendorsPage.tsx confirmed): PageHeader 'Vendors' + subtitle 'Suppliers and subcontractors used by purchases and job work' + 'Add Vendor' btn. Search input aria-label 'Search vendors', placeholder 'Search name, code, GSTIN…'; client-side filter over the concatenated string `${code} ${name} ${gstin} ${phone}` lowercased (case-insensitive), then .sort by name.localeCompare, then usePagination. Table cols: Code (font-mono), Name, GSTIN (|| '—'), Phone (|| '—'), Status (green Active / gray Inactive Badge), Actions (Edit pencil, Delete trash). isLoading -> TableSkeleton rows={8} cols={5}; rows.length===0 -> EmptyState (Building2 icon, 'No vendors'). Note: the empty state renders for BOTH no-data and no-search-match (same branch). Add/Edit is a Modal (VendorForm): Vendor Name (required, autoFocus), GSTIN, Phone, Email, Status select (active/inactive), Address textarea rows=2, Notes textarea rows=2; footer Cancel + 'Add vendor' (or 'Save changes', shows 'Saving…' while pending). Edit modal title `Edit {code}` and a right-aligned 'Last updated {fmtDateTime(updatedAt)}'.\n\nValidation (client-only, confirmed): submit() blocks when !form.name.trim() via toast.error('Vendor name is required'); modal stays open. All other fields optional; each is .trim() then `|| undefined` (blank -> undefined -> NULL -> '—'). No Zod, no GSTIN/email/phone format validation. Server enforces NOT NULL name/code + unique code.\n\nAPI/data (confirmed): useVendors->listVendors(selectAll). useCreateVendor->createVendor (code = input.code?.trim() || nextCode('vendor','VEN'); insertRow with id uid('ven_')). useUpdateVendor->updateVendor(updateRow patch). useDeleteVendor->deleteVendor(deleteRow). All mutations onSuccess invalidate qk.vendors.all. Errors via toUserMessage; delete catch default 'Delete failed — the vendor may be used by a subcontract.', save catch default 'Save failed'. createVendor accepts an explicit code (VendorCreateInput.code) which bypasses next_seq and can collide with the unique constraint — but the UI never exposes a code field, so a duplicate code is only reachable via a scripted/direct call.",
+  "cases": [
+    {
+      "key": "MSM-VENDORS-UI-001",
+      "name": "Vendors list renders with all columns and status badges",
+      "category": "UI",
+      "priority": "High",
+      "status": "Approved",
+      "objective": "Verify the vendors list page renders the header, search box, and table with Code, Name, GSTIN, Phone, Status, Actions columns and correct Active/Inactive badges.",
+      "precondition": "Logged in as an approved user (QA super-admin); at least one active and one inactive vendor exist in the current tenant.",
+      "testData": "",
+      "steps": [
+        "Navigate to /app/vendors.",
+        "Observe the page header 'Vendors' with subtitle 'Suppliers and subcontractors used by purchases and job work' and the 'Add Vendor' button.",
+        "Observe the search input with placeholder 'Search name, code, GSTIN…'.",
+        "Inspect the table header row and both an active-vendor and an inactive-vendor data row."
+      ],
+      "expectedResult": "Table shows columns Code (monospace), Name, GSTIN, Phone, Status, Actions. Empty GSTIN/Phone render as '—'. Active vendors show a green 'Active' badge; inactive vendors show a gray 'Inactive' badge. Each row has Edit (pencil) and Delete (trash) icon buttons; rows are ordered alphabetically by name.",
+      "labels": ["smoke", "regression"],
+      "destructive": false,
+      "automation": "Automated",
+      "automatedTest": "e2e/generated/vendors.spec.ts"
+    },
+    {
+      "key": "MSM-VENDORS-UI-002",
+      "name": "Loading skeleton and empty state display correctly",
+      "category": "UI",
+      "priority": "Normal",
+      "status": "Approved",
+      "objective": "Verify the TableSkeleton shows while loading and the EmptyState shows both when no vendors exist and when a search matches nothing (same UI branch).",
+      "precondition": "Logged in as an approved user (QA super-admin).",
+      "testData": "Search term unlikely to match, e.g. 'zzzznomatch'",
+      "steps": [
+        "Navigate to /app/vendors and observe the initial state before data resolves (throttle network if needed).",
+        "Once loaded, type 'zzzznomatch' into the search box.",
+        "Clear the search box."
+      ],
+      "expectedResult": "During load a table skeleton (8 rows x 5 cols) is shown. When no rows match the search, the EmptyState with the building icon, title 'No vendors' and description 'Add a supplier or subcontractor to use in purchases and job work.' is shown in place of the table (note: this is the same branch used when the tenant genuinely has no vendors). Clearing the search restores the list.",
+      "labels": ["regression"],
+      "destructive": false,
+      "automation": "Automated",
+      "automatedTest": "e2e/generated/vendors.spec.ts"
+    },
+    {
+      "key": "MSM-VENDORS-UI-003",
+      "name": "Add/Edit modal renders all fields and edit metadata",
+      "category": "UI",
+      "priority": "Normal",
+      "status": "Approved",
+      "objective": "Verify the VendorForm modal shows all input fields, autofocuses Name, and in edit mode shows the vendor code in the title and the last-updated timestamp.",
+      "precondition": "Logged in as an approved user (QA super-admin); at least one vendor exists.",
+      "testData": "",
+      "steps": [
+        "Click 'Add Vendor' and inspect the modal title, fields, focus, and footer buttons.",
+        "Cancel the modal, then click the Edit (pencil) icon on an existing vendor row.",
+        "Inspect the edit modal title, the 'Last updated' line, footer button, and that fields are prefilled."
+      ],
+      "expectedResult": "Add modal titled 'Add Vendor' with fields: Vendor Name (required, autofocused), GSTIN, Phone, Email, Status select (Active/Inactive), Address textarea, Notes textarea, and Cancel / 'Add vendor' buttons. Edit modal titled 'Edit VENxxx' shows a right-aligned 'Last updated <datetime>' line and a 'Save changes' button; all fields are prefilled with the vendor's stored values.",
+      "labels": ["regression"],
+      "destructive": false,
+      "automation": "Automated",
+      "automatedTest": "e2e/generated/vendors.spec.ts"
+    },
+    {
+      "key": "MSM-VENDORS-FUNC-001",
+      "name": "Create a new vendor with auto-generated code",
+      "category": "Functionality",
+      "priority": "Highest",
+      "status": "Approved",
+      "objective": "Verify a new vendor can be created, receives a server-minted VENxxx code, and appears in the list.",
+      "precondition": "Logged in as an approved user (QA super-admin).",
+      "testData": "Name='QA Test Vendor', GSTIN='29ABCDE1234F1Z5', Phone='9876543210', Email='qa@vendor.test', Address='1 Test Rd', Notes='created by QA', Status=Active",
+      "steps": [
+        "Click 'Add Vendor'.",
+        "Fill Name, GSTIN, Phone, Email, Address, Notes; keep Status = Active.",
+        "Click 'Add vendor'.",
+        "Locate the new vendor in the list (search by name if paginated)."
+      ],
+      "expectedResult": "A success toast 'Vendor added' appears, the modal closes, the list refreshes (qk.vendors.all invalidated), and the new vendor appears with an auto code in the VENxxx sequence and an 'Active' badge. Its GSTIN and Phone display the entered values.",
+      "labels": ["smoke", "regression"],
+      "destructive": true,
+      "automation": "Manual",
+      "automatedTest": ""
+    },
+    {
+      "key": "MSM-VENDORS-FUNC-002",
+      "name": "Edit an existing vendor updates fields and status",
+      "category": "Functionality",
+      "priority": "High",
+      "status": "Approved",
+      "objective": "Verify editing a vendor persists changed fields including toggling Active to Inactive, and refreshes the Last updated timestamp.",
+      "precondition": "Logged in as an approved user (QA super-admin); a disposable QA vendor exists.",
+      "testData": "New Phone='9000000001', Status=Inactive",
+      "steps": [
+        "Click the Edit (pencil) icon on the QA vendor and note the current 'Last updated' time.",
+        "Change Phone and set Status to Inactive.",
+        "Click 'Save changes'.",
+        "Re-open the same vendor's edit modal."
+      ],
+      "expectedResult": "Toast 'Vendor updated' appears, modal closes, the row now shows the new phone and a gray 'Inactive' badge. Re-opening shows the persisted values and a newer 'Last updated' timestamp (updated_at bumped server-side).",
+      "labels": ["regression"],
+      "destructive": true,
+      "automation": "Manual",
+      "automatedTest": ""
+    },
+    {
+      "key": "MSM-VENDORS-FUNC-003",
+      "name": "Search filters vendors by code, name, GSTIN, and phone",
+      "category": "Functionality",
+      "priority": "High",
+      "status": "Approved",
+      "objective": "Verify the client-side search filters the list (case-insensitive) across the combined code+name+GSTIN+phone string, and results stay alphabetically sorted by name.",
+      "precondition": "Logged in as an approved user (QA super-admin); multiple vendors with distinct names, codes, GSTINs and phones exist.",
+      "testData": "A partial name (mixed case), a VEN code fragment, a GSTIN fragment (mixed case), a phone-number fragment",
+      "steps": [
+        "On /app/vendors type a partial vendor name in mixed case into the search box; observe results.",
+        "Clear and type a partial VEN code (e.g. 'ven0' / 'VEN0').",
+        "Clear and type a GSTIN fragment in lowercase.",
+        "Clear and type a partial phone number."
+      ],
+      "expectedResult": "Each search narrows the list to only matching vendors; matching is case-insensitive (the whole code/name/gstin/phone string is compared lowercased). Displayed rows stay sorted alphabetically by name. Clearing the box restores the full list. Note: matching is against the concatenated string, so a query spanning a boundary (e.g. code then a space then start of name) will also match.",
+      "labels": ["regression"],
+      "destructive": false,
+      "automation": "Automated",
+      "automatedTest": "e2e/generated/vendors.spec.ts"
+    },
+    {
+      "key": "MSM-VENDORS-FUNC-004",
+      "name": "Delete an unused vendor after confirmation",
+      "category": "Functionality",
+      "priority": "High",
+      "status": "Approved",
+      "objective": "Verify deleting an unused vendor prompts for confirmation and removes it from the list on confirm, and leaves it intact on cancel.",
+      "precondition": "Logged in as an approved user (QA super-admin); a disposable QA vendor NOT referenced by any subcontract order/doc exists.",
+      "testData": "",
+      "steps": [
+        "Click the Delete (trash) icon on the disposable QA vendor.",
+        "In the confirm dialog (title 'Delete vendor', message 'Delete \"<name>\"?'), click Cancel and verify no deletion.",
+        "Click Delete again and confirm."
+      ],
+      "expectedResult": "Cancelling closes the dialog and leaves the vendor intact. Confirming shows toast 'Vendor deleted' and removes the vendor from the list (qk.vendors.all invalidated).",
+      "labels": ["regression"],
+      "destructive": true,
+      "automation": "Manual",
+      "automatedTest": ""
+    },
+    {
+      "key": "MSM-VENDORS-FUNC-005",
+      "name": "Pagination navigates multi-page vendor list",
+      "category": "Functionality",
+      "priority": "Low",
+      "status": "Approved",
+      "objective": "Verify pagination controls page through the vendor list when rows exceed one page and recompute against the filtered set.",
+      "precondition": "Logged in as an approved user (QA super-admin); enough vendors exist to exceed one page.",
+      "testData": "",
+      "steps": [
+        "Navigate to /app/vendors.",
+        "Use the pagination control to move to the next page and back.",
+        "Apply a search filter and observe pagination adjusts to the filtered set."
+      ],
+      "expectedResult": "Pagination shows correct page counts, next/previous navigation works, and applying a filter recomputes the paged set (resetting to a valid page) correctly.",
+      "labels": ["regression"],
+      "destructive": false,
+      "automation": "Automated",
+      "automatedTest": "e2e/generated/vendors.spec.ts"
+    },
+    {
+      "key": "MSM-VENDORS-VAL-001",
+      "name": "Vendor name is required on create/edit",
+      "category": "Validation",
+      "priority": "Highest",
+      "status": "Approved",
+      "objective": "Verify submitting the form with an empty or whitespace-only name is blocked with a toast error and no record is written.",
+      "precondition": "Logged in as an approved user (QA super-admin).",
+      "testData": "Name='' and Name='   ' (spaces only)",
+      "steps": [
+        "Click 'Add Vendor', leave Name blank, fill other fields, click 'Add vendor'.",
+        "Set Name to spaces only and click 'Add vendor' again.",
+        "Note the vendor count before and after."
+      ],
+      "expectedResult": "Both attempts show toast error 'Vendor name is required', the modal stays open, and no vendor is created (the list count is unchanged). This applies identically on the edit form.",
+      "labels": ["regression", "negative"],
+      "destructive": false,
+      "automation": "Automated",
+      "automatedTest": "e2e/generated/vendors.spec.ts"
+    },
+    {
+      "key": "MSM-VENDORS-VAL-002",
+      "name": "Optional fields trimmed and blanks stored as null",
+      "category": "Validation",
+      "priority": "Normal",
+      "status": "Approved",
+      "objective": "Verify Name and optional fields (GSTIN/Phone/Email/Address/Notes) are trimmed on save and, when blank/whitespace-only, are sent as undefined (stored NULL, displayed as '—').",
+      "precondition": "Logged in as an approved user (QA super-admin).",
+      "testData": "Name='  Trim Vendor  ', GSTIN='  ' (spaces only), Phone='  9998887776  '",
+      "steps": [
+        "Create a vendor with a padded Name, whitespace-only GSTIN, and a padded Phone (leave Email/Address/Notes blank).",
+        "Open the created vendor's row in the list and its edit modal to inspect saved values."
+      ],
+      "expectedResult": "Name is stored trimmed ('Trim Vendor'), Phone is stored trimmed ('9998887776'), and the whitespace-only GSTIN is saved as NULL and rendered as '—' in the list. Blank Email/Address/Notes are also stored NULL. No leading/trailing whitespace persists in any field.",
+      "labels": ["regression"],
+      "destructive": true,
+      "automation": "Manual",
+      "automatedTest": ""
+    },
+    {
+      "key": "MSM-VENDORS-VAL-003",
+      "name": "No format validation on GSTIN/email/phone (documented gap)",
+      "category": "Validation",
+      "priority": "Low",
+      "status": "Approved",
+      "objective": "Document that the form performs no client-side format validation on GSTIN, email, or phone (no Zod schema); malformed values are accepted and saved.",
+      "precondition": "Logged in as an approved user (QA super-admin).",
+      "testData": "GSTIN='not-a-gstin', Email='invalid-email', Phone='abc123'",
+      "steps": [
+        "Create a vendor with a valid Name and clearly malformed GSTIN, Email, and Phone.",
+        "Save and inspect the stored values in the list and edit modal."
+      ],
+      "expectedResult": "The vendor saves successfully with the malformed values and no validation error is shown. This confirms the current no-format-validation behavior (unlike CompanyForm which uses RHF+Zod); flag as a potential enhancement.",
+      "labels": ["regression", "known-gap"],
+      "destructive": true,
+      "automation": "Manual",
+      "automatedTest": ""
+    },
+    {
+      "key": "MSM-VENDORS-API-001",
+      "name": "Vendor code auto-numbering is sequential and unique",
+      "category": "API",
+      "priority": "High",
+      "status": "Approved",
+      "objective": "Verify createVendor mints codes from the server next_seq counter so consecutively created vendors get sequential, zero-padded, unique VENxxx codes.",
+      "precondition": "Logged in as an approved user (QA super-admin); note the current highest VEN code in the tenant.",
+      "testData": "Two vendors created back-to-back",
+      "steps": [
+        "Create vendor A, note its code.",
+        "Create vendor B immediately after, note its code.",
+        "Compare the two codes and confirm uniqueness against existing codes."
+      ],
+      "expectedResult": "Codes follow VEN + zero-padded width-3 sequence (e.g. VEN010, VEN011), increment by one, and are unique — confirming server-side atomic numbering via the next_seq RPC (no client-side sequence race).",
+      "labels": ["regression", "api"],
+      "destructive": true,
+      "automation": "Manual",
+      "automatedTest": ""
+    },
+    {
+      "key": "MSM-VENDORS-API-002",
+      "name": "Save/delete failures surface friendly error toasts",
+      "category": "API",
+      "priority": "Normal",
+      "status": "Approved",
+      "objective": "Verify network/constraint errors from create/update/delete are caught and shown via toUserMessage as friendly toasts rather than crashing the page.",
+      "precondition": "Logged in as an approved user (QA super-admin); ability to simulate a failed request (e.g. offline in DevTools).",
+      "testData": "",
+      "steps": [
+        "Open DevTools and set the network to offline (or block the Supabase request).",
+        "Attempt to add or save a vendor with a valid name.",
+        "Observe the toast and modal state, then re-enable the network and retry."
+      ],
+      "expectedResult": "The mutation fails gracefully with an error toast (the mapped message or the fallback 'Save failed'); the modal remains open and no client-side crash occurs (no __next_error__ page). Restoring the network allows a successful retry.",
+      "labels": ["regression", "negative", "api"],
+      "destructive": false,
+      "automation": "Manual",
+      "automatedTest": ""
+    },
+    {
+      "key": "MSM-VENDORS-DB-001",
+      "name": "Deleting a vendor referenced by a subcontract is blocked (FK)",
+      "category": "Database",
+      "priority": "Highest",
+      "status": "Approved",
+      "objective": "Verify the DB foreign key from subcontract_orders/subcontract_docs prevents deleting an in-use vendor, and the UI shows the subcontract hint toast without removing the row.",
+      "precondition": "Logged in as an approved user (QA super-admin); a vendor referenced by at least one subcontract order/doc exists.",
+      "testData": "",
+      "steps": [
+        "Click Delete on the referenced vendor and confirm the dialog.",
+        "Observe the resulting toast and that the vendor remains in the list."
+      ],
+      "expectedResult": "The delete is rejected by the DB FK constraint; the caught error shows the fallback toast 'Delete failed — the vendor may be used by a subcontract.' and the vendor is NOT removed from the list.",
+      "labels": ["regression", "data-integrity"],
+      "destructive": true,
+      "automation": "Manual",
+      "automatedTest": ""
+    },
+    {
+      "key": "MSM-VENDORS-DB-002",
+      "name": "Vendor code uniqueness enforced by DB constraint",
+      "category": "Database",
+      "priority": "High",
+      "status": "Approved",
+      "objective": "Verify the per-tenant vendors_code_key unique constraint prevents duplicate codes when an explicit already-existing code is supplied (a path only reachable via scripted createVendor input.code or direct SQL, since the UI has no code field).",
+      "precondition": "Logged in as an approved user (QA super-admin) with DB/console or script access; note an existing vendor code in the tenant.",
+      "testData": "An explicit code equal to an existing VENxxx passed to createVendor.code, or a direct SQL insert with a duplicate code",
+      "steps": [
+        "Invoke createVendor (scripted) with a valid name and a code equal to an existing vendor's code, OR run a direct SQL insert with a duplicate code in the same tenant.",
+        "Observe the result."
+      ],
+      "expectedResult": "The insert is rejected by the unique constraint (vendors_code_key, scoped per tenant); no duplicate-code vendor is created and an error is surfaced. Note: the normal UI create path cannot reach this because it always mints a fresh code via next_seq.",
+      "labels": ["regression", "data-integrity"],
+      "destructive": true,
+      "automation": "Manual",
+      "automatedTest": ""
+    },
+    {
+      "key": "MSM-VENDORS-SEC-001",
+      "name": "Unauthenticated access to /app/vendors is gated",
+      "category": "Security",
+      "priority": "Highest",
+      "status": "Approved",
+      "objective": "Verify the authenticated portal shell (app/app/layout.tsx) blocks access to /app/vendors without a valid session, so no vendor data is exposed.",
+      "precondition": "No active session (logged out / cleared storage).",
+      "testData": "",
+      "steps": ["Log out / clear the session.", "Navigate directly to /app/vendors."],
+      "expectedResult": "The app shell redirects to login (or renders the auth gate) and does not render the vendor list; no vendor rows are fetched or exposed to an unauthenticated user.",
+      "labels": ["security", "regression"],
+      "destructive": false,
+      "automation": "Automated",
+      "automatedTest": "e2e/generated/vendors.spec.ts"
+    },
+    {
+      "key": "MSM-VENDORS-SEC-002",
+      "name": "RLS restricts vendor rows to approved users and their tenant",
+      "category": "Security",
+      "priority": "High",
+      "status": "Approved",
+      "objective": "Verify the approved_all RLS policy (is_app_approved) and tenant_id enforcement prevent unapproved users or cross-tenant reads/writes of vendors, given there is no client-side RBAC gate.",
+      "precondition": "Access to a pending (unapproved) account and, if available, a second-tenant account, plus an approved super-admin baseline.",
+      "testData": "",
+      "steps": [
+        "As a pending/unapproved authenticated user, attempt to load /app/vendors or call the vendors select directly.",
+        "If a second tenant is available, as that tenant's user attempt to read/update a vendor belonging to tenant #1 (e.g. by id).",
+        "Compare against the approved super-admin who owns the tenant's vendors."
+      ],
+      "expectedResult": "Unapproved users receive no vendor rows / are blocked by RLS on all ops. Cross-tenant reads and writes return nothing / are rejected (tenant isolation holds). Only approved users of the owning tenant can read and modify their vendors — confirming the module relies entirely on RLS since the UI applies no RBAC gate.",
+      "labels": ["security", "regression", "multi-tenant"],
+      "destructive": false,
+      "automation": "Automated",
+      "automatedTest": "e2e/generated/vendors.spec.ts"
+    }
+  ]
+}

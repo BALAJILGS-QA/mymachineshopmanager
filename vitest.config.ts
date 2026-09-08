@@ -9,7 +9,11 @@ export default defineConfig({
     alias: { '@': path.resolve(__dirname, './src') },
   },
   test: {
+    // Default env is node (fast); component tests opt into jsdom per-file via a
+    // `// @vitest-environment jsdom` docblock. setup registers jest-dom matchers
+    // and React Testing Library auto-cleanup.
     environment: 'node',
+    setupFiles: ['./src/test/setup.ts'],
     include: ['src/**/*.{test,spec}.{ts,tsx}'],
     exclude: ['node_modules', 'dist', 'e2e'],
     coverage: {
