@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState } from 'react'
+import { useEffect, useId, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -17,7 +17,6 @@ import {
 } from 'lucide-react'
 import { clsx } from 'clsx'
 import { useAuth } from './auth'
-import { Captcha, type CaptchaHandle } from './Captcha'
 import { useToast } from '@/components/ui/Toast'
 import { Logo } from '@/components/ui/Logo'
 import { BRAND } from '@/lib/brand'
@@ -164,8 +163,6 @@ function SignInForm({ supabaseMode }: { supabaseMode: boolean }) {
   const { login } = useAuth()
   const toast = useToast()
   const idLabel = supabaseMode ? 'Email' : 'Username or Email'
-  const [captchaToken, setCaptchaToken] = useState<string | null>(null)
-  const captchaRef = useRef<CaptchaHandle>(null)
   const {
     register,
     handleSubmit,
@@ -177,15 +174,13 @@ function SignInForm({ supabaseMode }: { supabaseMode: boolean }) {
 
   const onSubmit = handleSubmit(async (values) => {
     try {
-      const res = await login(values.loginId, values.password, captchaToken ?? undefined)
+      const res = await login(values.loginId, values.password)
       if (!res.ok) {
         toast.error(res.message || 'Invalid credentials')
-        captchaRef.current?.reset()
       }
       // On success the session effect (in AuthForm) redirects to /app.
     } catch {
       toast.error('Request failed. Please check your connection and try again.')
-      captchaRef.current?.reset()
     }
   })
 
@@ -216,12 +211,7 @@ function SignInForm({ supabaseMode }: { supabaseMode: boolean }) {
           {...register('password')}
         />
       </IconField>
-      <Captcha ref={captchaRef} onToken={setCaptchaToken} />
-      <button
-        type="submit"
-        className="btn-primary w-full py-2.5"
-        disabled={isSubmitting || !captchaToken}
-      >
+      <button type="submit" className="btn-primary w-full py-2.5" disabled={isSubmitting}>
         {isSubmitting && <Loader2 size={16} className="animate-spin" />}
         Sign in
       </button>
@@ -232,8 +222,6 @@ function SignInForm({ supabaseMode }: { supabaseMode: boolean }) {
 function SignUpForm({ onSubmitted }: { onSubmitted: (fullName: string) => void }) {
   const { register: registerUser } = useAuth()
   const toast = useToast()
-  const [captchaToken, setCaptchaToken] = useState<string | null>(null)
-  const captchaRef = useRef<CaptchaHandle>(null)
   const {
     register,
     handleSubmit,
@@ -253,16 +241,14 @@ function SignUpForm({ onSubmitted }: { onSubmitted: (fullName: string) => void }
 
   const onSubmit = handleSubmit(async (values) => {
     try {
-      const res = await registerUser({ ...values, captchaToken: captchaToken ?? undefined })
+      const res = await registerUser(values)
       if (!res.ok) {
         toast.error(res.message || 'Could not submit registration')
-        captchaRef.current?.reset()
       } else {
         onSubmitted(values.fullName)
       }
     } catch {
       toast.error('Request failed. Please check your connection and try again.')
-      captchaRef.current?.reset()
     }
   })
 
@@ -306,12 +292,7 @@ function SignUpForm({ onSubmitted }: { onSubmitted: (fullName: string) => void }
         />
       </IconField>
       <p className="text-2xs text-slate-500">At least 6 characters.</p>
-      <Captcha ref={captchaRef} onToken={setCaptchaToken} />
-      <button
-        type="submit"
-        className="btn-primary w-full py-2.5"
-        disabled={isSubmitting || !captchaToken}
-      >
+      <button type="submit" className="btn-primary w-full py-2.5" disabled={isSubmitting}>
         {isSubmitting && <Loader2 size={16} className="animate-spin" />}
         Submit registration
       </button>

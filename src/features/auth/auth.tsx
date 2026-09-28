@@ -40,8 +40,6 @@ export interface RegisterInput {
   phone: string
   address: string
   gstin: string
-  /** Cloudflare Turnstile token, verified server-side by Supabase (signUp). */
-  captchaToken?: string
 }
 
 interface AuthResult {
@@ -55,7 +53,7 @@ interface AuthApi {
   loading: boolean
   supabaseMode: boolean
   isSuperAdmin: boolean
-  login: (username: string, password: string, captchaToken?: string) => Promise<AuthResult>
+  login: (username: string, password: string) => Promise<AuthResult>
   register: (input: RegisterInput) => Promise<AuthResult>
   logout: () => void
   changePassword: (current: string, next: string) => Promise<boolean>
@@ -197,13 +195,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       supabaseMode,
       isSuperAdmin: session?.role === 'SuperAdmin',
 
-      async login(username, password, captchaToken) {
+      async login(username, password) {
         if (supabaseMode) {
           const email = username.trim()
           const { error } = await supabase!.auth.signInWithPassword({
             email,
             password,
-            options: { captchaToken },
           })
           if (error) return { ok: false, message: 'Invalid email or password' }
           if (isSuperAdminEmail(email)) return { ok: true }
@@ -277,7 +274,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             const { error } = await supabase!.auth.signUp({
               email,
               password: input.password,
-              options: { captchaToken: input.captchaToken },
             })
             if (error) return { ok: false, message: error.message }
             // Record the applicant's profile via a SECURITY DEFINER RPC — app_state
