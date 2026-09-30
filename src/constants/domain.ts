@@ -32,16 +32,22 @@ export const JOB_STATUSES = [
 export const PAYMENT_METHODS = [
   'Cash',
   'Bank Transfer',
+  'NEFT',
+  'RTGS',
+  'IMPS',
   'UPI',
   'Cheque',
   'Other',
 ] as const satisfies readonly PaymentMethod[]
 
+// 'Settled' is a system-derived closure (payment + deductions); it is not a
+// user-selectable status in status dropdowns, but is a valid stored value.
 export const INVOICE_STATUSES = [
   'Draft',
   'Unpaid',
   'Partially Paid',
   'Paid',
+  'Settled',
   'Cancelled',
 ] as const satisfies readonly InvoiceStatus[]
 

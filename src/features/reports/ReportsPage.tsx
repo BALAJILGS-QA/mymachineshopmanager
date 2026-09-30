@@ -10,6 +10,7 @@ import {
 import { useJobs } from '@/features/jobs/hooks/useJobs'
 import { useInvoices } from '@/features/invoices/hooks/useInvoices'
 import { usePayments } from '@/features/payments/hooks/usePayments'
+import { useAllocations, useDeductions } from '@/features/payments/hooks/useSettlements'
 import { useExpenses } from '@/features/expenses/hooks/useExpenses'
 import {
   useMaterials,
@@ -26,40 +27,101 @@ import { Pagination, usePagination } from '@/components/common/Pagination'
 import { useCompanyName, useMaterialName } from '@/features/shared/lookups'
 
 type ReportKey =
-  'jobs' | 'stock' | 'movement' | 'invoices' | 'payments' | 'expenses' | 'outstanding'
+  | 'jobs'
+  | 'stock'
+  | 'movement'
+  | 'invoices'
+  | 'payments'
+  | 'expenses'
+  | 'outstanding'
+  | 'settlement'
+  | 'ageing'
+  | 'deductions'
+  | 'unknownDeductions'
+  | 'customerOutstanding'
 
 const REPORTS: { key: ReportKey; label: string }[] = [
   { key: 'jobs', label: 'Job Order Report' },
   { key: 'stock', label: 'Material Stock Report' },
   { key: 'movement', label: 'Material Movement' },
   { key: 'invoices', label: 'Invoice Report' },
-  { key: 'payments', label: 'Payment Report' },
+  { key: 'payments', label: 'Payment Register' },
   { key: 'expenses', label: 'Expense Report' },
   { key: 'outstanding', label: 'Outstanding Report' },
+  { key: 'settlement', label: 'Invoice Settlement Report' },
+  { key: 'ageing', label: 'Receivable Ageing' },
+  { key: 'deductions', label: 'Deduction Report' },
+  { key: 'unknownDeductions', label: 'Unknown Deduction Report' },
+  { key: 'customerOutstanding', label: 'Customer Outstanding Report' },
 ]
+
+// Ageing buckets by days since invoice date (no due-date field exists on
+// invoices, so invoice date is the reference — see note in the report header).
+function ageBucket(days: number): string {
+  if (days <= 30) return '0–30'
+  if (days <= 60) return '31–60'
+  if (days <= 90) return '61–90'
+  if (days <= 180) return '91–180'
+  return '180+'
+}
 
 export function ReportsPage() {
   const { data: jobs = [] } = useJobs()
   const { data: materials = [] } = useMaterials()
   const { data: invoices = [] } = useInvoices()
   const { data: payments = [] } = usePayments()
+  const { data: allocations = [] } = useAllocations()
+  const { data: deductions = [] } = useDeductions()
   const { data: expenses = [] } = useExpenses()
   const { data: receipts = [] } = useReceipts()
   const { data: issues = [] } = useIssues()
   const { data: adjustments = [] } = useAdjustments()
   const db = useMemo(
-    () => ({ jobs, materials, invoices, payments, expenses, receipts, issues, adjustments }),
-    [jobs, materials, invoices, payments, expenses, receipts, issues, adjustments],
+    () => ({
+      jobs,
+      materials,
+      invoices,
+      payments,
+      allocations,
+      deductions,
+      expenses,
+      receipts,
+      issues,
+      adjustments,
+    }),
+    [
+      jobs,
+      materials,
+      invoices,
+      payments,
+      allocations,
+      deductions,
+      expenses,
+      receipts,
+      issues,
+      adjustments,
+    ],
   )
   const companyName = useCompanyName()
   const materialName = useMaterialName()
+  const invoiceNo = useMemo(() => {
+    const m = new Map(invoices.map((i) => [i.id, i.invoiceNo]))
+    return (id?: string) => (id ? (m.get(id) ?? '—') : '—')
+  }, [invoices])
 
   const [report, setReport] = useState<ReportKey>('jobs')
   const [company, setCompany] = useState('')
   const [from, setFrom] = useState('')
   const [to, setTo] = useState('')
 
-  const usesDate = report !== 'stock' && report !== 'outstanding'
+  const dateless: ReportKey[] = [
+    'stock',
+    'outstanding',
+    'settlement',
+    'ageing',
+    'customerOutstanding',
+  ]
+  const usesDate = !dateless.includes(report)
 
   const { columns, rows, footer } = useMemo(() => {
     const matchCompany = (cid?: string) => !company || cid === company
@@ -154,13 +216,14 @@ export function ReportsPage() {
       case 'invoices': {
         const rows = db.invoices
           .filter((i) => matchCompany(i.companyId) && inRange(i.date, from, to))
-          .map((i) => ({ i, c: computeInvoice(i, db.payments) }))
+          .map((i) => ({ i, c: computeInvoice(i, db.payments, db.allocations, db.deductions) }))
         const cols: XlsxColumn<(typeof rows)[number]>[] = [
           { header: 'Invoice', value: (r) => r.i.invoiceNo },
           { header: 'Date', value: (r) => r.i.date },
           { header: 'Company', value: (r) => companyName(r.i.companyId) },
           { header: 'Total', value: (r) => r.c.total },
           { header: 'Paid', value: (r) => r.c.paid },
+          { header: 'Deductions', value: (r) => r.c.knownDeductions + r.c.unknownDeduction },
           { header: 'Outstanding', value: (r) => r.c.outstanding },
           { header: 'Status', value: (r) => r.i.status },
         ]
@@ -168,18 +231,37 @@ export function ReportsPage() {
         return { columns: cols, rows, footer: `Invoiced ${currency(total)}` }
       }
       case 'payments': {
-        const rows = db.payments.filter(
-          (p) => matchCompany(p.companyId) && inRange(p.date, from, to),
-        )
+        const allocByPayment = new Map<string, number>()
+        for (const a of db.allocations)
+          allocByPayment.set(a.paymentId, (allocByPayment.get(a.paymentId) ?? 0) + a.amount)
+        const dedByPayment = new Map<string, { known: number; unknown: number }>()
+        for (const d of db.deductions) {
+          const e = dedByPayment.get(d.paymentId) ?? { known: 0, unknown: 0 }
+          if (d.deductionType === 'Unidentified') e.unknown += d.amount
+          else e.known += d.amount
+          dedByPayment.set(d.paymentId, e)
+        }
+        const rows = db.payments
+          .filter((p) => matchCompany(p.companyId) && inRange(p.date, from, to))
+          .map((p) => {
+            const allocated = allocByPayment.get(p.id) ?? (p.invoiceId ? p.amount : 0)
+            const ded = dedByPayment.get(p.id) ?? { known: 0, unknown: 0 }
+            const advance = Math.max(0, p.amount - allocated)
+            return { p, allocated, known: ded.known, unknown: ded.unknown, advance }
+          })
         const cols: XlsxColumn<(typeof rows)[number]>[] = [
-          { header: 'Payment', value: (p) => p.paymentNo },
-          { header: 'Date', value: (p) => p.date },
-          { header: 'Company', value: (p) => companyName(p.companyId) },
-          { header: 'Amount', value: (p) => p.amount },
-          { header: 'Method', value: (p) => p.method },
-          { header: 'Reference', value: (p) => p.reference ?? '' },
+          { header: 'Payment', value: (r) => r.p.paymentNo },
+          { header: 'Date', value: (r) => r.p.date },
+          { header: 'Company', value: (r) => companyName(r.p.companyId) },
+          { header: 'Method', value: (r) => r.p.method },
+          { header: 'UTR / Ref', value: (r) => r.p.reference ?? '' },
+          { header: 'Amount', value: (r) => r.p.amount },
+          { header: 'Allocated', value: (r) => r.allocated },
+          { header: 'Known Ded', value: (r) => r.known },
+          { header: 'Unknown Ded', value: (r) => r.unknown },
+          { header: 'Advance', value: (r) => r.advance },
         ]
-        const total = rows.reduce((a, r) => a + r.amount, 0)
+        const total = rows.reduce((a, r) => a + r.p.amount, 0)
         return { columns: cols, rows, footer: `Received ${currency(total)}` }
       }
       case 'expenses': {
@@ -199,10 +281,10 @@ export function ReportsPage() {
       case 'outstanding': {
         const rows = db.invoices
           .filter(
-            (i) => matchCompany(i.companyId) && ['Unpaid', 'Partially Paid'].includes(i.status),
+            (i) => matchCompany(i.companyId) && i.status !== 'Draft' && i.status !== 'Cancelled',
           )
-          .map((i) => ({ i, c: computeInvoice(i, db.payments) }))
-          .filter((r) => r.c.outstanding > 0)
+          .map((i) => ({ i, c: computeInvoice(i, db.payments, db.allocations, db.deductions) }))
+          .filter((r) => r.c.outstanding > 0.005)
         const cols: XlsxColumn<(typeof rows)[number]>[] = [
           { header: 'Invoice', value: (r) => r.i.invoiceNo },
           { header: 'Company', value: (r) => companyName(r.i.companyId) },
@@ -214,18 +296,181 @@ export function ReportsPage() {
         const total = rows.reduce((a, r) => a + r.c.outstanding, 0)
         return { columns: cols, rows, footer: `Total outstanding ${currency(total)}` }
       }
+      case 'settlement': {
+        // Per-invoice settlement breakdown incl. per-type deduction totals.
+        const dedFor = (invId: string, type: string) =>
+          db.deductions
+            .filter((d) => d.invoiceId === invId && d.deductionType === type)
+            .reduce((s, d) => s + d.amount, 0)
+        const otherFor = (invId: string) =>
+          db.deductions
+            .filter(
+              (d) =>
+                d.invoiceId === invId &&
+                !['TDS', 'Transportation', 'Unidentified'].includes(d.deductionType),
+            )
+            .reduce((s, d) => s + d.amount, 0)
+        const rows = db.invoices
+          .filter(
+            (i) => matchCompany(i.companyId) && i.status !== 'Draft' && i.status !== 'Cancelled',
+          )
+          .map((i) => ({ i, c: computeInvoice(i, db.payments, db.allocations, db.deductions) }))
+        const cols: XlsxColumn<(typeof rows)[number]>[] = [
+          { header: 'Invoice', value: (r) => r.i.invoiceNo },
+          { header: 'Company', value: (r) => companyName(r.i.companyId) },
+          { header: 'Total', value: (r) => r.c.total },
+          { header: 'Paid', value: (r) => r.c.paid },
+          { header: 'TDS', value: (r) => dedFor(r.i.id, 'TDS') },
+          { header: 'Transport', value: (r) => dedFor(r.i.id, 'Transportation') },
+          { header: 'Other Ded', value: (r) => otherFor(r.i.id) },
+          { header: 'Unknown Ded', value: (r) => r.c.unknownDeduction },
+          { header: 'Outstanding', value: (r) => r.c.outstanding },
+          { header: 'Status', value: (r) => r.i.status },
+        ]
+        const total = rows.reduce((a, r) => a + r.c.outstanding, 0)
+        return { columns: cols, rows, footer: `Outstanding ${currency(total)}` }
+      }
+      case 'ageing': {
+        const todayMs = Date.now()
+        const rows = db.invoices
+          .filter(
+            (i) => matchCompany(i.companyId) && i.status !== 'Draft' && i.status !== 'Cancelled',
+          )
+          .map((i) => {
+            const c = computeInvoice(i, db.payments, db.allocations, db.deductions)
+            const days = Math.max(0, Math.floor((todayMs - new Date(i.date).getTime()) / 86400000))
+            return { i, c, days, bucket: ageBucket(days) }
+          })
+          .filter((r) => r.c.outstanding > 0.005)
+          .sort((a, b) => b.days - a.days)
+        const cols: XlsxColumn<(typeof rows)[number]>[] = [
+          { header: 'Invoice', value: (r) => r.i.invoiceNo },
+          { header: 'Company', value: (r) => companyName(r.i.companyId) },
+          { header: 'Date', value: (r) => r.i.date },
+          { header: 'Outstanding', value: (r) => r.c.outstanding },
+          { header: 'Age (days)', value: (r) => r.days },
+          { header: 'Bucket', value: (r) => r.bucket },
+        ]
+        const total = rows.reduce((a, r) => a + r.c.outstanding, 0)
+        return { columns: cols, rows, footer: `Outstanding ${currency(total)}` }
+      }
+      case 'deductions': {
+        const rows = db.deductions
+          .map((d) => ({ d, p: db.payments.find((pp) => pp.id === d.paymentId) }))
+          .filter(({ p }) => matchCompany(p?.companyId) && (!p || inRange(p.date, from, to)))
+        const cols: XlsxColumn<(typeof rows)[number]>[] = [
+          { header: 'Payment', value: (r) => r.p?.paymentNo ?? '—' },
+          { header: 'Date', value: (r) => r.p?.date ?? '' },
+          { header: 'Company', value: (r) => (r.p ? companyName(r.p.companyId) : '—') },
+          { header: 'Invoice', value: (r) => invoiceNo(r.d.invoiceId) },
+          { header: 'Type', value: (r) => r.d.deductionType },
+          { header: 'Calc', value: (r) => r.d.calcType },
+          { header: 'Rate', value: (r) => r.d.rate ?? '' },
+          { header: 'Amount', value: (r) => r.d.amount },
+          { header: 'Remarks', value: (r) => r.d.remarks ?? '' },
+        ]
+        const total = rows.reduce((a, r) => a + r.d.amount, 0)
+        return { columns: cols, rows, footer: `Deductions ${currency(total)}` }
+      }
+      case 'unknownDeductions': {
+        const todayMs = Date.now()
+        const rows = db.deductions
+          .filter((d) => d.deductionType === 'Unidentified')
+          .map((d) => ({ d, p: db.payments.find((pp) => pp.id === d.paymentId) }))
+          .filter(({ p }) => matchCompany(p?.companyId) && (!p || inRange(p.date, from, to)))
+          .map(({ d, p }) => {
+            const days = p
+              ? Math.max(0, Math.floor((todayMs - new Date(p.date).getTime()) / 86400000))
+              : 0
+            return { d, p, days }
+          })
+          .sort((a, b) => b.days - a.days)
+        const cols: XlsxColumn<(typeof rows)[number]>[] = [
+          { header: 'Payment', value: (r) => r.p?.paymentNo ?? '—' },
+          { header: 'Company', value: (r) => (r.p ? companyName(r.p.companyId) : '—') },
+          { header: 'Invoice', value: (r) => invoiceNo(r.d.invoiceId) },
+          { header: 'Amount', value: (r) => r.d.amount },
+          { header: 'Payment Date', value: (r) => r.p?.date ?? '' },
+          { header: 'Age (days)', value: (r) => r.days },
+          { header: 'Remarks', value: (r) => r.d.remarks ?? '' },
+        ]
+        const total = rows.reduce((a, r) => a + r.d.amount, 0)
+        return { columns: cols, rows, footer: `Unknown difference ${currency(total)} — follow up` }
+      }
+      case 'customerOutstanding': {
+        const byCompany = new Map<
+          string,
+          { count: number; value: number; paid: number; deductions: number; outstanding: number }
+        >()
+        for (const i of db.invoices) {
+          if (i.status === 'Draft' || i.status === 'Cancelled') continue
+          if (!matchCompany(i.companyId)) continue
+          const c = computeInvoice(i, db.payments, db.allocations, db.deductions)
+          const e = byCompany.get(i.companyId) ?? {
+            count: 0,
+            value: 0,
+            paid: 0,
+            deductions: 0,
+            outstanding: 0,
+          }
+          e.count += 1
+          e.value += c.total
+          e.paid += c.paid
+          e.deductions += c.knownDeductions + c.unknownDeduction
+          e.outstanding += Math.max(0, c.outstanding)
+          byCompany.set(i.companyId, e)
+        }
+        const rows = [...byCompany.entries()]
+          .map(([companyId, e]) => ({ companyId, ...e }))
+          .sort((a, b) => b.outstanding - a.outstanding)
+        const cols: XlsxColumn<(typeof rows)[number]>[] = [
+          { header: 'Company', value: (r) => companyName(r.companyId) },
+          { header: 'Invoices', value: (r) => r.count },
+          { header: 'Invoice Value', value: (r) => r.value },
+          { header: 'Paid', value: (r) => r.paid },
+          { header: 'Deductions', value: (r) => r.deductions },
+          { header: 'Outstanding', value: (r) => r.outstanding },
+        ]
+        const total = rows.reduce((a, r) => a + r.outstanding, 0)
+        return { columns: cols, rows, footer: `Total outstanding ${currency(total)}` }
+      }
     }
-  }, [report, company, from, to, db, companyName, materialName])
+    // `db` carries materials/receipts/issues/adjustments; store is derived from them.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [report, company, from, to, db, companyName, materialName, invoiceNo])
 
   const pg = usePagination(rows as unknown[])
 
   function isMoney(header: string) {
-    return ['Total', 'Paid', 'Outstanding', 'Amount', 'Value'].includes(header)
+    return [
+      'Total',
+      'Paid',
+      'Outstanding',
+      'Amount',
+      'Value',
+      'Invoice Value',
+      'Deductions',
+      'Allocated',
+      'Known Ded',
+      'Unknown Ded',
+      'Advance',
+      'TDS',
+      'Transport',
+      'Other Ded',
+    ].includes(header)
   }
   function isQty(header: string) {
-    return ['Ordered', 'Completed', 'Pending', 'Received', 'Issued', 'Balance', 'Qty'].includes(
-      header,
-    )
+    return [
+      'Ordered',
+      'Completed',
+      'Pending',
+      'Received',
+      'Issued',
+      'Balance',
+      'Qty',
+      'Invoices',
+      'Age (days)',
+    ].includes(header)
   }
 
   return (

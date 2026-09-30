@@ -12,8 +12,11 @@ import {
 } from './hooks/useCompanies'
 import { useJobs } from '@/features/jobs/hooks/useJobs'
 import { useInvoices } from '@/features/invoices/hooks/useInvoices'
+import { usePayments } from '@/features/payments/hooks/usePayments'
+import { useAllocations, useDeductions } from '@/features/payments/hooks/useSettlements'
+import { computeInvoice, roundMoney } from '@/data/computations'
 import { toUserMessage } from '@/lib/api/errors'
-import { fmtDateTime } from '@/lib/format'
+import { currency, fmtDateTime } from '@/lib/format'
 import { PageHeader } from '@/components/common/PageHeader'
 import { DataTable, type DataTableColumn } from '@/components/common/DataTable'
 import { Badge, Card, Field, Input, Textarea } from '@/components/ui/primitives'
@@ -26,7 +29,30 @@ export function CompaniesPage() {
   const { data: companies = [], isLoading } = useCompanies()
   const { data: jobs = [] } = useJobs()
   const { data: invoices = [] } = useInvoices()
+  const { data: payments = [] } = usePayments()
+  const { data: allocations = [] } = useAllocations()
+  const { data: deductions = [] } = useDeductions()
   const deleteCompany = useDeleteCompany()
+
+  // Per-customer receivables in a single pass (settlement-aware): outstanding
+  // from eligible invoices, advances from the unallocated portion of receipts.
+  const receivables = useMemo(() => {
+    const out = new Map<string, number>()
+    const adv = new Map<string, number>()
+    for (const inv of invoices) {
+      if (inv.status === 'Draft' || inv.status === 'Cancelled') continue
+      const c = computeInvoice(inv, payments, allocations, deductions)
+      out.set(inv.companyId, roundMoney((out.get(inv.companyId) ?? 0) + Math.max(0, c.outstanding)))
+    }
+    const allocByPayment = new Map<string, number>()
+    for (const a of allocations)
+      allocByPayment.set(a.paymentId, (allocByPayment.get(a.paymentId) ?? 0) + a.amount)
+    for (const p of payments) {
+      const advance = p.amount - (allocByPayment.get(p.id) ?? 0)
+      if (advance > 0.005) adv.set(p.companyId, roundMoney((adv.get(p.companyId) ?? 0) + advance))
+    }
+    return { out, adv }
+  }, [invoices, payments, allocations, deductions])
   const toast = useToast()
   const confirm = useConfirm()
   const [search, setSearch] = useState('')
@@ -60,6 +86,36 @@ export function CompaniesPage() {
     { key: 'contact', header: 'Contact', render: (c) => c.contactPerson || '—' },
     { key: 'phone', header: 'Phone', render: (c) => c.phone || '—' },
     { key: 'gstin', header: 'GSTIN', render: (c) => c.gstin || '—' },
+    {
+      key: 'outstanding',
+      header: 'Outstanding',
+      headerClassName: 'text-right',
+      cellClassName: 'text-right tabular-nums',
+      hideBelow: 'md',
+      render: (c) => {
+        const v = receivables.out.get(c.id) ?? 0
+        return v > 0.005 ? (
+          <span className="font-medium text-amber-600">{currency(v)}</span>
+        ) : (
+          <span className="text-slate-400">—</span>
+        )
+      },
+    },
+    {
+      key: 'advance',
+      header: 'Advance',
+      headerClassName: 'text-right',
+      cellClassName: 'text-right tabular-nums',
+      hideBelow: 'lg',
+      render: (c) => {
+        const v = receivables.adv.get(c.id) ?? 0
+        return v > 0.005 ? (
+          <span className="font-medium text-blue-600">{currency(v)}</span>
+        ) : (
+          <span className="text-slate-400">—</span>
+        )
+      },
+    },
     {
       key: 'status',
       header: 'Status',

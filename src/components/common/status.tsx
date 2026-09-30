@@ -23,6 +23,7 @@ const INVOICE_TONE: Record<InvoiceStatus, string> = {
   Unpaid: 'amber',
   'Partially Paid': 'blue',
   Paid: 'green',
+  Settled: 'green',
   Cancelled: 'red',
 }
 

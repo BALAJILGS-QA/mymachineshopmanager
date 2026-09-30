@@ -29,6 +29,7 @@ import { useCompanyName, useMaterialName } from '@/features/shared/lookups'
 import { useJobs } from '@/features/jobs/hooks/useJobs'
 import { useInvoices } from '@/features/invoices/hooks/useInvoices'
 import { usePayments } from '@/features/payments/hooks/usePayments'
+import { useAllocations, useDeductions } from '@/features/payments/hooks/useSettlements'
 import { useExpenses } from '@/features/expenses/hooks/useExpenses'
 import { useCompanies } from '@/features/companies/hooks/useCompanies'
 import {
@@ -67,6 +68,8 @@ export function DashboardPage() {
   const { data: jobs = [] } = useJobs()
   const { data: invoices = [] } = useInvoices()
   const { data: payments = [] } = usePayments()
+  const { data: allocations = [] } = useAllocations()
+  const { data: deductions = [] } = useDeductions()
   const { data: expenses = [] } = useExpenses()
   const { data: issues = [] } = useIssues()
   const { data: materials = [] } = useMaterials()
@@ -118,13 +121,29 @@ export function DashboardPage() {
     const rawValue = company ? companyMaterialValue(db, company) : totalRawMaterialValue(db)
     const pending = invoicesF
       .filter((i) => i.status !== 'Cancelled')
-      .reduce((s, i) => s + computeInvoice(i, payments).outstanding, 0)
+      .reduce(
+        (s, i) => s + Math.max(0, computeInvoice(i, payments, allocations, deductions).outstanding),
+        0,
+      )
     const paymentsThisMonth = paymentsF
       .filter((p) => p.date >= monthStart)
       .reduce((s, p) => s + p.amount, 0)
     const expensesThisMonth = expensesF
       .filter((e) => e.date >= monthStart)
       .reduce((s, e) => s + e.amount, 0)
+    // Unknown difference still awaiting a breakup (finance follow-up list).
+    const paymentIds = new Set(paymentsF.map((p) => p.id))
+    const unknownDeductions = deductions
+      .filter((d) => d.deductionType === 'Unidentified' && paymentIds.has(d.paymentId))
+      .reduce((s, d) => s + d.amount, 0)
+    // Advance = bank money received but not applied to any invoice.
+    const allocByPayment = new Map<string, number>()
+    for (const a of allocations)
+      allocByPayment.set(a.paymentId, (allocByPayment.get(a.paymentId) ?? 0) + a.amount)
+    const advances = paymentsF.reduce(
+      (s, p) => s + Math.max(0, p.amount - (allocByPayment.get(p.id) ?? 0)),
+      0,
+    )
     return {
       open,
       inProd,
@@ -134,9 +153,22 @@ export function DashboardPage() {
       pending,
       paymentsThisMonth,
       expensesThisMonth,
+      unknownDeductions,
+      advances,
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [jobsF, invoicesF, paymentsF, expensesF, payments, stamp, monthStart, company])
+  }, [
+    jobsF,
+    invoicesF,
+    paymentsF,
+    expensesF,
+    payments,
+    allocations,
+    deductions,
+    stamp,
+    monthStart,
+    company,
+  ])
 
   // Invoices raised vs Payments received — last 6 months.
   const invVsPay = useMemo(() => {
@@ -372,6 +404,18 @@ export function DashboardPage() {
               value={currency(kpi.pending)}
               tone="red"
               to="/app/invoices"
+            />
+            <SummaryRow
+              label="Advance / on account"
+              value={currency(kpi.advances)}
+              tone="blue"
+              to="/app/payments"
+            />
+            <SummaryRow
+              label="Unknown difference"
+              value={currency(kpi.unknownDeductions)}
+              tone={kpi.unknownDeductions > 0.005 ? 'amber' : 'slate'}
+              to="/app/reports"
             />
             <SummaryRow
               label="Net (month)"

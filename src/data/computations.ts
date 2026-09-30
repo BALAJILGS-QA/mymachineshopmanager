@@ -10,6 +10,8 @@ import type {
   MaterialReceiptStock,
   MaterialStock,
   Payment,
+  PaymentAllocation,
+  PaymentDeduction,
   StockAdjustment,
 } from '@/types'
 
@@ -30,14 +32,56 @@ export function invoiceSubtotal(inv: Invoice): number {
   return roundMoney(inv.lines.reduce((sum, l) => sum + l.quantity * l.rate, 0))
 }
 
-// Payments allocated to a specific (non-cancelled) invoice.
-export function paidForInvoice(invoiceId: string, payments: Payment[]): number {
+// Money applied to a specific (non-cancelled) invoice. Mirrors the SQL
+// `invoice_totals.paid` exactly: when allocations are supplied they are the
+// source of truth, PLUS any legacy direct-link payment (payments.invoiceId) that
+// has no allocation row (old create_payment / bank-import path); with no
+// allocations it falls back to the pure direct-link sum (pre-settlement data).
+export function paidForInvoice(
+  invoiceId: string,
+  payments: Payment[],
+  allocations: PaymentAllocation[] = [],
+): number {
+  if (allocations.length) {
+    const allocatedPaymentIds = new Set(allocations.map((a) => a.paymentId))
+    const fromAllocations = allocations
+      .filter((a) => a.invoiceId === invoiceId)
+      .reduce((sum, a) => sum + a.amount, 0)
+    const legacy = payments
+      .filter((p) => p.invoiceId === invoiceId && !allocatedPaymentIds.has(p.id))
+      .reduce((sum, p) => sum + p.amount, 0)
+    return roundMoney(fromAllocations + legacy)
+  }
   return roundMoney(
     payments.filter((p) => p.invoiceId === invoiceId).reduce((sum, p) => sum + p.amount, 0),
   )
 }
 
-export function computeInvoice(inv: Invoice, payments: Payment[]): InvoiceComputed {
+// Deductions recorded against a specific invoice, split known vs unknown.
+export function deductionsForInvoice(
+  invoiceId: string,
+  deductions: PaymentDeduction[] = [],
+): { known: number; unknown: number } {
+  let known = 0
+  let unknown = 0
+  for (const d of deductions) {
+    if (d.invoiceId !== invoiceId) continue
+    if (d.deductionType === 'Unidentified') unknown += d.amount
+    else known += d.amount
+  }
+  return { known: roundMoney(known), unknown: roundMoney(unknown) }
+}
+
+// Full invoice financials. `allocations`/`deductions` are optional: omit them and
+// the result is identical to the pre-settlement model (paid via direct links, no
+// deductions). Kept bit-identical to the reworked `invoice_totals` SQL view so
+// client-derived and server-derived figures never diverge.
+export function computeInvoice(
+  inv: Invoice,
+  payments: Payment[],
+  allocations: PaymentAllocation[] = [],
+  deductions: PaymentDeduction[] = [],
+): InvoiceComputed {
   const subtotal = invoiceSubtotal(inv)
   const taxable = Math.max(0, subtotal - (inv.discount || 0))
   // Prefer the CGST + SGST split when present; fall back to the combined rate.
@@ -47,9 +91,23 @@ export function computeInvoice(inv: Invoice, payments: Payment[]): InvoiceComput
       : inv.taxPercent || 0
   const taxAmount = roundMoney((taxable * taxPct) / 100)
   const total = roundMoney(taxable + taxAmount)
-  const paid = inv.status === 'Cancelled' ? 0 : paidForInvoice(inv.id, payments)
-  const outstanding = inv.status === 'Cancelled' ? 0 : roundMoney(total - paid)
-  return { subtotal, taxAmount, total, paid, outstanding }
+  const cancelled = inv.status === 'Cancelled'
+  const paid = cancelled ? 0 : paidForInvoice(inv.id, payments, allocations)
+  const { known, unknown } = cancelled
+    ? { known: 0, unknown: 0 }
+    : deductionsForInvoice(inv.id, deductions)
+  const settled = roundMoney(paid + known + unknown)
+  const outstanding = cancelled ? 0 : roundMoney(total - settled)
+  return {
+    subtotal,
+    taxAmount,
+    total,
+    paid,
+    outstanding,
+    knownDeductions: known,
+    unknownDeduction: unknown,
+    settled,
+  }
 }
 
 // Invoice statuses that represent a real, collectible customer sales invoice.
@@ -59,6 +117,7 @@ const ELIGIBLE_INVOICE_STATUSES: ReadonlyArray<Invoice['status']> = [
   'Unpaid',
   'Partially Paid',
   'Paid',
+  'Settled',
 ]
 
 export function isEligibleInvoice(inv: Invoice): boolean {
@@ -82,6 +141,8 @@ export interface ReceivablesSummary {
   totalReceived: number
   totalOutstanding: number
   totalAdvances: number
+  totalKnownDeductions: number
+  totalUnknownDeductions: number
   invoiceCount: number
   paymentCount: number
 }
@@ -108,23 +169,41 @@ export function receivablesSummary(
   invoices: Invoice[],
   payments: Payment[],
   filter: ReceivablesFilter = {},
+  allocations: PaymentAllocation[] = [],
+  deductions: PaymentDeduction[] = [],
 ): ReceivablesSummary {
   const { companyId, from, to } = filter
   const matchCompany = (cid: string) => !companyId || cid === companyId
 
   let totalInvoiced = 0
   let totalOutstanding = 0
+  let totalKnownDeductions = 0
+  let totalUnknownDeductions = 0
   let invoiceCount = 0
   for (const inv of invoices) {
     if (!isEligibleInvoice(inv)) continue
     if (!matchCompany(inv.companyId)) continue
     if (!withinRange(inv.date, from, to)) continue
-    // `computeInvoice` already nets ALL payments allocated to this invoice; the
-    // clamp keeps an over-paid invoice from producing negative outstanding.
-    const c = computeInvoice(inv, payments)
+    // `computeInvoice` nets allocations + legacy links + deductions for this
+    // invoice; the clamp keeps an over-settled invoice from going negative.
+    const c = computeInvoice(inv, payments, allocations, deductions)
     totalInvoiced += c.total
     totalOutstanding += Math.max(c.outstanding, 0)
+    totalKnownDeductions += c.knownDeductions
+    totalUnknownDeductions += c.unknownDeduction
     invoiceCount += 1
+  }
+
+  // Advance = bank money received but NOT applied to any invoice. With
+  // allocations present, a payment's advance portion is (amount − Σ its
+  // allocations) — this handles partial allocation and excess payments. Without
+  // allocations we keep the legacy rule (explicit flag or no invoice link).
+  const allocByPayment = new Map<string, number>()
+  const hasAllocations = allocations.length > 0
+  if (hasAllocations) {
+    for (const a of allocations) {
+      allocByPayment.set(a.paymentId, (allocByPayment.get(a.paymentId) ?? 0) + a.amount)
+    }
   }
 
   let totalReceived = 0
@@ -135,9 +214,12 @@ export function receivablesSummary(
     if (!withinRange(p.date, from, to)) continue
     totalReceived += p.amount
     paymentCount += 1
-    // An advance is any receipt not applied to an invoice (explicit flag or a
-    // missing invoice link) — it stays counted here until it is allocated.
-    if (p.isAdvance || !p.invoiceId) totalAdvances += p.amount
+    if (hasAllocations) {
+      const advancePortion = p.amount - (allocByPayment.get(p.id) ?? 0)
+      if (advancePortion > 0.005) totalAdvances += advancePortion
+    } else if (p.isAdvance || !p.invoiceId) {
+      totalAdvances += p.amount
+    }
   }
 
   return {
@@ -145,18 +227,30 @@ export function receivablesSummary(
     totalReceived: roundMoney(totalReceived),
     totalOutstanding: roundMoney(totalOutstanding),
     totalAdvances: roundMoney(totalAdvances),
+    totalKnownDeductions: roundMoney(totalKnownDeductions),
+    totalUnknownDeductions: roundMoney(totalUnknownDeductions),
     invoiceCount,
     paymentCount,
   }
 }
 
-// Derive the effective status from payments (Draft/Cancelled are preserved).
-export function deriveInvoiceStatus(inv: Invoice, payments: Payment[]): Invoice['status'] {
+// Derive the effective status (Draft/Cancelled are preserved). Mirrors the
+// recompute in the settlement RPCs:
+//   settled ≤ 0                → Unpaid
+//   settled < total            → Partially Paid
+//   settled ≥ total & paid≥total → Paid    (cash fully covers the invoice)
+//   settled ≥ total & paid<total → Settled (closed via deductions, cash < gross)
+export function deriveInvoiceStatus(
+  inv: Invoice,
+  payments: Payment[],
+  allocations: PaymentAllocation[] = [],
+  deductions: PaymentDeduction[] = [],
+): Invoice['status'] {
   if (inv.status === 'Draft' || inv.status === 'Cancelled') return inv.status
-  const { total, paid } = computeInvoice(inv, payments)
-  if (paid <= 0) return 'Unpaid'
-  if (paid + 0.001 < total) return 'Partially Paid'
-  return 'Paid'
+  const { total, paid, settled } = computeInvoice(inv, payments, allocations, deductions)
+  if (settled <= 0) return 'Unpaid'
+  if (settled + 0.001 < total) return 'Partially Paid'
+  return paid + 0.001 >= total ? 'Paid' : 'Settled'
 }
 
 // Sentinel scope for shop-/self-owned ("own") stock (companyId is null).

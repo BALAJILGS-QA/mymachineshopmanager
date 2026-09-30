@@ -14,6 +14,13 @@ export const qk = {
     all: ['payments'] as const,
     detail: (id: string) => ['payments', id] as const,
   },
+  // Payment→invoice allocations and per-invoice deductions (settlement layer).
+  allocations: {
+    all: ['allocations'] as const,
+  },
+  deductions: {
+    all: ['deductions'] as const,
+  },
   invoices: {
     all: ['invoices'] as const,
     detail: (id: string) => ['invoices', id] as const,

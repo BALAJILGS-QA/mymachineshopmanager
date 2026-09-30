@@ -41,11 +41,14 @@ import { useConfirm } from '@/components/ui/ConfirmDialog'
 import { useCompanyName } from '@/features/shared/lookups'
 import { InvoiceForm } from './InvoiceForm'
 import { PaymentForm } from '@/features/payments/PaymentForm'
+import { useAllocations, useDeductions } from '@/features/payments/hooks/useSettlements'
 import { INVOICE_STATUSES as STATUSES } from '@/constants/domain'
 
 export function InvoicesPage() {
   const { data: invoices = [], isLoading } = useInvoices()
   const { data: payments = [] } = usePayments()
+  const { data: allocations = [] } = useAllocations()
+  const { data: deductions = [] } = useDeductions()
   const setInvoiceStatus = useSetInvoiceStatus()
   const companyName = useCompanyName()
   const navigate = useAppNavigate()
@@ -70,9 +73,9 @@ export function InvoicesPage() {
         if (s && !`${inv.invoiceNo} ${inv.reference ?? ''}`.toLowerCase().includes(s)) return false
         return true
       })
-      .map((inv) => ({ inv, c: computeInvoice(inv, payments) }))
+      .map((inv) => ({ inv, c: computeInvoice(inv, payments, allocations, deductions) }))
       .sort((a, b) => (a.inv.date < b.inv.date ? 1 : -1))
-  }, [invoices, payments, company, status, from, to, search])
+  }, [invoices, payments, allocations, deductions, company, status, from, to, search])
 
   const pg = usePagination(rows)
 
@@ -89,7 +92,7 @@ export function InvoicesPage() {
     let paid = 0
     let outstanding = 0
     for (const inv of inMonth) {
-      const c = computeInvoice(inv, payments)
+      const c = computeInvoice(inv, payments, allocations, deductions)
       total += c.total
       paid += c.paid
       outstanding += c.outstanding
@@ -99,12 +102,12 @@ export function InvoicesPage() {
   const monthStats = useMemo(
     () => statsFor(monthPrefix),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [invoices, payments, monthPrefix],
+    [invoices, payments, allocations, deductions, monthPrefix],
   )
   const prevStats = useMemo(
     () => statsFor(prevPrefix),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [invoices, payments, prevPrefix],
+    [invoices, payments, allocations, deductions, prevPrefix],
   )
 
   // GST summary over the filtered rows (excludes cancelled invoices).

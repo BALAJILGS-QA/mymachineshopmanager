@@ -11,9 +11,13 @@ export type JobStatus =
 
 export type JobPriority = 'Low' | 'Normal' | 'High' | 'Urgent'
 
-export type InvoiceStatus = 'Draft' | 'Unpaid' | 'Partially Paid' | 'Paid' | 'Cancelled'
+// 'Settled' = closed via payment + valid/known deductions (and/or an explicitly
+// recorded unknown difference) even though cash received < gross invoice value.
+// Distinct from 'Paid' (fully collected in money).
+export type InvoiceStatus = 'Draft' | 'Unpaid' | 'Partially Paid' | 'Paid' | 'Settled' | 'Cancelled'
 
-export type PaymentMethod = 'Cash' | 'Bank Transfer' | 'UPI' | 'Cheque' | 'Other'
+export type PaymentMethod =
+  'Cash' | 'Bank Transfer' | 'NEFT' | 'RTGS' | 'IMPS' | 'UPI' | 'Cheque' | 'Other'
 
 export type MaterialOwnerType = 'Company' | 'Shop'
 
@@ -220,6 +224,52 @@ export interface Payment extends AuditFields {
   reference?: string
   notes?: string
   isAdvance: boolean
+}
+
+// A payment can be split across several invoices; each slice of the bank money
+// applied to one invoice is an allocation. Σ(allocations for a payment) ≤ the
+// payment amount; any remainder is on-account / advance.
+export interface PaymentAllocation {
+  id: ID
+  paymentId: ID
+  invoiceId: ID
+  amount: number
+  createdAt?: ISODateTime
+  createdBy?: string
+}
+
+// Deduction categories. 'Unidentified' is the unknown-difference bucket recorded
+// when the customer paid less than the gross without giving a breakup; it can be
+// reclassified into known types later (audited).
+export type DeductionType =
+  | 'TDS'
+  | 'Transportation'
+  | 'Freight'
+  | 'Commission'
+  | 'Retention'
+  | 'Discount'
+  | 'Other'
+  | 'Unidentified'
+
+export type DeductionCalcType = 'percent' | 'fixed'
+
+// An amount the customer withheld from a specific invoice (TDS/freight/etc.), or
+// an as-yet-unexplained shortfall ('Unidentified'). Bridges bank-received to the
+// gross invoice value: settled = allocation + deductions.
+export interface PaymentDeduction {
+  id: ID
+  paymentId: ID
+  invoiceId?: ID
+  deductionType: DeductionType
+  calcType: DeductionCalcType
+  rate?: number // percentage when calcType === 'percent'
+  amount: number
+  reference?: string
+  remarks?: string
+  createdAt?: ISODateTime
+  createdBy?: string
+  updatedAt?: ISODateTime
+  updatedBy?: string
 }
 
 export interface Expense extends AuditFields {
@@ -447,8 +497,11 @@ export interface InvoiceComputed {
   subtotal: number
   taxAmount: number
   total: number
-  paid: number
-  outstanding: number
+  paid: number // money applied to the invoice (allocations + legacy direct links)
+  outstanding: number // total − settled
+  knownDeductions: number // TDS/freight/etc. recorded against this invoice
+  unknownDeduction: number // unexplained shortfall recorded against this invoice
+  settled: number // paid + knownDeductions + unknownDeduction
 }
 
 export interface MaterialStock {

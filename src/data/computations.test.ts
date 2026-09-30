@@ -11,7 +11,15 @@ import {
   jobPendingQty,
   SHOP_SCOPE,
 } from './computations'
-import type { Invoice, MaterialIssue, MaterialReceipt, Payment, StockAdjustment } from '@/types'
+import type {
+  Invoice,
+  MaterialIssue,
+  MaterialReceipt,
+  Payment,
+  PaymentAllocation,
+  PaymentDeduction,
+  StockAdjustment,
+} from '@/types'
 import type { Database } from './db'
 import { buildInitialDb } from './seed'
 
@@ -396,6 +404,8 @@ describe('receivablesSummary', () => {
       totalReceived: 0,
       totalOutstanding: 0,
       totalAdvances: 0,
+      totalKnownDeductions: 0,
+      totalUnknownDeductions: 0,
       invoiceCount: 0,
       paymentCount: 0,
     })
@@ -533,5 +543,259 @@ describe('receivablesSummary', () => {
     expect(s.totalInvoiced).toBe(100.1)
     expect(s.totalReceived).toBe(100.1)
     expect(s.totalOutstanding).toBe(0)
+  })
+})
+
+// ---- Settlement: allocations + deductions + unknown difference -------------
+
+function alloc(partial: Partial<PaymentAllocation> = {}): PaymentAllocation {
+  return {
+    id: 'pal_1',
+    paymentId: 'pay_1',
+    invoiceId: 'inv_1',
+    amount: 100,
+    ...partial,
+  }
+}
+
+function deduction(partial: Partial<PaymentDeduction> = {}): PaymentDeduction {
+  return {
+    id: 'ded_1',
+    paymentId: 'pay_1',
+    invoiceId: 'inv_1',
+    deductionType: 'TDS',
+    calcType: 'fixed',
+    amount: 0,
+    ...partial,
+  }
+}
+
+describe('paidForInvoice — allocation-aware', () => {
+  it('sums allocations when present', () => {
+    const pays = [payment({ id: 'p1', invoiceId: undefined, amount: 300 })]
+    const allocs = [
+      alloc({ id: 'a1', paymentId: 'p1', invoiceId: 'inv_1', amount: 120 }),
+      alloc({ id: 'a2', paymentId: 'p1', invoiceId: 'inv_2', amount: 180 }),
+    ]
+    expect(paidForInvoice('inv_1', pays, allocs)).toBe(120)
+    expect(paidForInvoice('inv_2', pays, allocs)).toBe(180)
+  })
+
+  it('adds legacy direct-link payments that have no allocation row (no double count)', () => {
+    // p1 is allocated; p2 is a legacy direct link with no allocation.
+    const pays = [
+      payment({ id: 'p1', invoiceId: undefined, amount: 100 }),
+      payment({ id: 'p2', invoiceId: 'inv_1', amount: 40 }),
+    ]
+    const allocs = [alloc({ id: 'a1', paymentId: 'p1', invoiceId: 'inv_1', amount: 100 })]
+    expect(paidForInvoice('inv_1', pays, allocs)).toBe(140)
+  })
+
+  it('falls back to pure direct links when no allocations are supplied', () => {
+    const pays = [payment({ id: 'p1', invoiceId: 'inv_1', amount: 70 })]
+    expect(paidForInvoice('inv_1', pays)).toBe(70)
+  })
+})
+
+describe('computeInvoice — deductions & settlement', () => {
+  it('known deductions bridge bank-received to gross (invoice fully settled)', () => {
+    // Gross 1000; bank 950 allocated; TDS 50 known → settled 1000, outstanding 0.
+    const inv = invoice({ id: 'inv_1' })
+    const pays = [payment({ id: 'p1', invoiceId: undefined, amount: 950 })]
+    const allocs = [alloc({ id: 'a1', paymentId: 'p1', invoiceId: 'inv_1', amount: 950 })]
+    const deds = [deduction({ id: 'd1', paymentId: 'p1', deductionType: 'TDS', amount: 50 })]
+    const c = computeInvoice(inv, pays, allocs, deds)
+    expect(c.paid).toBe(950)
+    expect(c.knownDeductions).toBe(50)
+    expect(c.unknownDeduction).toBe(0)
+    expect(c.settled).toBe(1000)
+    expect(c.outstanding).toBe(0)
+  })
+
+  it('unknown difference is tracked separately but still closes the invoice', () => {
+    const inv = invoice({ id: 'inv_1' })
+    const pays = [payment({ id: 'p1', invoiceId: undefined, amount: 950 })]
+    const allocs = [alloc({ id: 'a1', paymentId: 'p1', invoiceId: 'inv_1', amount: 950 })]
+    const deds = [
+      deduction({ id: 'd1', paymentId: 'p1', deductionType: 'Unidentified', amount: 50 }),
+    ]
+    const c = computeInvoice(inv, pays, allocs, deds)
+    expect(c.knownDeductions).toBe(0)
+    expect(c.unknownDeduction).toBe(50)
+    expect(c.settled).toBe(1000)
+    expect(c.outstanding).toBe(0)
+  })
+
+  it('no deductions/allocations → identical to the legacy model', () => {
+    const inv = invoice({ id: 'inv_1' })
+    const pays = [payment({ id: 'p1', invoiceId: 'inv_1', amount: 400 })]
+    const c = computeInvoice(inv, pays)
+    expect(c.paid).toBe(400)
+    expect(c.knownDeductions).toBe(0)
+    expect(c.unknownDeduction).toBe(0)
+    expect(c.settled).toBe(400)
+    expect(c.outstanding).toBe(600)
+  })
+})
+
+describe('deriveInvoiceStatus — Settled vs Paid', () => {
+  const inv = invoice({ id: 'inv_1' }) // gross 1000
+
+  it('cash fully covers → Paid', () => {
+    const pays = [payment({ id: 'p1', invoiceId: undefined, amount: 1000 })]
+    const allocs = [alloc({ id: 'a1', paymentId: 'p1', amount: 1000 })]
+    expect(deriveInvoiceStatus(inv, pays, allocs)).toBe('Paid')
+  })
+
+  it('closed via deductions with cash < gross → Settled', () => {
+    const pays = [payment({ id: 'p1', invoiceId: undefined, amount: 950 })]
+    const allocs = [alloc({ id: 'a1', paymentId: 'p1', amount: 950 })]
+    const deds = [deduction({ id: 'd1', paymentId: 'p1', deductionType: 'TDS', amount: 50 })]
+    expect(deriveInvoiceStatus(inv, pays, allocs, deds)).toBe('Settled')
+  })
+
+  it('partial settlement → Partially Paid', () => {
+    const pays = [payment({ id: 'p1', invoiceId: undefined, amount: 400 })]
+    const allocs = [alloc({ id: 'a1', paymentId: 'p1', amount: 400 })]
+    expect(deriveInvoiceStatus(inv, pays, allocs)).toBe('Partially Paid')
+  })
+})
+
+describe('ABC Pumps — the canonical spec scenario', () => {
+  // INV-1001 100000, INV-1002 75000, INV-1003 50000 → gross 225000.
+  // One bank transfer of 220000 allocated across all three; customer gave no
+  // deduction breakup → 5000 recorded as Unidentified. All three must settle.
+  const inv1 = invoice({
+    id: 'inv_1001',
+    invoiceNo: 'INV-1001',
+    lines: [{ id: 'l', description: 'x', quantity: 1, rate: 100000 }],
+  })
+  const inv2 = invoice({
+    id: 'inv_1002',
+    invoiceNo: 'INV-1002',
+    lines: [{ id: 'l', description: 'x', quantity: 1, rate: 75000 }],
+  })
+  const inv3 = invoice({
+    id: 'inv_1003',
+    invoiceNo: 'INV-1003',
+    lines: [{ id: 'l', description: 'x', quantity: 1, rate: 50000 }],
+  })
+  const pay = payment({ id: 'pay_abc', invoiceId: undefined, amount: 220000, method: 'NEFT' })
+  // Allocate bank money proportionally: 100000/75000/45000 = 220000.
+  const allocs: PaymentAllocation[] = [
+    alloc({ id: 'a1', paymentId: 'pay_abc', invoiceId: 'inv_1001', amount: 100000 }),
+    alloc({ id: 'a2', paymentId: 'pay_abc', invoiceId: 'inv_1002', amount: 75000 }),
+    alloc({ id: 'a3', paymentId: 'pay_abc', invoiceId: 'inv_1003', amount: 45000 }),
+  ]
+
+  it('state 1 — unknown difference of 5000 on INV-1003, it settles', () => {
+    const deds: PaymentDeduction[] = [
+      deduction({
+        id: 'd1',
+        paymentId: 'pay_abc',
+        invoiceId: 'inv_1003',
+        deductionType: 'Unidentified',
+        amount: 5000,
+      }),
+    ]
+    const c3 = computeInvoice(inv3, [pay], allocs, deds)
+    expect(c3.paid).toBe(45000)
+    expect(c3.unknownDeduction).toBe(5000)
+    expect(c3.settled).toBe(50000)
+    expect(c3.outstanding).toBe(0)
+    expect(deriveInvoiceStatus(inv3, [pay], allocs, deds)).toBe('Settled')
+
+    const summary = receivablesSummary([inv1, inv2, inv3], [pay], {}, allocs, deds)
+    expect(summary.totalInvoiced).toBe(225000)
+    expect(summary.totalReceived).toBe(220000)
+    expect(summary.totalOutstanding).toBe(0)
+    expect(summary.totalUnknownDeductions).toBe(5000)
+    expect(summary.totalKnownDeductions).toBe(0)
+    expect(summary.totalAdvances).toBe(0) // whole payment allocated
+  })
+
+  it('state 2 — reclassified into TDS 2250 + Transportation 2750, unknown 0', () => {
+    const deds: PaymentDeduction[] = [
+      deduction({
+        id: 'd1',
+        paymentId: 'pay_abc',
+        invoiceId: 'inv_1003',
+        deductionType: 'TDS',
+        amount: 2250,
+      }),
+      deduction({
+        id: 'd2',
+        paymentId: 'pay_abc',
+        invoiceId: 'inv_1003',
+        deductionType: 'Transportation',
+        amount: 2750,
+      }),
+    ]
+    const c3 = computeInvoice(inv3, [pay], allocs, deds)
+    expect(c3.knownDeductions).toBe(5000)
+    expect(c3.unknownDeduction).toBe(0)
+    expect(c3.settled).toBe(50000)
+    expect(c3.outstanding).toBe(0)
+
+    const summary = receivablesSummary([inv1, inv2, inv3], [pay], {}, allocs, deds)
+    expect(summary.totalKnownDeductions).toBe(5000)
+    expect(summary.totalUnknownDeductions).toBe(0)
+    expect(summary.totalOutstanding).toBe(0)
+  })
+})
+
+describe('multi-payment accrual & partial settlement', () => {
+  const inv = invoice({ id: 'inv_1' }) // gross 1000
+
+  it('three separate payments (each allocated) accrue to fully Paid', () => {
+    const pays = [
+      payment({ id: 'p1', invoiceId: undefined, amount: 400 }),
+      payment({ id: 'p2', invoiceId: undefined, amount: 300 }),
+      payment({ id: 'p3', invoiceId: undefined, amount: 300 }),
+    ]
+    const allocs = [
+      alloc({ id: 'a1', paymentId: 'p1', invoiceId: 'inv_1', amount: 400 }),
+      alloc({ id: 'a2', paymentId: 'p2', invoiceId: 'inv_1', amount: 300 }),
+      alloc({ id: 'a3', paymentId: 'p3', invoiceId: 'inv_1', amount: 300 }),
+    ]
+    const c = computeInvoice(inv, pays, allocs)
+    expect(c.paid).toBe(1000)
+    expect(c.outstanding).toBe(0)
+    expect(deriveInvoiceStatus(inv, pays, allocs)).toBe('Paid')
+  })
+
+  it('allocation + known deduction that only partially cover → Partially Paid', () => {
+    const pays = [payment({ id: 'p1', invoiceId: undefined, amount: 400 })]
+    const allocs = [alloc({ id: 'a1', paymentId: 'p1', invoiceId: 'inv_1', amount: 400 })]
+    const deds = [deduction({ id: 'd1', paymentId: 'p1', deductionType: 'TDS', amount: 100 })]
+    const c = computeInvoice(inv, pays, allocs, deds)
+    expect(c.settled).toBe(500)
+    expect(c.outstanding).toBe(500)
+    expect(deriveInvoiceStatus(inv, pays, allocs, deds)).toBe('Partially Paid')
+  })
+})
+
+describe('receivablesSummary — advances from partial/excess allocation', () => {
+  it('excess bank money over allocation becomes an advance', () => {
+    // Gross 1000; customer pays 1200; allocate 1000, 200 is on-account.
+    const inv = invoice({ id: 'inv_1' })
+    const pays = [payment({ id: 'p1', invoiceId: undefined, amount: 1200 })]
+    const allocs = [alloc({ id: 'a1', paymentId: 'p1', invoiceId: 'inv_1', amount: 1000 })]
+    const s = receivablesSummary([inv], pays, {}, allocs)
+    expect(s.totalReceived).toBe(1200)
+    expect(s.totalOutstanding).toBe(0)
+    expect(s.totalAdvances).toBe(200)
+  })
+
+  it('a fully unallocated payment is entirely an advance', () => {
+    const inv = invoice({ id: 'inv_1' })
+    const pays = [
+      payment({ id: 'p1', invoiceId: 'inv_1', amount: 400 }),
+      payment({ id: 'p2', invoiceId: undefined, amount: 500, isAdvance: true }),
+    ]
+    const allocs = [alloc({ id: 'a1', paymentId: 'p1', invoiceId: 'inv_1', amount: 400 })]
+    const s = receivablesSummary([inv], pays, {}, allocs)
+    expect(s.totalAdvances).toBe(500)
+    expect(s.totalOutstanding).toBe(600)
   })
 })

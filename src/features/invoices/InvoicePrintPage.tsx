@@ -6,6 +6,7 @@ import { InvoiceStatusBadge } from '@/components/common/status'
 import { downloadInvoicePdf } from './invoicePdf'
 import { useInvoices } from './hooks/useInvoices'
 import { usePayments } from '@/features/payments/hooks/usePayments'
+import { useAllocations, useDeductions } from '@/features/payments/hooks/useSettlements'
 import { useCompanies } from '@/features/companies/hooks/useCompanies'
 import { useSettings } from '@/features/settings/hooks/useSettings'
 import { DEFAULT_SETTINGS } from '@/data/seed'
@@ -21,6 +22,8 @@ export function InvoicePrintPage({ id }: { id?: string }) {
   const company = companies.find((c) => c.id === invoice?.companyId)
   const shop = useSettings().data?.company ?? DEFAULT_SETTINGS.company
   const { data: payments = [] } = usePayments()
+  const { data: allocations = [] } = useAllocations()
+  const { data: deductions = [] } = useDeductions()
 
   if (!invoice) {
     return (
@@ -33,7 +36,35 @@ export function InvoicePrintPage({ id }: { id?: string }) {
     )
   }
 
-  const c = computeInvoice(invoice, payments)
+  const c = computeInvoice(invoice, payments, allocations, deductions)
+
+  // Payment history for this invoice: allocations (with their payment) + any
+  // legacy direct-link payments that predate the allocation layer.
+  const allocatedPaymentIds = new Set(allocations.map((a) => a.paymentId))
+  const history = [
+    ...allocations
+      .filter((a) => a.invoiceId === invoice.id)
+      .map((a) => {
+        const p = payments.find((pp) => pp.id === a.paymentId)
+        return {
+          key: a.id,
+          no: p?.paymentNo ?? '—',
+          date: p?.date,
+          method: p?.method,
+          amount: a.amount,
+        }
+      }),
+    ...payments
+      .filter((p) => p.invoiceId === invoice.id && !allocatedPaymentIds.has(p.id))
+      .map((p) => ({
+        key: p.id,
+        no: p.paymentNo,
+        date: p.date,
+        method: p.method,
+        amount: p.amount,
+      })),
+  ].sort((a, b) => (a.date ?? '').localeCompare(b.date ?? ''))
+  const invoiceDeductions = deductions.filter((d) => d.invoiceId === invoice.id)
 
   return (
     <div>
@@ -154,10 +185,21 @@ export function InvoicePrintPage({ id }: { id?: string }) {
               <span>Total</span>
               <span>{currency(c.total)}</span>
             </div>
-            {c.paid > 0 && (
+            {c.settled > 0 && (
               <>
                 <Row label="Paid" value={currency(c.paid)} />
-                <div className="flex justify-between font-semibold text-amber-600">
+                {c.knownDeductions > 0 && (
+                  <Row label="Known deductions" value={`- ${currency(c.knownDeductions)}`} />
+                )}
+                {c.unknownDeduction > 0 && (
+                  <Row label="Unknown difference" value={`- ${currency(c.unknownDeduction)}`} />
+                )}
+                {(c.knownDeductions > 0 || c.unknownDeduction > 0) && (
+                  <Row label="Total settled" value={currency(c.settled)} />
+                )}
+                <div
+                  className={`flex justify-between font-semibold ${c.outstanding > 0.005 ? 'text-amber-600' : 'text-green-600'}`}
+                >
                   <span>Outstanding</span>
                   <span>{currency(c.outstanding)}</span>
                 </div>
@@ -165,6 +207,36 @@ export function InvoicePrintPage({ id }: { id?: string }) {
             )}
           </div>
         </div>
+
+        {/* Payment history + deductions — settlement transparency on the invoice. */}
+        {(history.length > 0 || invoiceDeductions.length > 0) && (
+          <div className="mt-6 border-t border-slate-100 pt-3">
+            <p className="text-2xs font-semibold uppercase tracking-wide text-slate-500">
+              Payment history
+            </p>
+            <table className="mt-2 w-full text-sm">
+              <tbody>
+                {history.map((h) => (
+                  <tr key={h.key} className="border-b border-slate-100">
+                    <td className="py-1 font-mono text-xs text-slate-600">{h.no}</td>
+                    <td className="py-1 text-xs text-slate-500">{h.date ? fmtDate(h.date) : ''}</td>
+                    <td className="py-1 text-xs text-slate-500">{h.method}</td>
+                    <td className="py-1 text-right tabular-nums">{currency(h.amount)}</td>
+                  </tr>
+                ))}
+                {invoiceDeductions.map((d) => (
+                  <tr key={d.id} className="border-b border-slate-100 text-slate-500">
+                    <td className="py-1 text-xs" colSpan={3}>
+                      {d.deductionType === 'Unidentified' ? 'Unknown difference' : d.deductionType}
+                      {d.remarks ? ` — ${d.remarks}` : ''}
+                    </td>
+                    <td className="py-1 text-right text-xs tabular-nums">- {currency(d.amount)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
 
         {/* Note — the delivery challan number(s) this invoice covers, highlighted. */}
         <div className="mt-6 rounded-lg border border-brand-200 bg-brand-50 px-4 py-3">

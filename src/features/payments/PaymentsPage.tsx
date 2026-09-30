@@ -1,7 +1,8 @@
 import { useMemo, useState } from 'react'
 import { Coins, Download, FileText, IndianRupee, Pencil, Plus, Trash2, Wallet } from 'lucide-react'
-import type { Invoice, Payment } from '@/types'
+import type { Invoice, Payment, PaymentAllocation, PaymentDeduction } from '@/types'
 import { usePayments, useDeletePayment } from './hooks/usePayments'
+import { useAllocations, useDeductions } from './hooks/useSettlements'
 import { useInvoices } from '@/features/invoices/hooks/useInvoices'
 import { toUserMessage } from '@/lib/api/errors'
 import { computeInvoice, receivablesSummary } from '@/data/computations'
@@ -18,25 +19,41 @@ import { useToast } from '@/components/ui/Toast'
 import { useConfirm } from '@/components/ui/ConfirmDialog'
 import { useCompanyName } from '@/features/shared/lookups'
 import { PaymentForm } from './PaymentForm'
+import { SettlementForm } from './SettlementForm'
 
 // Payment-status badge tone for an invoice-linked receipt, from its outstanding.
-function statusTone(inv: Invoice, payments: Payment[]): { tone: string; label: string } {
+function statusTone(
+  inv: Invoice,
+  payments: Payment[],
+  allocations: PaymentAllocation[] = [],
+  deductions: PaymentDeduction[] = [],
+): { tone: string; label: string } {
   if (inv.status === 'Cancelled') return { tone: 'red', label: 'Cancelled' }
-  const { total, paid, outstanding } = computeInvoice(inv, payments)
-  if (paid <= 0) return { tone: 'slate', label: 'Unpaid' }
-  if (outstanding > 0.005 && paid < total) return { tone: 'amber', label: 'Partially Paid' }
-  return { tone: 'green', label: 'Paid' }
+  const { total, paid, settled, outstanding } = computeInvoice(
+    inv,
+    payments,
+    allocations,
+    deductions,
+  )
+  if (settled <= 0) return { tone: 'slate', label: 'Unpaid' }
+  if (outstanding > 0.005) return { tone: 'amber', label: 'Partially Paid' }
+  return paid + 0.001 >= total
+    ? { tone: 'green', label: 'Paid' }
+    : { tone: 'green', label: 'Settled' }
 }
 
 export function PaymentsPage() {
   const { data: payments = [], isLoading } = usePayments()
   const { data: invoices = [], isLoading: invoicesLoading } = useInvoices()
+  const { data: allocations = [] } = useAllocations()
+  const { data: deductions = [] } = useDeductions()
   const deletePayment = useDeletePayment()
   const companyName = useCompanyName()
   const toast = useToast()
   const confirm = useConfirm()
 
   const [show, setShow] = useState(false)
+  const [showSettlement, setShowSettlement] = useState(false)
   const [editing, setEditing] = useState<Payment | null>(null)
   const [search, setSearch] = useState('')
   const [company, setCompany] = useState('')
@@ -76,12 +93,18 @@ export function PaymentsPage() {
   // shared calculation core, so there is no duplicated financial logic.
   const summary = useMemo(
     () =>
-      receivablesSummary(invoices, payments, {
-        companyId: company || undefined,
-        from: from || undefined,
-        to: to || undefined,
-      }),
-    [invoices, payments, company, from, to],
+      receivablesSummary(
+        invoices,
+        payments,
+        {
+          companyId: company || undefined,
+          from: from || undefined,
+          to: to || undefined,
+        },
+        allocations,
+        deductions,
+      ),
+    [invoices, payments, allocations, deductions, company, from, to],
   )
   const summaryLoading = isLoading || invoicesLoading
   const money = (v: number) => (summaryLoading ? '—' : currency(v))
@@ -122,11 +145,39 @@ export function PaymentsPage() {
   // allocated receipts, or a clear badge for advance / unallocated money — never
   // a bare "—" when the allocation is actually meaningful.
   function renderInvoiceCell(p: Payment) {
-    if (p.isAdvance) return <Badge tone="violet">Advance</Badge>
-    if (!p.invoiceId) return <Badge tone="slate">Unallocated</Badge>
-    const inv = invoiceById.get(p.invoiceId)
+    // A settlement payment carries its invoices in the allocation table, not the
+    // header invoice_id — surface those first.
+    const myAllocs = allocations.filter((a) => a.paymentId === p.id)
+    if (myAllocs.length > 1) {
+      return (
+        <span className="inline-flex flex-wrap items-center gap-1">
+          {myAllocs.map((a) => {
+            const inv = invoiceById.get(a.invoiceId)
+            return inv ? (
+              <AppLink
+                key={a.id}
+                to={`/app/invoices/${inv.id}/print`}
+                className="font-medium text-brand-600 hover:underline"
+                title={`${inv.invoiceNo}: ${currency(a.amount)}`}
+              >
+                {inv.invoiceNo}
+              </AppLink>
+            ) : null
+          })}
+          {p.amount - myAllocs.reduce((s, a) => s + a.amount, 0) > 0.005 && (
+            <Badge tone="violet">+ advance</Badge>
+          )}
+        </span>
+      )
+    }
+    const singleInvoiceId = myAllocs[0]?.invoiceId ?? p.invoiceId
+    if (!singleInvoiceId) {
+      if (p.isAdvance) return <Badge tone="violet">Advance</Badge>
+      return <Badge tone="slate">Unallocated</Badge>
+    }
+    const inv = invoiceById.get(singleInvoiceId)
     if (!inv) return <span className="text-slate-400">—</span>
-    const st = statusTone(inv, payments)
+    const st = statusTone(inv, payments, allocations, deductions)
     return (
       <span className="inline-flex items-center gap-1.5">
         <AppLink
@@ -151,8 +202,11 @@ export function PaymentsPage() {
             <button className="btn-secondary" onClick={exportExcel}>
               <Download size={16} /> Excel
             </button>
-            <button className="btn-primary" onClick={() => setShow(true)}>
-              <Plus size={16} /> Record Payment
+            <button className="btn-secondary" onClick={() => setShow(true)}>
+              <Plus size={16} /> Quick Payment
+            </button>
+            <button className="btn-primary" onClick={() => setShowSettlement(true)}>
+              <Plus size={16} /> Record Settlement
             </button>
           </>
         }
@@ -289,6 +343,7 @@ export function PaymentsPage() {
       </Card>
 
       {show && <PaymentForm onClose={() => setShow(false)} />}
+      {showSettlement && <SettlementForm onClose={() => setShowSettlement(false)} />}
       {editing && <PaymentForm payment={editing} onClose={() => setEditing(null)} />}
     </div>
   )
