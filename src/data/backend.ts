@@ -373,29 +373,40 @@ export async function loadAll(): Promise<Database | null> {
     inv.lines = linesByInvoice.get(inv.id) ?? []
   })
 
-  // App state (settings + sequences).
+  // Settings (the shop profile: company name/logo/GSTIN, tax defaults, numbering)
+  // are PER-TENANT. Read them through the tenant-isolated RPC, which resolves the
+  // caller's own tenant server-side — NEVER from the shared `app_state` singleton,
+  // which would expose the site owner's (SBI) branding/profile to every tenant.
+  // A brand-new tenant's row is '{}', so DEFAULT_SETTINGS supplies the neutral brand.
+  const { data: tset, error: tsetErr } = await supabase.rpc('get_tenant_settings')
+  if (tsetErr) throw tsetErr
+  const parsedSettings = (tset ?? {}) as Partial<Database['settings']>
+  if (parsedSettings && Object.keys(parsedSettings).length > 0) {
+    // Deep-merge so newly-added nested keys (e.g. numbering.dc) keep their
+    // defaults when the stored settings predate them.
+    db.settings = {
+      ...DEFAULT_SETTINGS,
+      ...parsedSettings,
+      numbering: { ...DEFAULT_SETTINGS.numbering, ...(parsedSettings.numbering ?? {}) },
+      company: { ...DEFAULT_SETTINGS.company, ...(parsedSettings.company ?? {}) },
+    }
+  }
+
+  // The user/account registry and legacy sequence counters remain in the shared
+  // `app_state` singleton: the approval registry is intentionally cross-tenant
+  // (a pending signup has no tenant yet, and the super admin approves it here).
+  // Settings are NO LONGER read from this row.
   const { data: state, error: stateErr } = await supabase
     .from('app_state')
-    .select('*')
+    .select('data')
     .eq('id', 'singleton')
     .maybeSingle()
   if (stateErr) throw stateErr
-  if (state?.data) {
-    const parsed = state.data as {
-      settings?: Database['settings']
-      sequences?: Database['sequences']
-      users?: Database['users']
-    }
-    if (parsed.settings) {
-      // Deep-merge so newly-added nested keys (e.g. numbering.dc) keep their
-      // defaults when the stored settings predate them.
-      db.settings = {
-        ...DEFAULT_SETTINGS,
-        ...parsed.settings,
-        numbering: { ...DEFAULT_SETTINGS.numbering, ...(parsed.settings.numbering ?? {}) },
-        company: { ...DEFAULT_SETTINGS.company, ...(parsed.settings.company ?? {}) },
-      }
-    }
+  const parsed = (state?.data ?? null) as {
+    sequences?: Database['sequences']
+    users?: Database['users']
+  } | null
+  if (parsed) {
     if (parsed.sequences) db.sequences = { ...db.sequences, ...parsed.sequences }
     if (Array.isArray(parsed.users)) db.users = parsed.users
   } else {
@@ -488,18 +499,26 @@ function invoiceLineDiff(prev: Database, next: Database) {
 
 async function applyAppState(prev: Database, next: Database) {
   if (!supabase) return
-  if (
-    JSON.stringify(prev.settings) === JSON.stringify(next.settings) &&
-    JSON.stringify(prev.sequences) === JSON.stringify(next.sequences) &&
-    JSON.stringify(prev.users) === JSON.stringify(next.users)
-  ) {
-    return
+  // Settings are per-tenant: persist via the tenant-isolated RPC so a tenant only
+  // ever writes its OWN shop profile. They are deliberately excluded from the
+  // shared `app_state` row below — writing them there would let one tenant's edits
+  // overwrite the shared singleton and re-introduce the cross-tenant leak.
+  if (JSON.stringify(prev.settings) !== JSON.stringify(next.settings)) {
+    const { error } = await supabase.rpc('set_tenant_settings', { p_data: next.settings })
+    if (error) throw error
   }
-  const { error } = await supabase.from('app_state').upsert({
-    id: 'singleton',
-    data: { settings: next.settings, sequences: next.sequences, users: next.users },
-  })
-  if (error) throw error
+  // Users (global approval registry) + legacy sequence counters stay in the shared
+  // singleton.
+  if (
+    JSON.stringify(prev.sequences) !== JSON.stringify(next.sequences) ||
+    JSON.stringify(prev.users) !== JSON.stringify(next.users)
+  ) {
+    const { error } = await supabase.from('app_state').upsert({
+      id: 'singleton',
+      data: { sequences: next.sequences, users: next.users },
+    })
+    if (error) throw error
+  }
 }
 
 // Called by db.saveDb after each persisted change. Serialised so writes land in
