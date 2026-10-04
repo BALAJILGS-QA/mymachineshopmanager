@@ -4,8 +4,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project
 
-CNC / machine-shop management system (single-tenant SaaS): companies, job orders,
+CNC / machine-shop management system (multi-tenant SaaS): companies, job orders,
 production, inventory, invoices, payments, expenses, delivery challans, reports.
+Tenancy is enforced in the database (`tenant_id` + RLS + cross-tenant guards,
+migrations 0039–0048); `src/features/tenant` carries the client-side tenant context.
 **Framework: Next.js App Router** (migrated from Vite + TanStack Start in 2026-09;
 see `MIGRATION_PROGRESS.md` for the full record). Active work happens on the
 `dev` branch; production deploys from `main` (Vercel).
@@ -14,17 +16,20 @@ see `MIGRATION_PROGRESS.md` for the full record). Active work happens on the
 
 Run all commands from the `mymachineshopmanager/` directory (the git root).
 
-| Command                           | Purpose                                                      |
-| --------------------------------- | ------------------------------------------------------------ |
-| `npm run dev`                     | Next dev server on http://localhost:3000                     |
-| `npm run build`                   | Production build (`next build`)                              |
-| `npm run start`                   | Serve the production build (`next start`)                    |
-| `npm run typecheck`               | `tsc --noEmit` — the real type gate                          |
-| `npm run lint` / `lint:fix`       | ESLint (flat config, non-type-aware)                         |
-| `npm run format` / `format:check` | Prettier                                                     |
-| `npm run test`                    | Vitest (unit) once; `test:watch`, `test:coverage` also exist |
-| `npm run test:e2e`                | Playwright (chromium + Pixel-7) against a fresh `next build` |
-| `npm run test:e2e:prod`           | Playwright against the deployed prod site                    |
+| Command                           | Purpose                                                                  |
+| --------------------------------- | ------------------------------------------------------------------------ |
+| `npm run dev`                     | Next dev server on http://localhost:3000                                 |
+| `npm run build`                   | Production build (`next build`)                                          |
+| `npm run start`                   | Serve the production build (`next start`)                                |
+| `npm run typecheck`               | `tsc --noEmit` — the real type gate                                      |
+| `npm run lint` / `lint:fix`       | ESLint (flat config, non-type-aware)                                     |
+| `npm run format` / `format:check` | Prettier                                                                 |
+| `npm run test`                    | Vitest (unit) once; `test:watch`, `test:coverage` also exist             |
+| `npm run test:e2e`                | Playwright (chromium + Pixel-7) against a fresh `next build`             |
+| `npm run test:e2e:prod`           | Playwright against the deployed prod site                                |
+| `npm run qa`                      | QA harness (`playwright.qa.config.ts`); `qa:report`, `qa:csv` also exist |
+| `npm run seo:audit`               | SEO audit script (`scripts/seo-audit.mjs`)                               |
+| `npm run deploy`                  | Guided deploy (`scripts/deploy.mjs`)                                     |
 
 Run a single unit test: `npx vitest run src/data/computations.test.ts`
 Run a single e2e test: `npx playwright test e2e/site.spec.ts --project=chromium`
@@ -91,7 +96,9 @@ localStorage local-mode fallback exists when Supabase env is absent.
   (`.env`, gitignored). `next.config.mjs` also bridges legacy `VITE_SUPABASE_*`
   values at build time (hosting still defines those); `src/lib/env-public.ts` is
   the cross-runtime reader. Only the anon key belongs client-side.
-- Schema/RPCs/RLS: `supabase/migrations/000X_*.sql` (numbered, apply in order).
+- Schema/RPCs/RLS: `supabase/migrations/00XX_*.sql` (numbered, apply in order;
+  currently through 0059). Tenant isolation lives here — new tables need
+  `tenant_id` + the standard RLS/guard pattern (see 0039–0048).
 - Path alias `@/*` → `src/*` (tsconfig `paths`; vitest.config mirrors it).
 - Deploy: **Vercel** (`vercel.json`, framework nextjs; production from `main`,
   previews from `dev`). Netlify config targets the Next runtime plugin.
