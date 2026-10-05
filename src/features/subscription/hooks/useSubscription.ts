@@ -20,13 +20,24 @@ export function useSetPlan() {
   })
 }
 
-// Super-admin: all users' subscriptions (for the Approvals screen). `enabled` lets
-// callers skip the fetch for non-super-admins.
+// Super-admin: all users' subscriptions (for the Approvals / Roles screens).
+// `enabled` lets callers skip the fetch for non-super-admins.
 export function useUserSubscriptions(enabled = true) {
   return useQuery({
     queryKey: ['user-subscriptions'],
     queryFn: api.listUserSubscriptions,
     enabled,
     staleTime: 5 * 60 * 1000,
+  })
+}
+
+// Super-admin: subscription history for one tenant (loaded when the detail drawer
+// opens). `enabled` gates the fetch to when a tenant is actually selected.
+export function useSubscriptionEvents(tenantId: string | null | undefined, enabled = true) {
+  return useQuery({
+    queryKey: ['subscription-events', tenantId],
+    queryFn: () => api.listSubscriptionEvents(tenantId as string),
+    enabled: enabled && !!tenantId,
+    staleTime: 60 * 1000,
   })
 }

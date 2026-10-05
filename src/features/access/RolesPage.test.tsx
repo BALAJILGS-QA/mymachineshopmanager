@@ -23,6 +23,10 @@ vi.mock('@/features/approvals/hooks/useUsers', () => ({
   useUpdateUserAccess: () => ({ mutateAsync: h.update, isPending: false }),
 }))
 vi.mock('@/components/ui/Toast', () => ({ useToast: () => h.toast }))
+vi.mock('@/features/subscription/hooks/useSubscription', () => ({
+  useUserSubscriptions: () => ({ data: [] }),
+  useSubscriptionEvents: () => ({ data: [], isLoading: false }),
+}))
 
 import { RolesPage } from './RolesPage'
 
