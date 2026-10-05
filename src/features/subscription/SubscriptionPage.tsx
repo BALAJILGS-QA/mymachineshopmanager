@@ -1,32 +1,24 @@
-import { Check, Crown, Loader2, Sparkles } from 'lucide-react'
+import { Check, Crown, Sparkles } from 'lucide-react'
 import { clsx } from 'clsx'
+import { useAppNavigate } from '@/components/nav/app-link'
 import { PageHeader } from '@/components/common/PageHeader'
-import { useToast } from '@/components/ui/Toast'
-import { PLANS, formatINR, planById, type PlanId } from './plans'
-import { useSubscription, useSetPlan } from './hooks/useSubscription'
+import { PLANS, formatINR, type PlanId } from './plans'
+import { useSubscription } from './hooks/useSubscription'
 
 // Subscription / plan selection page. Shows the three tiers, highlights the
-// tenant's current plan, and lets a tenant owner/admin choose one. Billing/payment
-// integration is a follow-up — choosing a plan records the selection server-side.
+// tenant's current plan, and routes to checkout (payment) when a plan is chosen.
 export function SubscriptionPage() {
   const { data: sub } = useSubscription()
-  const setPlan = useSetPlan()
-  const toast = useToast()
+  const navigate = useAppNavigate()
 
   const current = sub?.plan ?? null
   const isTrialing = sub?.status === 'trialing'
   const daysLeft = sub?.daysLeft ?? null
   const expired = isTrialing && (daysLeft ?? 0) <= 0
 
-  async function choose(plan: PlanId) {
-    try {
-      await setPlan.mutateAsync(plan)
-      toast.success(
-        `${planById(plan)?.name} plan selected. Our team will reach out to activate it.`,
-      )
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Could not update plan')
-    }
+  // Choosing a plan sends the user to the checkout / payment page.
+  function choose(plan: PlanId) {
+    navigate(`/app/subscription/checkout?plan=${plan}`)
   }
 
   return (
@@ -111,7 +103,7 @@ export function SubscriptionPage() {
 
               <button
                 type="button"
-                disabled={isCurrent || setPlan.isPending}
+                disabled={isCurrent}
                 onClick={() => choose(plan.id)}
                 className={clsx(
                   'mt-6 inline-flex w-full items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold transition',
@@ -122,7 +114,6 @@ export function SubscriptionPage() {
                       : 'border border-slate-300 text-slate-700 hover:bg-slate-50',
                 )}
               >
-                {setPlan.isPending && <Loader2 size={15} className="animate-spin" />}
                 {isCurrent ? 'Current plan' : `Choose ${plan.name}`}
               </button>
             </div>

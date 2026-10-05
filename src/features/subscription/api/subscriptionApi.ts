@@ -19,8 +19,16 @@ export async function getMySubscription(): Promise<Subscription> {
   return (data ?? FALLBACK) as Subscription
 }
 
-export async function setTenantPlan(plan: PlanId): Promise<Subscription> {
-  const { data, error } = await sb().rpc('set_tenant_plan', { p_plan: plan })
+export type BillingCycle = 'monthly' | 'annual'
+
+export async function setTenantPlan(
+  plan: PlanId,
+  billing: BillingCycle = 'monthly',
+): Promise<Subscription> {
+  const { data, error } = await sb().rpc('set_tenant_plan', {
+    p_plan: plan,
+    p_billing_cycle: billing,
+  })
   if (error) throw error
   return (data ?? FALLBACK) as Subscription
 }

@@ -15,8 +15,12 @@ export function useSubscription() {
 export function useSetPlan() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: (plan: PlanId) => api.setTenantPlan(plan),
-    onSuccess: () => qc.invalidateQueries({ queryKey: KEY }),
+    mutationFn: ({ plan, billing }: { plan: PlanId; billing?: api.BillingCycle }) =>
+      api.setTenantPlan(plan, billing),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: KEY })
+      qc.invalidateQueries({ queryKey: ['user-subscriptions'] })
+    },
   })
 }
 
