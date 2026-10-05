@@ -96,16 +96,14 @@ async function ensureSuperAdminCredential(): Promise<void> {
   }
 }
 
-// ---- Supabase: profiles live in app_state.data.users (no extra table) -------
+// ---- Supabase: the user registry is served by a scoped SECURITY DEFINER RPC -----
+// `list_app_users` returns the full list only to a super admin; a normal user gets
+// just their OWN record (enough to resolve their login/approval status). The raw
+// app_state row is not client-readable, so no user's details leak to another.
 async function fetchRemoteUsers(): Promise<AppUser[]> {
   if (!supabase) return []
-  const { data } = await supabase
-    .from('app_state')
-    .select('data')
-    .eq('id', 'singleton')
-    .maybeSingle()
-  const users = (data?.data as { users?: AppUser[] } | null)?.users
-  return Array.isArray(users) ? users : []
+  const { data } = await supabase.rpc('list_app_users')
+  return Array.isArray(data) ? (data as AppUser[]) : []
 }
 
 // While a registration is in flight we briefly hold a session to write the

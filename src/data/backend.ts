@@ -392,23 +392,23 @@ export async function loadAll(): Promise<Database | null> {
     }
   }
 
-  // The user/account registry and legacy sequence counters remain in the shared
-  // `app_state` singleton: the approval registry is intentionally cross-tenant
-  // (a pending signup has no tenant yet, and the super admin approves it here).
-  // Settings are NO LONGER read from this row.
-  const { data: state, error: stateErr } = await supabase
-    .from('app_state')
-    .select('data')
-    .eq('id', 'singleton')
-    .maybeSingle()
-  if (stateErr) throw stateErr
-  const parsed = (state?.data ?? null) as {
-    sequences?: Database['sequences']
-    users?: Database['users']
-  } | null
-  if (parsed) {
-    if (parsed.sequences) db.sequences = { ...db.sequences, ...parsed.sequences }
-    if (Array.isArray(parsed.users)) db.users = parsed.users
+  // The approval/user registry is sensitive (every registrant's email, name,
+  // company, phone, GSTIN) and tenant-blind, so it is served by a scoped
+  // SECURITY DEFINER RPC — NEVER read from the raw `app_state` row, which is now
+  // super-admin-only. `list_app_users` returns the full list to a super admin, an
+  // Admin's own shop, or just the caller's own record for a plain user, so one
+  // user's details are never shipped to another.
+  const { data: usersData, error: usersErr } = await supabase.rpc('list_app_users')
+  if (usersErr) throw usersErr
+  db.users = (Array.isArray(usersData) ? usersData : []) as Database['users']
+
+  // Legacy sequence counters (non-authoritative; real numbering uses the
+  // tenant-scoped next_seq RPC) come from their own RPC.
+  const { data: seqData, error: seqErr } = await supabase.rpc('get_app_sequences')
+  if (seqErr) throw seqErr
+  const seq = (seqData ?? null) as Partial<Database['sequences']> | null
+  if (seq && Object.keys(seq).length > 0) {
+    db.sequences = { ...db.sequences, ...seq }
   } else {
     // Fresh DB seeded via SQL: align code sequences with existing rows.
     db.sequences.companyCode = db.companies.length
@@ -507,16 +507,12 @@ async function applyAppState(prev: Database, next: Database) {
     const { error } = await supabase.rpc('set_tenant_settings', { p_data: next.settings })
     if (error) throw error
   }
-  // Users (global approval registry) + legacy sequence counters stay in the shared
-  // singleton.
-  if (
-    JSON.stringify(prev.sequences) !== JSON.stringify(next.sequences) ||
-    JSON.stringify(prev.users) !== JSON.stringify(next.users)
-  ) {
-    const { error } = await supabase.from('app_state').upsert({
-      id: 'singleton',
-      data: { sequences: next.sequences, users: next.users },
-    })
+  // Legacy sequence counters only, via a dedicated RPC (the raw `app_state` row is
+  // super-admin-only now). The users registry is NEVER written through here: it is
+  // mutated exclusively by register_pending_user / set_user_approval /
+  // set_user_access, so a client can never overwrite or leak other users' records.
+  if (JSON.stringify(prev.sequences) !== JSON.stringify(next.sequences)) {
+    const { error } = await supabase.rpc('save_app_sequences', { p_sequences: next.sequences })
     if (error) throw error
   }
 }

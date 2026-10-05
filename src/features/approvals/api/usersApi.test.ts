@@ -1,28 +1,32 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import type { AppUser, UserRole } from '@/types'
 
-// Unit coverage for the app_state read-modify-write in updateUserAccess — the
-// "only the target user changes / a single singleton upsert is issued" invariant
-// (MSM-ROLES-DB-003 / DB-001 / API-001), without touching a real backend.
+// Unit coverage for the RPC-delegated user access API. The read-modify-write now
+// lives server-side (set_user_access, SECURITY DEFINER + authorization checks), so
+// here we assert the client calls the right RPC with the right args and surfaces
+// its result/errors (MSM-ROLES-API-001).
 
 const store = vi.hoisted(() => ({
-  users: [] as AppUser[],
-  lastUpsert: null as { id: string; data: { users: AppUser[] } } | null,
+  calls: [] as { fn: string; args: Record<string, unknown> }[],
 }))
 
 vi.mock('@/lib/api/supabaseCrud', () => ({
   sb: () => ({
-    from: () => ({
-      select: () => ({
-        eq: () => ({
-          maybeSingle: async () => ({ data: { data: { users: store.users } }, error: null }),
-        }),
-      }),
-      upsert: async (payload: { id: string; data: { users: AppUser[] } }) => {
-        store.lastUpsert = payload
-        return { error: null }
-      },
-    }),
+    rpc: async (fn: string, args: Record<string, unknown>) => {
+      store.calls.push({ fn, args })
+      if (fn === 'set_user_access') {
+        if (args.p_id === 'nope') return { data: null, error: { message: 'User not found' } }
+        return {
+          data: {
+            id: args.p_id,
+            role: args.p_role ?? 'User',
+            permissions: args.p_permissions ?? [],
+          },
+          error: null,
+        }
+      }
+      return { data: null, error: null }
+    },
   }),
 }))
 
@@ -45,38 +49,37 @@ function user(over: Partial<AppUser>): AppUser {
 }
 
 beforeEach(() => {
-  store.lastUpsert = null
-  store.users = [
-    user({ id: 'u1', email: 'u1@a.com', role: 'User', permissions: [] }),
-    user({ id: 'u2', email: 'u2@a.com', role: 'User', permissions: ['hrm'] }),
-  ]
+  store.calls = []
 })
 
 describe('updateUserAccess', () => {
-  it('MSM-ROLES-DB-003: updates only the target user, leaving others untouched', async () => {
-    const u2Before = JSON.stringify(store.users[1])
-    await updateUserAccess('u1', { role: 'User', permissions: ['inventory'] })
+  it('MSM-ROLES-API-001: delegates to set_user_access with id/role/permissions', async () => {
+    const result = await updateUserAccess('u1', { role: 'User', permissions: ['inventory'] })
 
-    expect(store.lastUpsert).not.toBeNull()
-    const written = store.lastUpsert!.data.users
-    const u1 = written.find((u) => u.id === 'u1')!
-    const u2 = written.find((u) => u.id === 'u2')!
-    expect(u1.permissions).toEqual(['inventory'])
-    // The other user is byte-for-byte unchanged (no collateral write).
-    expect(JSON.stringify(u2)).toBe(u2Before)
+    expect(store.calls).toHaveLength(1)
+    expect(store.calls[0]).toEqual({
+      fn: 'set_user_access',
+      args: { p_id: 'u1', p_role: 'User', p_permissions: ['inventory'] },
+    })
+    expect(result.permissions).toEqual(['inventory'])
   })
 
-  it('MSM-ROLES-DB-001 / API-001: issues a single upsert to the app_state singleton', async () => {
-    await updateUserAccess('u2', { role: 'Admin', permissions: [] })
-    expect(store.lastUpsert!.id).toBe('singleton')
-    const u2 = store.lastUpsert!.data.users.find((u) => u.id === 'u2')!
-    expect(u2.role).toBe('Admin')
+  it('passes a role change through to the RPC', async () => {
+    const result = await updateUserAccess('u2', { role: 'Admin', permissions: [] })
+    expect(store.calls[0].args).toMatchObject({ p_id: 'u2', p_role: 'Admin' })
+    expect(result.role).toBe('Admin')
   })
 
-  it('throws for an unknown user id (no upsert)', async () => {
+  it('surfaces an unknown-user error from the RPC', async () => {
     await expect(updateUserAccess('nope', { role: 'User', permissions: [] })).rejects.toThrow(
       /not found/i,
     )
-    expect(store.lastUpsert).toBeNull()
+  })
+
+  it('sends nulls when no role/permissions are supplied', async () => {
+    await updateUserAccess('u3', {})
+    expect(store.calls[0].args).toEqual({ p_id: 'u3', p_role: null, p_permissions: null })
+    // keep the shared AppUser factory/type import exercised
+    expect(user({ id: 'u3' }).id).toBe('u3')
   })
 })

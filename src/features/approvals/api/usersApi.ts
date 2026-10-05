@@ -1,68 +1,50 @@
-// Users / registration-approval data-access - Supabase-direct. Profiles live in
-// app_state.data.users (JSON); approving/rejecting also mirrors the decision into
-// the server-side approval registry (RLS gate) via the set_user_approval RPC.
+// Users / registration-approval data-access — Supabase RPCs only. The user registry
+// lives in the super-admin-only app_state singleton, so every read and write goes
+// through a scoped SECURITY DEFINER RPC: `list_app_users` (scoped read),
+// `set_user_approval` (approve/reject — also stamps status + grants the tenant),
+// and `set_user_access` (role / module grants). A client can never read or rewrite
+// another user's record directly.
 
 import { sb } from '@/lib/api/supabaseCrud'
 import type { AppUser, UserRole } from '@/types'
 
-async function readAppState(): Promise<{ cur: Record<string, unknown>; users: AppUser[] }> {
-  const { data, error } = await sb()
-    .from('app_state')
-    .select('data')
-    .eq('id', 'singleton')
-    .maybeSingle()
-  if (error) throw error
-  const cur = (data?.data as Record<string, unknown> | null) ?? {}
-  const users = (Array.isArray(cur.users) ? cur.users : []) as AppUser[]
-  return { cur, users }
-}
-
 export async function listUsers(): Promise<AppUser[]> {
-  return (await readAppState()).users
-}
-
-// Mirror an approval decision into the server-side registry (no-op if the policy
-// RPC isn't present, so a missing migration doesn't break the local update).
-async function setRemoteApproval(email: string, approved: boolean): Promise<void> {
-  const { error } = await sb().rpc('set_user_approval', { p_email: email, p_approved: approved })
-  if (error && !/function .* does not exist|not find the function/i.test(error.message)) {
-    throw error
-  }
+  const { data, error } = await sb().rpc('list_app_users')
+  if (error) throw error
+  return (Array.isArray(data) ? data : []) as AppUser[]
 }
 
 async function decide(
   id: string,
   status: 'approved' | 'rejected',
-  by: string,
+  _by: string,
   email: string,
 ): Promise<AppUser> {
-  const { cur, users } = await readAppState()
-  const idx = users.findIndex((u) => u.id === id)
-  if (idx < 0) throw new Error('User not found')
-  users[idx] = { ...users[idx], status, decidedAt: new Date().toISOString(), decidedBy: by }
-  const { error } = await sb()
-    .from('app_state')
-    .upsert({ id: 'singleton', data: { ...cur, users } })
+  // set_user_approval (super-admin only in the DB) flips approved_users, the tenant
+  // membership AND the app_state registry status/decidedAt/decidedBy in one step.
+  const { error } = await sb().rpc('set_user_approval', {
+    p_email: email,
+    p_approved: status === 'approved',
+  })
   if (error) throw error
-  await setRemoteApproval(email, status === 'approved')
-  return users[idx]
+  const user = (await listUsers()).find((u) => u.id === id)
+  if (!user) throw new Error('User not found')
+  return user
 }
 
-// Update a user's role and/or granted modules (super-admin only, enforced by the
-// app_state RLS policy). Reuses the read-modify-write on the users JSON array.
+// Update a user's role and/or granted modules via the authorization-checked RPC
+// (super admin, or an Admin for a role='User' account in their own shop).
 export async function updateUserAccess(
   id: string,
   patch: { role?: UserRole; permissions?: string[] },
 ): Promise<AppUser> {
-  const { cur, users } = await readAppState()
-  const idx = users.findIndex((u) => u.id === id)
-  if (idx < 0) throw new Error('User not found')
-  users[idx] = { ...users[idx], ...patch }
-  const { error } = await sb()
-    .from('app_state')
-    .upsert({ id: 'singleton', data: { ...cur, users } })
+  const { data, error } = await sb().rpc('set_user_access', {
+    p_id: id,
+    p_role: patch.role ?? null,
+    p_permissions: patch.permissions ?? null,
+  })
   if (error) throw error
-  return users[idx]
+  return data as AppUser
 }
 
 export async function approveUser(id: string, by: string, email: string): Promise<AppUser> {
