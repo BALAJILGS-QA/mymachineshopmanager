@@ -17,6 +17,7 @@ import {
   MoreHorizontal,
   PanelLeftClose,
   PanelLeftOpen,
+  Sparkles,
   X,
   type LucideIcon,
 } from 'lucide-react'
@@ -34,6 +35,9 @@ import { effectiveModuleKeys, filterGroupsByAccess } from '@/features/access/mod
 import { useAuth } from '@/features/auth/auth'
 import { useSettings } from '@/features/settings/hooks/useSettings'
 import { useUsers } from '@/features/approvals/hooks/useUsers'
+import { TrialBanner } from '@/features/subscription/TrialBanner'
+import { SubscriptionPage } from '@/features/subscription/SubscriptionPage'
+import { useSubscription } from '@/features/subscription/hooks/useSubscription'
 import { DEFAULT_SETTINGS } from '@/data/seed'
 import { applyAppSeo, applyFavicon } from '@/lib/app-seo'
 
@@ -278,6 +282,12 @@ function Brand({ collapsed }: { collapsed?: boolean }) {
 
 export function AppShell({ children }: { children: ReactNode }) {
   const { session, logout, isSuperAdmin } = useAuth()
+  // Strict trial gate: once a non-super-admin tenant's 30-day trial expires (and it
+  // has no active paid plan), the whole portal is replaced by the upgrade screen —
+  // the DB also denies their data (migration 0064), this is the matching UX.
+  const { data: subscription } = useSubscription()
+  const trialExpired =
+    !isSuperAdmin && subscription?.status === 'trialing' && (subscription?.daysLeft ?? 1) <= 0
   const { data: settings } = useSettings()
   const company = settings?.company ?? DEFAULT_SETTINGS.company
   const { data: users = [] } = useUsers()
@@ -455,6 +465,16 @@ export function AppShell({ children }: { children: ReactNode }) {
           <div className="flex h-8 w-8 items-center justify-center rounded-full bg-brand-100 text-sm font-bold text-brand-800 ring-1 ring-brand-200">
             {session?.username?.[0]?.toUpperCase() ?? 'A'}
           </div>
+          {!isSuperAdmin && (
+            <Link
+              href="/app/subscription"
+              className="btn-secondary btn-sm"
+              title="Subscription & plans"
+            >
+              <Sparkles size={15} />
+              <span className="hidden sm:inline">Upgrade</span>
+            </Link>
+          )}
           <button onClick={logout} className="btn-secondary btn-sm" title="Sign out">
             <LogOut size={15} />
             <span className="hidden sm:inline">Sign out</span>
@@ -462,10 +482,13 @@ export function AppShell({ children }: { children: ReactNode }) {
         </div>
       </header>
 
-      {/* Main content */}
+      {/* Main content — replaced by the upgrade screen once the trial has expired. */}
       <main className={clsx('px-4 pb-24 pt-4 lg:px-8 lg:pb-10', ml)}>
-        <div className="mx-auto max-w-7xl">{children}</div>
+        <div className="mx-auto max-w-7xl">{trialExpired ? <SubscriptionPage /> : children}</div>
       </main>
+
+      {/* Free-trial reminder popup (shows in the last 5 days of the trial). */}
+      {!trialExpired && <TrialBanner />}
 
       {/* Mobile bottom navigation */}
       <nav className="fixed inset-x-0 bottom-0 z-20 flex items-stretch border-t border-slate-300 bg-white lg:hidden">

@@ -65,8 +65,10 @@ const SALT = 'cnc-shop::v1'
 const DEFAULT_USER = 'superadmin'
 const DEFAULT_PASS = 'superadmin123'
 
-// Emails treated as super admins in Supabase mode (full access + approvals).
-const SUPER_ADMIN_EMAILS = ['admin@sreebalajiindustries.com', 'balajin04@outlook.com']
+// The single super admin (platform operator). Everyone else becomes an Admin of
+// their own tenant once approved. Keep this in sync with public.is_super_admin_email
+// in the database (migration 0062).
+const SUPER_ADMIN_EMAILS = ['admin@sreebalajiindustries.com']
 function isSuperAdminEmail(email?: string | null): boolean {
   return !!email && SUPER_ADMIN_EMAILS.some((e) => e.toLowerCase() === email.toLowerCase())
 }

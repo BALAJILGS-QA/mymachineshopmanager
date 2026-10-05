@@ -3,6 +3,8 @@ import { useAppNavigate } from '@/components/nav/app-link'
 import { Check, ShieldCheck, UserCheck, X } from 'lucide-react'
 import type { AppUser, UserStatus } from '@/types'
 import { useUsers, useApproveUser, useRejectUser } from './hooks/useUsers'
+import { useUserSubscriptions } from '@/features/subscription/hooks/useSubscription'
+import { planById } from '@/features/subscription/plans'
 import { toUserMessage } from '@/lib/api/errors'
 import { useAuth } from '@/features/auth/auth'
 import { fmtDate, inRange } from '@/lib/format'
@@ -24,6 +26,8 @@ export function ApprovalsPage() {
   const { isSuperAdmin, session } = useAuth()
   const navigate = useAppNavigate()
   const { data: users = [] } = useUsers()
+  const { data: subs = [] } = useUserSubscriptions(isSuperAdmin)
+  const subByEmail = useMemo(() => new Map(subs.map((s) => [s.email.toLowerCase(), s])), [subs])
   const approveUser = useApproveUser()
   const rejectUser = useRejectUser()
   const toast = useToast()
@@ -127,7 +131,7 @@ export function ApprovalsPage() {
             }
           />
         ) : (
-          <ResponsiveTable className="min-w-[52rem]">
+          <ResponsiveTable className="min-w-[60rem]">
             <thead>
               <tr className="border-b border-slate-100">
                 <th className="th">Applicant</th>
@@ -136,6 +140,7 @@ export function ApprovalsPage() {
                 <th className="th">GSTIN</th>
                 <th className="th">Requested</th>
                 <th className="th">Status</th>
+                <th className="th">Subscription</th>
                 <th className="th text-right">Actions</th>
               </tr>
             </thead>
@@ -155,6 +160,39 @@ export function ApprovalsPage() {
                   <td className="td">{fmtDate(u.createdAt)}</td>
                   <td className="td">
                     <Badge tone={STATUS_TONE[u.status]}>{u.status}</Badge>
+                  </td>
+                  <td className="td">
+                    {(() => {
+                      const s = subByEmail.get(u.email.toLowerCase())
+                      if (!s) return <span className="text-slate-400">—</span>
+                      const expired = s.status === 'trialing' && (s.daysLeft ?? 0) <= 0
+                      const planName =
+                        planById(s.plan)?.name ?? (s.plan === 'trial' ? 'Trial' : (s.plan ?? '—'))
+                      const label =
+                        s.status === 'active' ? planName : expired ? 'Trial expired' : 'Free trial'
+                      const sub =
+                        s.status === 'active'
+                          ? `${planById(s.plan)?.price ? '₹' + planById(s.plan)!.price + '/mo' : 'Active'}`
+                          : typeof s.daysLeft === 'number'
+                            ? `${s.daysLeft} day${s.daysLeft === 1 ? '' : 's'} left`
+                            : '—'
+                      return (
+                        <div className="leading-tight">
+                          <div
+                            className={
+                              expired
+                                ? 'font-semibold text-red-600'
+                                : s.status === 'active'
+                                  ? 'font-semibold text-emerald-700'
+                                  : 'font-medium text-slate-800'
+                            }
+                          >
+                            {label}
+                          </div>
+                          <div className="text-2xs text-slate-500">{sub}</div>
+                        </div>
+                      )
+                    })()}
                   </td>
                   <td className="td">
                     <div className="flex justify-end gap-1.5">

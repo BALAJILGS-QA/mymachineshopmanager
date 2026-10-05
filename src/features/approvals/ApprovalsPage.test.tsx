@@ -30,6 +30,9 @@ vi.mock('./hooks/useUsers', () => ({
 }))
 vi.mock('@/components/ui/Toast', () => ({ useToast: () => h.toast }))
 vi.mock('@/components/ui/ConfirmDialog', () => ({ useConfirm: () => h.confirm }))
+vi.mock('@/features/subscription/hooks/useSubscription', () => ({
+  useUserSubscriptions: () => ({ data: [] }),
+}))
 
 import { ApprovalsPage } from './ApprovalsPage'
 
