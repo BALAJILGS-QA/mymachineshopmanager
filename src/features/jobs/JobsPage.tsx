@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { clsx } from 'clsx'
-import { ClipboardList, Download, Pencil, Plus, Trash2 } from 'lucide-react'
+import { ClipboardList, Download, Eye, Pencil, Plus, Trash2 } from 'lucide-react'
 import type { JobOrder } from '@/types'
 import { useJobs, useDeleteJob } from './hooks/useJobs'
 import { toUserMessage } from '@/lib/api/errors'
@@ -18,6 +18,7 @@ import { useToast } from '@/components/ui/Toast'
 import { useConfirm } from '@/components/ui/ConfirmDialog'
 import { useCompanyName } from '@/features/shared/lookups'
 import { JobForm } from './JobForm'
+import { JobCard } from './JobCard'
 
 export function JobsPage() {
   const { data: jobs = [], isLoading } = useJobs()
@@ -27,6 +28,7 @@ export function JobsPage() {
   const confirm = useConfirm()
 
   const [editing, setEditing] = useState<JobOrder | null | undefined>(undefined)
+  const [viewing, setViewing] = useState<JobOrder | null>(null)
   const [search, setSearch] = useState('')
   const [company, setCompany] = useState('')
   const [status, setStatus] = useState('')
@@ -79,8 +81,9 @@ export function JobsPage() {
         { header: 'Part', value: (j) => j.partName },
         { header: 'Part No', value: (j) => j.partNumber ?? '' },
         { header: 'Ordered', value: (j) => j.orderedQty },
+        { header: 'Planned', value: (j) => j.plannedQty ?? j.orderedQty },
         { header: 'Completed', value: (j) => j.completedQty },
-        { header: 'Pending', value: (j) => jobPendingQty(j.orderedQty, j.completedQty) },
+        { header: 'Balance', value: (j) => jobPendingQty(j.orderedQty, j.completedQty) },
         { header: 'Priority', value: (j) => j.priority },
         { header: 'Status', value: (j) => j.status },
         { header: 'Order Date', value: (j) => j.orderDate },
@@ -138,15 +141,16 @@ export function JobsPage() {
         ) : (
           <>
             <div className="hidden md:block">
-              <ResponsiveTable className="min-w-[64rem]">
+              <ResponsiveTable className="min-w-[68rem]">
                 <thead>
                   <tr className="border-b border-slate-100">
                     <th className="th">Job No</th>
                     <th className="th">Company</th>
                     <th className="th">Part</th>
                     <th className="th text-right">Ord</th>
+                    <th className="th text-right">Plan</th>
                     <th className="th text-right">Comp</th>
-                    <th className="th text-right">Pend</th>
+                    <th className="th text-right">Bal</th>
                     <th className="th">Priority</th>
                     <th className="th">Status</th>
                     <th className="th">Due</th>
@@ -172,6 +176,7 @@ export function JobsPage() {
                           )}
                         </td>
                         <td className="td text-right">{qty(j.orderedQty)}</td>
+                        <td className="td text-right">{qty(j.plannedQty ?? j.orderedQty)}</td>
                         <td className="td text-right">{qty(j.completedQty)}</td>
                         <td className="td text-right font-semibold">
                           {qty(jobPendingQty(j.orderedQty, j.completedQty))}
@@ -188,6 +193,13 @@ export function JobsPage() {
                         </td>
                         <td className="td">
                           <div className="flex justify-end gap-1">
+                            <button
+                              className="btn-ghost btn-sm"
+                              title="View job card"
+                              onClick={() => setViewing(j)}
+                            >
+                              <Eye size={15} />
+                            </button>
                             <button className="btn-ghost btn-sm" onClick={() => setEditing(j)}>
                               <Pencil size={15} />
                             </button>
@@ -254,6 +266,7 @@ export function JobsPage() {
       </Card>
 
       {editing !== undefined && <JobForm job={editing} onClose={() => setEditing(undefined)} />}
+      {viewing && <JobCard job={viewing} onClose={() => setViewing(null)} />}
     </div>
   )
 }

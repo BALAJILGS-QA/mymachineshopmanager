@@ -74,6 +74,7 @@ export interface JobOrder extends AuditFields {
   partNumber?: string
   materialId?: ID
   orderedQty: number
+  plannedQty?: number // planned production quantity (defaults to orderedQty)
   completedQty: number
   rejectedQty?: number // QC-rejected quantity recorded at completion
   orderDate: ISODate

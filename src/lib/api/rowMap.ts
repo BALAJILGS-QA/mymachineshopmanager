@@ -63,7 +63,7 @@ export const maps = {
   },
   jobs: {
     table: 'job_orders',
-    numeric: ['orderedQty', 'completedQty', 'rejectedQty', 'rate'],
+    numeric: ['orderedQty', 'plannedQty', 'completedQty', 'rejectedQty', 'rate'],
     fields: {
       id: 'id',
       jobNo: 'job_no',
@@ -73,6 +73,7 @@ export const maps = {
       partNumber: 'part_number',
       materialId: 'material_id',
       orderedQty: 'ordered_qty',
+      plannedQty: 'planned_qty',
       completedQty: 'completed_qty',
       rejectedQty: 'rejected_qty',
       rate: 'rate',
