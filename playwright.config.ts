@@ -6,6 +6,9 @@ const PORT = process.env.E2E_PORT || '3200'
 
 export default defineConfig({
   testDir: './e2e',
+  // The functional lifecycle suite has its own config (playwright.functional.config.ts)
+  // and hits a real backend — keep it out of the standard local-build e2e run.
+  testIgnore: '**/functional/**',
   fullyParallel: true,
   reporter: 'list',
   timeout: 30_000,

@@ -18,6 +18,8 @@
     "test:coverage": "vitest run --coverage",
     "test:e2e": "playwright test",
     "test:e2e:prod": "playwright test --config=playwright.prod.config.ts",
+    "test:func": "playwright test --config=playwright.functional.config.ts",
+    "test:func:report": "playwright show-report e2e/functional/report",
     "qa": "playwright test --config=playwright.qa.config.ts",
     "qa:report": "playwright show-report qa/reports/html",
     "qa:csv": "node scripts/qa-testcases.mjs build",

@@ -3,6 +3,7 @@ import { defineConfig, devices } from '@playwright/test'
 // Runs specs against the LIVE production site (no local server).
 export default defineConfig({
   testDir: './e2e',
+  testIgnore: '**/functional/**',
   reporter: 'list',
   timeout: 45_000,
   use: {

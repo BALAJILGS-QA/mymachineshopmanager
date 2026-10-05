@@ -26,6 +26,7 @@ dev.log
 # vendor bundles; .auth/*.json holds live Supabase session tokens).
 qa/reports/
 e2e/.auth/
+e2e/functional/report/
 
 # tsc -b composite build artifacts
 vite.config.js
