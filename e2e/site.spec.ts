@@ -24,22 +24,6 @@ test('landing page renders with merged auth and SEO metadata', async ({ page }) 
   await expect(page.locator('script#route-jsonld')).toHaveCount(1)
 })
 
-test('blog list and post navigation', async ({ page }) => {
-  await page.goto('/blog')
-  await expect(page.getByRole('heading', { name: 'The Workshop Journal' })).toBeVisible()
-
-  const firstPost = page.getByRole('heading', {
-    name: 'A Complete Guide to CNC Machining Services in 2026',
-  })
-  await expect(firstPost).toBeVisible()
-  await firstPost.click()
-
-  await expect(page).toHaveURL(/\/blog\/complete-guide/)
-  await expect(page.getByRole('heading', { level: 1 })).toContainText(/Complete Guide to CNC/)
-  await expect(page.locator('script#route-jsonld')).toHaveCount(1)
-  await expect(page).toHaveTitle(/Complete Guide/)
-})
-
 test('robots.txt and sitemap.xml are served', async ({ request }) => {
   const robots = await request.get('/robots.txt')
   expect(robots.status()).toBe(200)

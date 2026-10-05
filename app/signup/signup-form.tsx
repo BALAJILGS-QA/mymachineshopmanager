@@ -13,6 +13,8 @@ import { z } from 'zod'
 import {
   Building2,
   CheckCircle2,
+  Eye,
+  EyeOff,
   Loader2,
   Lock,
   Mail,
@@ -124,14 +126,7 @@ export function SignupForm() {
           <input className="input pl-9" aria-label="GSTIN" {...register('gstin')} />
         </IconField>
         <IconField icon={Lock} label="Password" required error={errors.password?.message}>
-          <input
-            className="input pl-9"
-            type="password"
-            autoComplete="new-password"
-            placeholder="••••••••"
-            aria-label="Password"
-            {...register('password')}
-          />
+          <PasswordInput autoComplete="new-password" {...register('password')} />
         </IconField>
       </div>
       <p className="mt-1.5 text-2xs text-slate-500">At least 6 characters.</p>
@@ -185,5 +180,32 @@ function IconField({
       </div>
       {error && <p className="mt-1 text-xs text-red-600">{error}</p>}
     </div>
+  )
+}
+
+// Password input with a show/hide eye toggle. Forwards the React Hook Form
+// `register(...)` props via spread so validation/submission are unchanged.
+function PasswordInput({ autoComplete, ...rest }: React.ComponentPropsWithoutRef<'input'>) {
+  const [show, setShow] = useState(false)
+  return (
+    <>
+      <input
+        className="input pl-9 pr-9"
+        type={show ? 'text' : 'password'}
+        autoComplete={autoComplete}
+        placeholder="••••••••"
+        aria-label="Password"
+        {...rest}
+      />
+      <button
+        type="button"
+        onClick={() => setShow((s) => !s)}
+        aria-label={show ? 'Hide password' : 'Show password'}
+        aria-pressed={show}
+        className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 transition hover:text-slate-700"
+      >
+        {show ? <EyeOff size={16} /> : <Eye size={16} />}
+      </button>
+    </>
   )
 }

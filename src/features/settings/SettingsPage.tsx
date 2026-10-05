@@ -1,9 +1,11 @@
-import { useState, type ChangeEvent } from 'react'
+import { useState, type ChangeEvent, type InputHTMLAttributes } from 'react'
 import {
   ArrowLeft,
   ChevronRight,
   Coins,
   Database,
+  Eye,
+  EyeOff,
   Hash,
   KeyRound,
   Layers,
@@ -662,16 +664,44 @@ function ChangePassword() {
       <SectionTitle title="Change Password" subtitle="Admin login credential" />
       <div className="mt-3 space-y-3">
         <Field label="Current Password">
-          <Input type="password" value={current} onChange={(e) => setCurrent(e.target.value)} />
+          <PasswordInput
+            autoComplete="current-password"
+            value={current}
+            onChange={(e) => setCurrent(e.target.value)}
+          />
         </Field>
         <Field label="New Password">
-          <Input type="password" value={next} onChange={(e) => setNext(e.target.value)} />
+          <PasswordInput
+            autoComplete="new-password"
+            value={next}
+            onChange={(e) => setNext(e.target.value)}
+          />
         </Field>
         <button className="btn-primary" onClick={submit}>
           <KeyRound size={16} /> Update password
         </button>
       </div>
     </Card>
+  )
+}
+
+// Password <Input> with a show/hide eye toggle. Accepts (and forwards) the `id`
+// that <Field> injects via cloneElement, so the label association is preserved.
+function PasswordInput({ id, ...props }: InputHTMLAttributes<HTMLInputElement>) {
+  const [show, setShow] = useState(false)
+  return (
+    <div className="relative">
+      <Input id={id} type={show ? 'text' : 'password'} className="pr-9" {...props} />
+      <button
+        type="button"
+        onClick={() => setShow((s) => !s)}
+        aria-label={show ? 'Hide password' : 'Show password'}
+        aria-pressed={show}
+        className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 transition hover:text-slate-700"
+      >
+        {show ? <EyeOff size={16} /> : <Eye size={16} />}
+      </button>
+    </div>
   )
 }
 

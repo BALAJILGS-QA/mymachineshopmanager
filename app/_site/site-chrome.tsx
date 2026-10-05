@@ -17,16 +17,14 @@ import { clsx } from 'clsx'
 import { Logo } from '@/components/ui/Logo'
 import { BRAND } from '@/lib/brand'
 import { useReveal } from '@/features/site/useReveal'
-import { FEATURES, INDUSTRIES } from '@/features/site/solutionsData'
+import { FEATURES } from '@/features/site/solutionsData'
 import '@/features/site/site.css'
 
-// `/`, `/about`, `/blog` and `/contact` are real routes; hash entries scroll.
+// `/`, `/about` and `/contact` are real routes; hash entries scroll.
 const NAV = [
   { href: '/', label: 'Home' },
   { href: '/features', label: 'Features' },
-  { href: '/industries', label: 'Industries' },
   { href: '/about', label: 'About' },
-  { href: '/blog', label: 'Blog' },
   { href: '/contact', label: 'Reach Us' },
 ]
 
@@ -186,7 +184,7 @@ function Footer() {
   const year = 2026
   return (
     <footer className="relative border-t border-[var(--line)] bg-white/60">
-      <div className="mx-auto grid max-w-6xl gap-10 px-5 py-14 md:grid-cols-2 lg:grid-cols-[1.5fr_1fr_1fr_1fr]">
+      <div className="mx-auto grid max-w-6xl gap-10 px-5 py-14 md:grid-cols-2 lg:grid-cols-[1.5fr_1fr_1fr]">
         <div>
           <Wordmark />
           <p className="mt-4 max-w-xs text-sm leading-relaxed text-[var(--ink-dim)]">
@@ -212,33 +210,11 @@ function Footer() {
           </ul>
         </div>
         <div>
-          <p className="kicker mb-3">Industries</p>
-          <ul className="space-y-2 text-sm text-[var(--ink-dim)]">
-            {INDUSTRIES.map((i) => (
-              <li key={i.slug}>
-                <Link href={`/industries/${i.slug}`} className="hover:text-[var(--ink)]">
-                  {i.name}
-                </Link>
-              </li>
-            ))}
-            <li>
-              <Link href="/industries" className="font-medium hover:text-[var(--ink)]">
-                All industries →
-              </Link>
-            </li>
-          </ul>
-        </div>
-        <div>
           <p className="kicker mb-3">Company</p>
           <ul className="space-y-2 text-sm text-[var(--ink-dim)]">
             <li>
               <Link href="/about" className="hover:text-[var(--ink)]">
                 About
-              </Link>
-            </li>
-            <li>
-              <Link href="/blog" className="hover:text-[var(--ink)]">
-                Blog
               </Link>
             </li>
             <li>

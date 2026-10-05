@@ -9,7 +9,7 @@ import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import Link from 'next/link'
-import { CheckCircle2, Loader2, Lock } from 'lucide-react'
+import { CheckCircle2, Eye, EyeOff, Loader2, Lock } from 'lucide-react'
 import { supabase, isSupabaseEnabled } from '@/data/supabase'
 
 const schema = z
@@ -28,6 +28,8 @@ type Phase = 'processing' | 'ready' | 'invalid' | 'done'
 export function ResetForm() {
   const [phase, setPhase] = useState<Phase>('processing')
   const [error, setError] = useState<string | null>(null)
+  const [showPassword, setShowPassword] = useState(false)
+  const [showConfirm, setShowConfirm] = useState(false)
 
   // Establish the recovery session from the link once on mount.
   useEffect(() => {
@@ -163,12 +165,21 @@ export function ResetForm() {
           />
           <input
             id="password"
-            className="input pl-9"
-            type="password"
+            className="input pl-9 pr-9"
+            type={showPassword ? 'text' : 'password'}
             autoComplete="new-password"
             placeholder="••••••••"
             {...register('password')}
           />
+          <button
+            type="button"
+            onClick={() => setShowPassword((s) => !s)}
+            aria-label={showPassword ? 'Hide password' : 'Show password'}
+            aria-pressed={showPassword}
+            className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 transition hover:text-slate-700"
+          >
+            {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+          </button>
         </div>
         {errors.password && <p className="mt-1 text-xs text-red-600">{errors.password.message}</p>}
       </div>
@@ -184,12 +195,21 @@ export function ResetForm() {
           />
           <input
             id="confirm"
-            className="input pl-9"
-            type="password"
+            className="input pl-9 pr-9"
+            type={showConfirm ? 'text' : 'password'}
             autoComplete="new-password"
             placeholder="••••••••"
             {...register('confirm')}
           />
+          <button
+            type="button"
+            onClick={() => setShowConfirm((s) => !s)}
+            aria-label={showConfirm ? 'Hide password' : 'Show password'}
+            aria-pressed={showConfirm}
+            className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 transition hover:text-slate-700"
+          >
+            {showConfirm ? <EyeOff size={16} /> : <Eye size={16} />}
+          </button>
         </div>
         {errors.confirm && <p className="mt-1 text-xs text-red-600">{errors.confirm.message}</p>}
       </div>

@@ -161,7 +161,7 @@ export function SolutionPage({ solution }: { solution: Solution }) {
   )
 }
 
-// Shared index (listing) template for /features and /industries.
+// Shared index (listing) template for /features.
 export function SolutionIndex({
   kind,
   title,

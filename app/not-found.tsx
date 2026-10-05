@@ -8,8 +8,6 @@ export default function NotFound() {
   const links = [
     { href: '/', label: 'Home' },
     { href: '/features', label: 'Features' },
-    { href: '/industries', label: 'Industries' },
-    { href: '/blog', label: 'Blog' },
     { href: '/contact', label: 'Contact' },
   ]
   return (
