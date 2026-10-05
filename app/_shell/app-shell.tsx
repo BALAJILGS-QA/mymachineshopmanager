@@ -12,6 +12,7 @@ import { usePathname, useRouter } from 'next/navigation'
 import {
   ChevronDown,
   ChevronRight,
+  Clock,
   LogOut,
   Menu,
   MoreHorizontal,
@@ -288,6 +289,13 @@ export function AppShell({ children }: { children: ReactNode }) {
   const { data: subscription } = useSubscription()
   const trialExpired =
     !isSuperAdmin && subscription?.status === 'trialing' && (subscription?.daysLeft ?? 1) <= 0
+  // Persistent trial countdown for the header (visible on every page). Only while
+  // the tenant is actually on a trial; escalates amber → red in the last 5 days.
+  const onTrial =
+    !isSuperAdmin &&
+    subscription?.status === 'trialing' &&
+    typeof subscription?.daysLeft === 'number'
+  const trialDaysLeft = onTrial ? (subscription?.daysLeft as number) : null
   const { data: settings } = useSettings()
   const company = settings?.company ?? DEFAULT_SETTINGS.company
   const { data: users = [] } = useUsers()
@@ -465,6 +473,30 @@ export function AppShell({ children }: { children: ReactNode }) {
           <div className="flex h-8 w-8 items-center justify-center rounded-full bg-brand-100 text-sm font-bold text-brand-800 ring-1 ring-brand-200">
             {session?.username?.[0]?.toUpperCase() ?? 'A'}
           </div>
+          {onTrial && trialDaysLeft !== null && (
+            <Link
+              href="/app/subscription"
+              title={
+                trialDaysLeft <= 0
+                  ? 'Your free trial has ended — upgrade now'
+                  : `Free trial — ${trialDaysLeft} day${trialDaysLeft === 1 ? '' : 's'} remaining. Upgrade to keep your data.`
+              }
+              aria-label={
+                trialDaysLeft <= 0
+                  ? 'Free trial ended'
+                  : `Free trial, ${trialDaysLeft} days remaining`
+              }
+              className={clsx(
+                'inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-semibold ring-1 transition',
+                trialDaysLeft <= 5
+                  ? 'bg-red-50 text-red-700 ring-red-200 hover:bg-red-100'
+                  : 'bg-amber-50 text-amber-800 ring-amber-200 hover:bg-amber-100',
+              )}
+            >
+              <Clock size={13} className="shrink-0" />
+              <span>{trialDaysLeft <= 0 ? 'Trial ended' : `Trial · ${trialDaysLeft}d left`}</span>
+            </Link>
+          )}
           {!isSuperAdmin && (
             <Link
               href="/app/subscription"

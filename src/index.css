@@ -235,29 +235,3 @@
     @apply bg-white;
   }
 }
-
-/* Trial "moving label" marquee (dashboard footer). Two in-track copies scrolled by
-   -50% loop seamlessly; respects reduced-motion. */
-@keyframes msm-marquee {
-  from {
-    transform: translateX(0);
-  }
-  to {
-    transform: translateX(-50%);
-  }
-}
-.msm-marquee-track {
-  display: inline-flex;
-  white-space: nowrap;
-  min-width: 100%;
-  animation: msm-marquee 30s linear infinite;
-  will-change: transform;
-}
-.msm-marquee-track:hover {
-  animation-play-state: paused;
-}
-@media (prefers-reduced-motion: reduce) {
-  .msm-marquee-track {
-    animation: none;
-  }
-}

@@ -22,7 +22,6 @@ import { currency, fmtDate, qty } from '@/lib/format'
 import type { JobStatus } from '@/types'
 import { Card, Select } from '@/components/ui/primitives'
 import { PageHeader } from '@/components/common/PageHeader'
-import { TrialMarquee } from '@/features/subscription/TrialMarquee'
 import { WorkflowStepper } from '@/components/common/WorkflowStepper'
 import { BigStat, PanelCard, SummaryRow } from '@/components/common/SummaryPanels'
 import { JobStatusBadge, PriorityBadge } from '@/components/common/status'
@@ -661,9 +660,6 @@ export function DashboardPage() {
           )}
         </Card>
       </div>
-
-      {/* Moving trial-status label pinned to the bottom of the dashboard. */}
-      <TrialMarquee />
     </div>
   )
 }
