@@ -1,24 +1,64 @@
 import { useState } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import { ArrowLeft, Check, CreditCard, Loader2, Lock } from 'lucide-react'
 import { clsx } from 'clsx'
 import { useAppNavigate } from '@/components/nav/app-link'
 import { PageHeader } from '@/components/common/PageHeader'
 import { Card } from '@/components/ui/primitives'
 import { useToast } from '@/components/ui/Toast'
+import { supabase } from '@/data/supabase'
 import { planById, formatINR, type PlanId } from './plans'
-import { useSetPlan } from './hooks/useSubscription'
 import type { BillingCycle } from './api/subscriptionApi'
 
+// ---- Razorpay checkout types (loaded at runtime from checkout.js) -------------
+interface RazorpayResponse {
+  razorpay_order_id: string
+  razorpay_payment_id: string
+  razorpay_signature: string
+}
+interface RazorpayOptions {
+  key: string
+  order_id: string
+  amount: number
+  currency: string
+  name: string
+  description?: string
+  theme?: { color?: string }
+  prefill?: { email?: string; name?: string }
+  handler: (r: RazorpayResponse) => void
+  modal?: { ondismiss?: () => void }
+}
+interface RazorpayInstance {
+  open: () => void
+}
+declare global {
+  interface Window {
+    Razorpay?: new (o: RazorpayOptions) => RazorpayInstance
+  }
+}
+
+function loadRazorpay(): Promise<boolean> {
+  if (typeof window === 'undefined') return Promise.resolve(false)
+  if (window.Razorpay) return Promise.resolve(true)
+  return new Promise((resolve) => {
+    const s = document.createElement('script')
+    s.src = 'https://checkout.razorpay.com/v1/checkout.js'
+    s.onload = () => resolve(true)
+    s.onerror = () => resolve(false)
+    document.body.appendChild(s)
+  })
+}
+
 // Checkout / payment page reached from the subscription plan cards. Shows an order
-// summary with billing cycle + GST, then completes the purchase. NOTE: a live
-// payment gateway (Razorpay) is still being finalised — confirming here activates
-// the plan and records it for the super admin; swap the pay handler for the
-// gateway redirect when it's ready.
+// summary (billing cycle + GST), then pays via Razorpay. The order amount is
+// computed server-side; the payment signature is verified server-side before the
+// plan is activated — so the upgrade is real and recorded for the super admin.
 export function CheckoutPage({ planId }: { planId: PlanId | null }) {
   const navigate = useAppNavigate()
   const toast = useToast()
-  const setPlan = useSetPlan()
+  const qc = useQueryClient()
   const [billing, setBilling] = useState<BillingCycle>('monthly')
+  const [paying, setPaying] = useState(false)
 
   const plan = planId ? planById(planId) : undefined
 
@@ -27,9 +67,9 @@ export function CheckoutPage({ planId }: { planId: PlanId | null }) {
       <div>
         <PageHeader title="Checkout" subtitle="Choose a plan to continue." />
         <button
+          type="button"
           className="btn-secondary"
           onClick={() => navigate('/app/subscription')}
-          type="button"
         >
           <ArrowLeft size={15} /> Back to plans
         </button>
@@ -37,19 +77,87 @@ export function CheckoutPage({ planId }: { planId: PlanId | null }) {
     )
   }
 
-  // Annual = pay for 10 months (2 months free). GST 18%.
   const base = billing === 'annual' ? plan.price * 10 : plan.price
   const gst = Math.round(base * 0.18)
   const total = base + gst
   const period = billing === 'annual' ? 'year' : 'month'
 
   async function pay() {
+    const selected = plan!
+    setPaying(true)
     try {
-      await setPlan.mutateAsync({ plan: plan!.id, billing })
-      toast.success(`Payment successful — ${plan!.name} plan activated.`)
-      navigate('/app/subscription')
+      const orderRes = await fetch('/api/razorpay/order', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ plan: selected.id, billing }),
+      })
+      const order = await orderRes.json()
+      if (!orderRes.ok) {
+        toast.error(
+          orderRes.status === 503
+            ? 'Online payment is being set up — please try again shortly or contact us.'
+            : order?.error || 'Could not start payment',
+        )
+        setPaying(false)
+        return
+      }
+
+      const loaded = await loadRazorpay()
+      if (!loaded || !window.Razorpay) {
+        toast.error('Could not load the payment gateway. Check your connection.')
+        setPaying(false)
+        return
+      }
+
+      const token = (await supabase?.auth.getSession())?.data?.session?.access_token
+      if (!token) {
+        toast.error('Your session expired — please sign in again.')
+        setPaying(false)
+        return
+      }
+
+      const rz = new window.Razorpay({
+        key: order.keyId,
+        order_id: order.orderId,
+        amount: order.amount,
+        currency: order.currency,
+        name: 'My Machine Shop Manager',
+        description: `${order.planName} plan (${billing})`,
+        theme: { color: '#ea580c' },
+        handler: async (resp) => {
+          try {
+            const vr = await fetch('/api/razorpay/verify', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+              body: JSON.stringify({
+                orderId: resp.razorpay_order_id,
+                paymentId: resp.razorpay_payment_id,
+                signature: resp.razorpay_signature,
+                plan: selected.id,
+                billing,
+              }),
+            })
+            const vd = await vr.json()
+            if (!vr.ok) {
+              toast.error(vd?.error || 'Payment verification failed')
+              return
+            }
+            await qc.invalidateQueries({ queryKey: ['subscription'] })
+            await qc.invalidateQueries({ queryKey: ['user-subscriptions'] })
+            toast.success(`Payment successful — ${selected.name} plan activated.`)
+            navigate('/app/subscription')
+          } catch {
+            toast.error('Could not confirm payment. If charged, contact support.')
+          } finally {
+            setPaying(false)
+          }
+        },
+        modal: { ondismiss: () => setPaying(false) },
+      })
+      rz.open()
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Payment could not be completed')
+      toast.error(e instanceof Error ? e.message : 'Payment failed')
+      setPaying(false)
     }
   }
 
@@ -66,7 +174,6 @@ export function CheckoutPage({ planId }: { planId: PlanId | null }) {
       </button>
 
       <div className="grid gap-5 lg:grid-cols-[1.3fr_1fr]">
-        {/* Billing cycle + what's included */}
         <Card className="p-5">
           <h3 className="text-sm font-bold text-slate-900">Billing cycle</h3>
           <div className="mt-3 grid gap-2.5 sm:grid-cols-2">
@@ -115,7 +222,6 @@ export function CheckoutPage({ planId }: { planId: PlanId | null }) {
           </ul>
         </Card>
 
-        {/* Order summary + pay */}
         <Card className="h-fit p-5">
           <h3 className="text-sm font-bold text-slate-900">Order summary</h3>
           <dl className="mt-3 space-y-2.5 text-sm">
@@ -129,21 +235,16 @@ export function CheckoutPage({ planId }: { planId: PlanId | null }) {
           <button
             type="button"
             onClick={pay}
-            disabled={setPlan.isPending}
+            disabled={paying}
             className="btn-primary mt-5 w-full justify-center py-2.5"
           >
-            {setPlan.isPending ? (
-              <Loader2 size={16} className="animate-spin" />
-            ) : (
-              <CreditCard size={16} />
-            )}
+            {paying ? <Loader2 size={16} className="animate-spin" /> : <CreditCard size={16} />}
             Pay {formatINR(total)} securely
           </button>
 
           <p className="mt-3 flex items-start gap-1.5 text-2xs leading-relaxed text-slate-500">
             <Lock size={12} className="mt-0.5 shrink-0" />
-            Secure checkout. Online payment gateway (Razorpay) is being finalised — confirming here
-            activates your plan and records the upgrade for your records.
+            Payments are processed securely by Razorpay. Your card details never touch our servers.
           </p>
         </Card>
       </div>
