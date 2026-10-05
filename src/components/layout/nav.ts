@@ -92,6 +92,12 @@ export const NAV_GROUPS: NavGroup[] = [
     items: [
       { to: '/app/jobs', label: 'Job Orders', icon: ClipboardList, short: 'Jobs' },
       { to: '/app/production', label: 'Production', icon: Factory, short: 'Floor' },
+      {
+        to: '/app/production-planning/materials',
+        label: 'Raw Materials',
+        icon: Boxes,
+        short: 'Material',
+      },
       // Tool Room is specialized production tool management; its own multi-screen
       // area lives under /app/tool-room (that page is the hub for its sub-screens).
       { to: '/app/tool-room', label: 'Tool Room', icon: Wrench, short: 'Tools' },
