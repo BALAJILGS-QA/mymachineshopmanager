@@ -5,12 +5,10 @@ import {
   Boxes,
   CheckCircle2,
   Coins,
-  Download,
   History,
   Layers,
   PackageX,
   Send,
-  Sliders,
   TrendingDown,
 } from 'lucide-react'
 import { PageHeader } from '@/components/common/PageHeader'
@@ -22,6 +20,8 @@ import { useCompanyName, useMaterialName } from '@/features/shared/lookups'
 import { useLedger, useOwnPurchases } from '../hooks/useInventory'
 import { useMaterialStockSummaries } from '../stockSummary'
 
+// Quick Actions only link to current Inventory destinations (the removed
+// Adjustments / Transfers / Stock History / Reports screens are no longer in nav).
 const QUICK_LINKS = [
   {
     to: '/app/inventory/materials',
@@ -29,16 +29,12 @@ const QUICK_LINKS = [
     icon: Boxes,
     tone: 'cyan' as const,
   },
-  { to: '/app/inventory/movements', label: 'Movements', icon: History, tone: 'blue' as const },
-  { to: '/app/inventory/adjustments', label: 'Adjustments', icon: Sliders, tone: 'amber' as const },
   {
-    to: '/app/inventory/transfers',
-    label: 'Transfers',
-    icon: ArrowLeftRight,
-    tone: 'purple' as const,
+    to: '/app/inventory/movements',
+    label: 'Stock Movements',
+    icon: History,
+    tone: 'blue' as const,
   },
-  { to: '/app/inventory/history', label: 'Stock History', icon: History, tone: 'slate' as const },
-  { to: '/app/inventory/reports', label: 'Reports', icon: Download, tone: 'green' as const },
 ]
 
 // Simple horizontal-bar list (matches the app's lightweight chart style).
@@ -138,7 +134,7 @@ export function InventoryDashboard() {
   return (
     <div>
       <PageHeader
-        title="Inventory"
+        title="Stock Overview"
         subtitle="Materials, stock, movements and valuation — the source of truth for material stock"
       />
 
@@ -277,7 +273,7 @@ export function InventoryDashboard() {
 
       <Card className="mt-4 p-4">
         <h3 className="mb-3 text-sm font-semibold text-slate-900">Quick Actions</h3>
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
           {QUICK_LINKS.map((l) => (
             <AppLink
               key={l.to}

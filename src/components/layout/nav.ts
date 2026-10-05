@@ -28,7 +28,6 @@ import {
   Percent,
   Wrench,
   History,
-  Sliders,
   Settings as SettingsIcon,
   type LucideIcon,
 } from 'lucide-react'
@@ -108,28 +107,18 @@ export const NAV_GROUPS: NavGroup[] = [
     icon: Boxes,
     accent: 'cyan',
     items: [
-      { to: '/app/inventory/dashboard', label: 'Dashboard', icon: LayoutDashboard, short: 'Inv' },
+      // Route kept as /app/inventory/dashboard for backward compatibility; the
+      // user-facing label is "Stock Overview".
+      {
+        to: '/app/inventory/dashboard',
+        label: 'Stock Overview',
+        icon: LayoutDashboard,
+        short: 'Overview',
+      },
       { to: '/app/inventory/materials', label: 'Materials & Stock', icon: Boxes, short: 'Stock' },
       { to: '/app/inventory/movements', label: 'Stock Movements', icon: History, short: 'Moves' },
-      {
-        to: '/app/inventory/adjustments',
-        label: 'Stock Adjustments',
-        icon: Sliders,
-        short: 'Adjust',
-      },
-      {
-        to: '/app/inventory/transfers',
-        label: 'Stock Transfers',
-        icon: ArrowLeftRight,
-        short: 'Transfer',
-      },
-      {
-        to: '/app/inventory/history',
-        label: 'Stock History',
-        icon: ClipboardList,
-        short: 'History',
-      },
-      { to: '/app/inventory/reports', label: 'Reports', icon: BarChart3, short: 'Reports' },
+      // Stock Adjustments / Transfers / History / Reports removed from the sidebar
+      // (navigation-only change). Their routes, pages and stock logic are retained.
     ],
   },
   {
