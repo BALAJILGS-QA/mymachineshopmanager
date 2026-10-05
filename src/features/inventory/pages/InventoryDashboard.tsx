@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import {
   AlertTriangle,
   ArrowLeftRight,
@@ -15,9 +15,11 @@ import { PageHeader } from '@/components/common/PageHeader'
 import { StatTile } from '@/components/common/StatTile'
 import { Card } from '@/components/ui/primitives'
 import { AppLink } from '@/components/nav/app-link'
-import { currency, fmtDate, qty } from '@/lib/format'
-import { useCompanyName, useMaterialName } from '@/features/shared/lookups'
-import { useLedger, useOwnPurchases } from '../hooks/useInventory'
+import { currency, qty } from '@/lib/format'
+import { SHOP_SCOPE } from '@/data/computations'
+import { useCompanyName } from '@/features/shared/lookups'
+import { useCompanies } from '@/features/companies/hooks/useCompanies'
+import { useOwnPurchases } from '../hooks/useInventory'
 import { useMaterialStockSummaries } from '../stockSummary'
 
 // Quick Actions only link to current Inventory destinations (the removed
@@ -62,11 +64,14 @@ function BarList({ rows }: { rows: Array<{ label: string; value: number; tone?: 
 }
 
 export function InventoryDashboard() {
-  const summaries = useMaterialStockSummaries()
-  const { data: ledger = [] } = useLedger()
+  // Company filter: '' = all, SHOP_SCOPE = own/shop stock, else a company id.
+  // The scope flows into the existing per-source stock query, so all KPIs and
+  // sections reflect the selected company's material stocks with no new logic.
+  const [scope, setScope] = useState('')
+  const { data: companies = [] } = useCompanies()
+  const summaries = useMaterialStockSummaries(scope || undefined)
   const { data: ownPurchases = [] } = useOwnPurchases()
   const companyName = useCompanyName()
-  const materialName = useMaterialName()
 
   const k = useMemo(() => {
     const totalQty = summaries.reduce((s, m) => s + m.current, 0)
@@ -83,17 +88,6 @@ export function InventoryDashboard() {
       received,
       dispatched,
     }
-  }, [summaries])
-
-  const byCategory = useMemo(() => {
-    const m = new Map<string, number>()
-    for (const s of summaries)
-      if (s.current > 0)
-        m.set(s.type || 'Uncategorised', (m.get(s.type || 'Uncategorised') ?? 0) + s.current)
-    return [...m.entries()]
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 6)
-      .map(([label, value]) => ({ label, value, tone: 'bg-cyan-500' }))
   }, [summaries])
 
   const byOwner = useMemo(() => {
@@ -120,22 +114,27 @@ export function InventoryDashboard() {
     [summaries],
   )
 
-  const lowStock = useMemo(
-    () =>
-      summaries
-        .filter((s) => s.status === 'low' || s.status === 'out')
-        .sort((a, b) => a.current - b.current)
-        .slice(0, 8),
-    [summaries],
-  )
-
-  const recent = ledger.slice(0, 8)
-
   return (
     <div>
       <PageHeader
         title="Stock Overview"
         subtitle="Materials, stock, movements and valuation — the source of truth for material stock"
+        actions={
+          <select
+            className="input w-full sm:w-56"
+            aria-label="Filter stock by company"
+            value={scope}
+            onChange={(e) => setScope(e.target.value)}
+          >
+            <option value="">All companies</option>
+            <option value={SHOP_SCOPE}>Own / Shop stock</option>
+            {companies.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
+            ))}
+          </select>
+        }
       />
 
       <div className="mb-4 grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-5">
@@ -205,11 +204,7 @@ export function InventoryDashboard() {
         />
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-3">
-        <Card className="p-4">
-          <h3 className="mb-3 text-sm font-semibold text-slate-900">Stock by Category</h3>
-          <BarList rows={byCategory} />
-        </Card>
+      <div className="grid gap-4 lg:grid-cols-2">
         <Card className="p-4">
           <h3 className="mb-3 text-sm font-semibold text-slate-900">Stock by Owner / Location</h3>
           <BarList rows={byOwner} />
@@ -217,57 +212,6 @@ export function InventoryDashboard() {
         <Card className="p-4">
           <h3 className="mb-3 text-sm font-semibold text-slate-900">Top Consumed Materials</h3>
           <BarList rows={topConsumed} />
-        </Card>
-      </div>
-
-      <div className="mt-4 grid gap-4 lg:grid-cols-2">
-        <Card className="p-4">
-          <h3 className="mb-3 text-sm font-semibold text-slate-900">Low / Out of Stock</h3>
-          {lowStock.length === 0 ? (
-            <p className="rounded-lg bg-green-50 px-3 py-2 text-xs text-green-700">
-              All materials above reorder level.
-            </p>
-          ) : (
-            <ul className="divide-y divide-slate-100">
-              {lowStock.map((s) => (
-                <li key={s.materialId} className="flex items-center justify-between py-2 text-sm">
-                  <span className="truncate text-slate-700">{s.name}</span>
-                  <span
-                    className={`font-semibold ${s.current <= 0 ? 'text-red-600' : 'text-amber-600'}`}
-                  >
-                    {qty(s.current)} {s.unit}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </Card>
-
-        <Card className="p-4">
-          <h3 className="mb-3 text-sm font-semibold text-slate-900">Recent Activity</h3>
-          {recent.length === 0 ? (
-            <p className="text-xs text-slate-500">No stock movements yet.</p>
-          ) : (
-            <ul className="divide-y divide-slate-100">
-              {recent.map((r) => (
-                <li key={r.id} className="flex items-center justify-between gap-2 py-2 text-xs">
-                  <div className="min-w-0">
-                    <p className="truncate font-medium text-slate-800">
-                      {r.txnType} · {materialName(r.materialId)}
-                    </p>
-                    <p className="truncate text-2xs text-slate-500">
-                      {r.docNo} · {fmtDate(r.date)}
-                    </p>
-                  </div>
-                  <span
-                    className={`shrink-0 font-semibold ${r.qtyIn > 0 ? 'text-emerald-600' : 'text-red-600'}`}
-                  >
-                    {r.qtyIn > 0 ? `+${qty(r.qtyIn)}` : `-${qty(r.qtyOut)}`}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          )}
         </Card>
       </div>
 
