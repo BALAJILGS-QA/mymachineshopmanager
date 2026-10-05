@@ -113,6 +113,13 @@ export function LoginForm() {
           </button>
         </div>
         {errors.password && <p className="mt-1 text-xs text-red-600">{errors.password.message}</p>}
+        <p className="mt-2 text-xs text-slate-500">
+          By signing in, you agree to our{' '}
+          <Link href="/terms" className="font-semibold text-brand-600 hover:underline">
+            Terms &amp; Conditions
+          </Link>
+          .
+        </p>
       </div>
 
       <button type="submit" className="btn-primary w-full py-2.5" disabled={isSubmitting}>

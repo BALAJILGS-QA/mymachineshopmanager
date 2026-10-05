@@ -206,6 +206,13 @@ function SignInForm({ supabaseMode }: { supabaseMode: boolean }) {
       <IconField icon={Lock} label="Password" required error={errors.password?.message}>
         <PasswordInput autoComplete="current-password" {...register('password')} />
       </IconField>
+      <p className="text-xs text-slate-500">
+        By signing in, you agree to our{' '}
+        <a href="/terms" className="font-semibold text-brand-600 hover:underline">
+          Terms &amp; Conditions
+        </a>
+        .
+      </p>
       <button type="submit" className="btn-primary w-full py-2.5" disabled={isSubmitting}>
         {isSubmitting && <Loader2 size={16} className="animate-spin" />}
         Sign in

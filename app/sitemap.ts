@@ -16,6 +16,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
     { url: absoluteUrl('/contact'), changeFrequency: 'yearly', priority: 0.6, lastModified: now },
     { url: absoluteUrl('/signup'), changeFrequency: 'yearly', priority: 0.6, lastModified: now },
     { url: absoluteUrl('/login'), changeFrequency: 'yearly', priority: 0.4, lastModified: now },
+    { url: absoluteUrl('/terms'), changeFrequency: 'yearly', priority: 0.3, lastModified: now },
   ]
 
   const features: MetadataRoute.Sitemap = FEATURES.map((f) => ({

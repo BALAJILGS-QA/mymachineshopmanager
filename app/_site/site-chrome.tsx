@@ -228,6 +228,11 @@ function Footer() {
               </a>
             </li>
             <li>
+              <Link href="/terms" className="hover:text-[var(--ink)]">
+                Terms &amp; Conditions
+              </Link>
+            </li>
+            <li>
               <a href="/login" className="hover:text-[var(--ink)]">
                 Login
               </a>
