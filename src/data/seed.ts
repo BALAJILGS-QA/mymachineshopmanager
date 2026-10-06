@@ -39,7 +39,7 @@ export const DEFAULT_SETTINGS: Settings = {
     'Miscellaneous',
   ],
   numbering: {
-    job: 'JOB-{FY}-{####}',
+    job: 'PROD-{YYYY}-{######}',
     invoice: 'INV-{FY}-{####}',
     receipt: 'RCP-{FY}-{####}',
     issue: 'ISS-{FY}-{####}',

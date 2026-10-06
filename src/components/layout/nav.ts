@@ -93,7 +93,7 @@ export const NAV_GROUPS: NavGroup[] = [
     icon: Factory,
     accent: 'orange',
     items: [
-      { to: '/app/jobs', label: 'Job Orders', icon: ClipboardList, short: 'Jobs' },
+      { to: '/app/jobs', label: 'Production Orders', icon: ClipboardList, short: 'Orders' },
       { to: '/app/production', label: 'Production', icon: Factory, short: 'Floor' },
       { to: '/app/qc', label: 'Quality Control', icon: ClipboardCheck, short: 'QC' },
       { to: '/app/finished-goods', label: 'Finished Goods', icon: PackageCheck, short: 'FG' },

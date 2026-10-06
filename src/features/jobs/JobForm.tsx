@@ -188,14 +188,14 @@ export function JobForm({ job, onClose }: { job: JobOrder | null; onClose: () =>
       open
       onClose={onClose}
       size="xl"
-      title={job ? `Edit ${job.jobNo}` : 'New Job Order'}
+      title={job ? `Edit ${job.jobNo}` : 'New Production Order'}
       footer={
         <>
           <button className="btn-secondary" onClick={onClose}>
             Cancel
           </button>
           <button className="btn-primary" onClick={submit} disabled={saving}>
-            {saving ? 'Saving…' : job ? 'Save changes' : 'Create job order'}
+            {saving ? 'Saving…' : job ? 'Save changes' : 'Create production order'}
           </button>
         </>
       }
