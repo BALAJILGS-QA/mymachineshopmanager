@@ -7,6 +7,11 @@ const JOB_TONE: Record<JobStatus, string> = {
   'In Progress': 'blue',
   'On Hold': 'violet',
   Completed: 'green',
+  'Quality Control': 'amber',
+  'QC Approved': 'green',
+  Rework: 'violet',
+  'QC Rejected': 'red',
+  'Ready for Dispatch': 'blue',
   Delivered: 'green',
   Cancelled: 'red',
 }

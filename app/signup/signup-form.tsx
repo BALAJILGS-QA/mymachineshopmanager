@@ -6,7 +6,7 @@
 // profile is stored in the users list (app_state) and surfaces in the app's
 // User Approvals grid; the applicant can sign in only after approval.
 
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -26,6 +26,8 @@ import {
 } from 'lucide-react'
 import Link from 'next/link'
 import { useAuth } from '@/features/auth/auth'
+import { CaptchaField, type CaptchaFieldHandle } from '@/components/security/CaptchaField'
+import { isRecaptchaEnabled } from '@/lib/security/recaptcha'
 
 const signUpSchema = z.object({
   fullName: z.string().trim().min(1, 'Full name is required'),
@@ -42,6 +44,9 @@ export function SignupForm() {
   const { register: registerUser } = useAuth()
   const [submitted, setSubmitted] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const captchaRequired = isRecaptchaEnabled()
+  const [captchaToken, setCaptchaToken] = useState<string | null>(null)
+  const captchaRef = useRef<CaptchaFieldHandle>(null)
 
   const {
     register,
@@ -62,12 +67,25 @@ export function SignupForm() {
 
   const onSubmit = handleSubmit(async (values) => {
     setError(null)
+    if (captchaRequired && !captchaToken) {
+      setError('Please complete the verification.')
+      return
+    }
     try {
-      const res = await registerUser(values)
-      if (!res.ok) setError(res.message || 'Could not submit registration')
-      else setSubmitted(values.fullName)
+      const res = await registerUser(values, captchaToken ?? undefined)
+      if (!res.ok) {
+        setError(res.message || 'Could not submit registration')
+        if (captchaRequired) {
+          setCaptchaToken(null)
+          captchaRef.current?.reset()
+        }
+      } else setSubmitted(values.fullName)
     } catch {
       setError('Request failed. Please check your connection and try again.')
+      if (captchaRequired) {
+        setCaptchaToken(null)
+        captchaRef.current?.reset()
+      }
     }
   })
 
@@ -137,9 +155,15 @@ export function SignupForm() {
         </p>
       )}
 
-      <button type="submit" className="btn-primary mt-4 w-full py-2.5" disabled={isSubmitting}>
+      <CaptchaField ref={captchaRef} className="mt-4" onToken={setCaptchaToken} />
+
+      <button
+        type="submit"
+        className="btn-primary mt-4 w-full py-2.5"
+        disabled={isSubmitting || (captchaRequired && !captchaToken)}
+      >
         {isSubmitting && <Loader2 size={16} className="animate-spin" />}
-        Create account
+        {isSubmitting ? 'Submitting…' : 'Create account'}
       </button>
 
       <p className="mt-4 text-center text-xs text-slate-500">

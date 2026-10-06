@@ -4,15 +4,16 @@
 // the registered address; the link lands on /reset-password where the new
 // password is set. In local (non-Supabase) mode email reset isn't available.
 
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import Link from 'next/link'
 import { ArrowLeft, CheckCircle2, Loader2, Mail } from 'lucide-react'
-import { supabase, isSupabaseEnabled } from '@/data/supabase'
-import { logger } from '@/lib/logger'
+import { isSupabaseEnabled } from '@/data/supabase'
 import { BRAND } from '@/lib/brand'
+import { CaptchaField, type CaptchaFieldHandle } from '@/components/security/CaptchaField'
+import { isRecaptchaEnabled } from '@/lib/security/recaptcha'
 
 const schema = z.object({
   email: z.string().trim().min(1, 'Email is required').email('Enter a valid email'),
@@ -23,6 +24,9 @@ export function ForgotForm() {
   const [sentTo, setSentTo] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const supabaseMode = isSupabaseEnabled()
+  const captchaRequired = isRecaptchaEnabled()
+  const [captchaToken, setCaptchaToken] = useState<string | null>(null)
+  const captchaRef = useRef<CaptchaFieldHandle>(null)
 
   const {
     register,
@@ -30,28 +34,54 @@ export function ForgotForm() {
     formState: { errors, isSubmitting },
   } = useForm<Values>({ resolver: zodResolver(schema), defaultValues: { email: '' } })
 
+  const resetCaptcha = () => {
+    if (captchaRequired) {
+      setCaptchaToken(null)
+      captchaRef.current?.reset()
+    }
+  }
+
   const onSubmit = handleSubmit(async (values) => {
     setError(null)
-    if (!supabaseMode || !supabase) {
+    if (!supabaseMode) {
       setError(
         'Password reset by email is unavailable in local mode. Please contact your administrator.',
       )
       return
     }
+    if (captchaRequired && !captchaToken) {
+      setError('Please complete the verification.')
+      return
+    }
+    // reCAPTCHA is verified SERVER-SIDE by /api/auth/forgot before the reset email
+    // is sent. The route returns the same { ok: true } whether or not the address
+    // exists, so there is no account-enumeration leak.
+    let res: Response
+    let data: { ok?: boolean; error?: string }
     try {
-      const redirectTo = `${window.location.origin}/reset-password`
-      const { error: e } = await supabase.auth.resetPasswordForEmail(values.email.trim(), {
-        redirectTo,
+      res = await fetch('/api/auth/forgot', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ email: values.email.trim(), captchaToken }),
       })
-      // Do not reveal whether the address exists — always show the same result.
-      if (e && !/rate limit/i.test(e.message)) {
-        // Still show success to avoid account enumeration, but log for debugging.
-        logger.warn('resetPasswordForEmail failed', e.message)
-      }
-      setSentTo(values.email.trim())
+      data = await res.json().catch(() => ({}))
     } catch {
       setError('Request failed. Please check your connection and try again.')
+      resetCaptcha()
+      return
     }
+    if (res.ok && data.ok) {
+      setSentTo(values.email.trim())
+      return
+    }
+    if (data.error === 'captcha_failed') {
+      setError('Verification failed. Please complete the verification again.')
+    } else if (res.status === 429) {
+      setError('Too many attempts. Please wait a minute and try again.')
+    } else {
+      setError('Request failed. Please try again.')
+    }
+    resetCaptcha()
   })
 
   if (sentTo) {
@@ -105,9 +135,15 @@ export function ForgotForm() {
         </p>
       )}
 
-      <button type="submit" className="btn-primary mt-4 w-full py-2.5" disabled={isSubmitting}>
+      <CaptchaField ref={captchaRef} className="mt-4" onToken={setCaptchaToken} />
+
+      <button
+        type="submit"
+        className="btn-primary mt-4 w-full py-2.5"
+        disabled={isSubmitting || (captchaRequired && !captchaToken)}
+      >
         {isSubmitting && <Loader2 size={16} className="animate-spin" />}
-        Send reset link
+        {isSubmitting ? 'Sending…' : 'Send reset link'}
       </button>
 
       <Link

@@ -25,8 +25,35 @@ export const JOB_STATUSES = [
   'In Progress',
   'On Hold',
   'Completed',
+  'Quality Control',
+  'QC Approved',
+  'Rework',
+  'QC Rejected',
+  'Ready for Dispatch',
   'Delivered',
   'Cancelled',
+] as const satisfies readonly JobStatus[]
+
+// Statuses a user may set directly on the Job Order form. The production/QC
+// lifecycle states are reached only through the workflow RPCs (production/QC/
+// finished-goods screens), never by hand — so they are intentionally excluded.
+export const JOB_FORM_STATUSES = [
+  'Draft',
+  'Pending',
+  'In Progress',
+  'On Hold',
+  'Cancelled',
+] as const satisfies readonly JobStatus[]
+
+// Lifecycle states that belong to the production/QC/dispatch flow.
+export const PRODUCTION_LIFECYCLE_STATUSES = [
+  'In Progress',
+  'Completed',
+  'Quality Control',
+  'QC Approved',
+  'Rework',
+  'QC Rejected',
+  'Ready for Dispatch',
 ] as const satisfies readonly JobStatus[]
 
 export const PAYMENT_METHODS = [

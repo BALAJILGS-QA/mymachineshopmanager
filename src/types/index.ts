@@ -7,7 +7,19 @@ export type ISODate = string // YYYY-MM-DD
 export type ISODateTime = string // full ISO timestamp
 
 export type JobStatus =
-  'Draft' | 'Pending' | 'In Progress' | 'On Hold' | 'Completed' | 'Delivered' | 'Cancelled'
+  | 'Draft'
+  | 'Pending'
+  | 'In Progress'
+  | 'On Hold'
+  | 'Completed'
+  // Production Module lifecycle (migration 0069) — extends, does not replace.
+  | 'Quality Control'
+  | 'QC Approved'
+  | 'Rework'
+  | 'QC Rejected'
+  | 'Ready for Dispatch'
+  | 'Delivered'
+  | 'Cancelled'
 
 export type JobPriority = 'Low' | 'Normal' | 'High' | 'Urgent'
 
@@ -46,6 +58,9 @@ export interface Material extends AuditFields {
   code: string
   name: string
   companyId?: ID // set = this customer's material; null = shared / own
+  partNumber?: string // raw-material master business key (with company + name)
+  hsn?: string // HSN code
+  binNo?: string // storage bin / location
   type?: string // grade / type
   unit: string
   description?: string
@@ -75,8 +90,10 @@ export interface JobOrder extends AuditFields {
   materialId?: ID
   orderedQty: number
   plannedQty?: number // planned production quantity (defaults to orderedQty)
-  completedQty: number
-  rejectedQty?: number // QC-rejected quantity recorded at completion
+  completedQty: number // = produced quantity
+  rejectedQty?: number // QC-rejected quantity (aggregate across inspections)
+  acceptedQty?: number // QC-accepted quantity (aggregate; FG-eligible)
+  reworkQty?: number // outstanding rework quantity
   orderDate: ISODate
   dueDate?: ISODate
   priority: JobPriority
@@ -87,6 +104,7 @@ export interface JobOrder extends AuditFields {
   completedAt?: ISODateTime
   deliveredAt?: ISODateTime
   operator?: string
+  tenantId?: ID // stamped server-side; used for tenant-scoped storage paths
 }
 
 export interface ProductionEvent {
@@ -99,6 +117,141 @@ export interface ProductionEvent {
   note?: string
   operator?: string
   at: ISODateTime
+}
+
+// ---- Production Module (migrations 0070/0072) ----
+
+export type QcDecision = 'Approved' | 'Rejected' | 'Rework'
+export type QcResult = 'Pass' | 'Fail' | 'Partial'
+
+export interface QcInspection {
+  id: ID
+  inspectionNo?: string
+  jobId: ID
+  inspector?: string
+  inspectedAt: ISODateTime
+  producedQty: number
+  acceptedQty: number
+  rejectedQty: number
+  reworkQty: number
+  result?: QcResult
+  decision?: QcDecision
+  remarks?: string
+  createdAt: ISODateTime
+  updatedAt: ISODateTime
+}
+
+export interface QcDimension {
+  id: ID
+  inspectionId: ID
+  seq: number
+  name: string
+  nominal?: number
+  unit?: string
+  tolPlus?: number
+  tolMinus?: number
+  specification?: string
+  createdAt: ISODateTime
+}
+
+export interface QcMeasurement {
+  id: ID
+  dimensionId: ID
+  sampleNo: number
+  measuredValue?: number
+  isPass?: boolean | null
+  createdAt: ISODateTime
+}
+
+// A dimension plus its 1..10 sample measurements (view-model for the grid).
+export interface QcDimensionInput {
+  seq: number
+  name: string
+  nominal?: number
+  unit?: string
+  tolPlus?: number
+  tolMinus?: number
+  specification?: string
+  samples: { sampleNo: number; value?: number }[]
+}
+
+export type FgTxnType = 'Receipt' | 'Dispatch' | 'Adjustment'
+
+export interface FinishedGoodsEntry {
+  id: ID
+  entryNo?: string
+  jobId: ID
+  qcInspectionId?: ID
+  txnType: FgTxnType
+  qtyIn: number
+  qtyOut: number
+  companyId?: ID
+  binNo?: string
+  referenceType?: string
+  referenceId?: ID
+  note?: string
+  createdBy?: string
+  createdAt: ISODateTime
+}
+
+export interface FinishedGoodsBalance {
+  jobId: ID
+  received: number
+  dispatched: number
+  balance: number
+  lastMovement?: ISODateTime
+}
+
+export type MachineProgramStatus = 'Draft' | 'Review' | 'Approved' | 'Superseded'
+
+export interface MachineProgram {
+  id: ID
+  programNo?: string
+  jobId: ID
+  process?: string
+  controller?: string
+  controllerOther?: string
+  machine?: string
+  operation?: string
+  status: MachineProgramStatus
+  activeRevisionId?: ID
+  notes?: string
+  createdBy?: string
+  createdAt: ISODateTime
+  updatedAt: ISODateTime
+}
+
+export interface MachineProgramRevision {
+  id: ID
+  programId: ID
+  revNo: number
+  storagePath?: string
+  fileName?: string
+  fileSize?: number
+  mime?: string
+  changeReason?: string
+  status: MachineProgramStatus
+  createdBy?: string
+  createdAt: ISODateTime
+  approvedBy?: string
+  approvedAt?: ISODateTime
+}
+
+export interface JobOrderDocument {
+  id: ID
+  jobId: ID
+  companyId?: ID
+  kind: 'drawing' | 'document'
+  fileName: string
+  storagePath: string
+  mime: string
+  fileSize?: number
+  version: number
+  isActive: boolean
+  supersededBy?: ID
+  uploadedBy?: string
+  uploadedAt: ISODateTime
+  createdAt: ISODateTime
 }
 
 export interface MaterialReceipt extends AuditFields {

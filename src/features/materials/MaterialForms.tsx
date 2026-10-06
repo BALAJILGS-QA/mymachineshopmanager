@@ -46,6 +46,9 @@ export function MaterialForm({
     name: material?.name ?? '',
     code: material?.code ?? '',
     companyId: material?.companyId ?? presetCompanyId ?? '',
+    partNumber: material?.partNumber ?? '',
+    hsn: material?.hsn ?? '',
+    binNo: material?.binNo ?? '',
     type: material?.type ?? '',
     unit: material?.unit ?? settings.units[0] ?? 'Nos',
     description: material?.description ?? '',
@@ -64,6 +67,9 @@ export function MaterialForm({
         name: form.name,
         code: form.code || undefined,
         companyId: form.companyId || undefined,
+        partNumber: form.partNumber || undefined,
+        hsn: form.hsn || undefined,
+        binNo: form.binNo || undefined,
         type: form.type || undefined,
         unit: form.unit,
         description: form.description || undefined,
@@ -121,6 +127,15 @@ export function MaterialForm({
         </Field>
         <Field label="Material Code" hint="Blank to auto-generate">
           <Input value={form.code} onChange={(e) => set('code', e.target.value)} />
+        </Field>
+        <Field label="Part Number" hint="Unique per company + item">
+          <Input value={form.partNumber} onChange={(e) => set('partNumber', e.target.value)} />
+        </Field>
+        <Field label="HSN Code">
+          <Input value={form.hsn} onChange={(e) => set('hsn', e.target.value)} />
+        </Field>
+        <Field label="Bin No">
+          <Input value={form.binNo} onChange={(e) => set('binNo', e.target.value)} />
         </Field>
         <Field label="Type / Grade">
           <Select value={form.type} onChange={(e) => set('type', e.target.value)}>

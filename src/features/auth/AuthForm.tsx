@@ -1,4 +1,4 @@
-import { useEffect, useId, useState } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -22,6 +22,8 @@ import { useAuth } from './auth'
 import { useToast } from '@/components/ui/Toast'
 import { Logo } from '@/components/ui/Logo'
 import { BRAND } from '@/lib/brand'
+import { CaptchaField, type CaptchaFieldHandle } from '@/components/security/CaptchaField'
+import { isRecaptchaEnabled } from '@/lib/security/recaptcha'
 
 type Mode = 'signin' | 'signup'
 
@@ -165,6 +167,9 @@ function SignInForm({ supabaseMode }: { supabaseMode: boolean }) {
   const { login } = useAuth()
   const toast = useToast()
   const idLabel = supabaseMode ? 'Email' : 'Username or Email'
+  const captchaRequired = isRecaptchaEnabled()
+  const [captchaToken, setCaptchaToken] = useState<string | null>(null)
+  const captchaRef = useRef<CaptchaFieldHandle>(null)
   const {
     register,
     handleSubmit,
@@ -175,14 +180,26 @@ function SignInForm({ supabaseMode }: { supabaseMode: boolean }) {
   })
 
   const onSubmit = handleSubmit(async (values) => {
+    if (captchaRequired && !captchaToken) {
+      toast.error('Please complete the verification.')
+      return
+    }
     try {
-      const res = await login(values.loginId, values.password)
+      const res = await login(values.loginId, values.password, captchaToken ?? undefined)
       if (!res.ok) {
-        toast.error(res.message || 'Invalid credentials')
+        toast.error(res.message || 'Invalid email or password')
+        if (captchaRequired) {
+          setCaptchaToken(null)
+          captchaRef.current?.reset()
+        }
       }
       // On success the session effect (in AuthForm) redirects to /app.
     } catch {
       toast.error('Request failed. Please check your connection and try again.')
+      if (captchaRequired) {
+        setCaptchaToken(null)
+        captchaRef.current?.reset()
+      }
     }
   })
 
@@ -213,10 +230,20 @@ function SignInForm({ supabaseMode }: { supabaseMode: boolean }) {
         </a>
         .
       </p>
-      <button type="submit" className="btn-primary w-full py-2.5" disabled={isSubmitting}>
+      <CaptchaField ref={captchaRef} onToken={setCaptchaToken} />
+      <button
+        type="submit"
+        className="btn-primary w-full py-2.5"
+        disabled={isSubmitting || (captchaRequired && !captchaToken)}
+      >
         {isSubmitting && <Loader2 size={16} className="animate-spin" />}
-        Sign in
+        {isSubmitting ? 'Signing in…' : 'Sign in'}
       </button>
+      {captchaRequired && !captchaToken && (
+        <p className="text-center text-xs text-slate-500">
+          Complete the verification above to continue.
+        </p>
+      )}
     </form>
   )
 }
@@ -224,6 +251,9 @@ function SignInForm({ supabaseMode }: { supabaseMode: boolean }) {
 function SignUpForm({ onSubmitted }: { onSubmitted: (fullName: string) => void }) {
   const { register: registerUser } = useAuth()
   const toast = useToast()
+  const captchaRequired = isRecaptchaEnabled()
+  const [captchaToken, setCaptchaToken] = useState<string | null>(null)
+  const captchaRef = useRef<CaptchaFieldHandle>(null)
   const {
     register,
     handleSubmit,
@@ -242,15 +272,27 @@ function SignUpForm({ onSubmitted }: { onSubmitted: (fullName: string) => void }
   })
 
   const onSubmit = handleSubmit(async (values) => {
+    if (captchaRequired && !captchaToken) {
+      toast.error('Please complete the verification.')
+      return
+    }
     try {
-      const res = await registerUser(values)
+      const res = await registerUser(values, captchaToken ?? undefined)
       if (!res.ok) {
         toast.error(res.message || 'Could not submit registration')
+        if (captchaRequired) {
+          setCaptchaToken(null)
+          captchaRef.current?.reset()
+        }
       } else {
         onSubmitted(values.fullName)
       }
     } catch {
       toast.error('Request failed. Please check your connection and try again.')
+      if (captchaRequired) {
+        setCaptchaToken(null)
+        captchaRef.current?.reset()
+      }
     }
   })
 
@@ -287,10 +329,20 @@ function SignUpForm({ onSubmitted }: { onSubmitted: (fullName: string) => void }
         <PasswordInput autoComplete="new-password" {...register('password')} />
       </IconField>
       <p className="text-2xs text-slate-500">At least 6 characters.</p>
-      <button type="submit" className="btn-primary w-full py-2.5" disabled={isSubmitting}>
+      <CaptchaField ref={captchaRef} onToken={setCaptchaToken} />
+      <button
+        type="submit"
+        className="btn-primary w-full py-2.5"
+        disabled={isSubmitting || (captchaRequired && !captchaToken)}
+      >
         {isSubmitting && <Loader2 size={16} className="animate-spin" />}
-        Submit registration
+        {isSubmitting ? 'Submitting…' : 'Submit registration'}
       </button>
+      {captchaRequired && !captchaToken && (
+        <p className="text-center text-xs text-slate-500">
+          Complete the verification above to continue.
+        </p>
+      )}
     </form>
   )
 }

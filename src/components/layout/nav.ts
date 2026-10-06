@@ -27,6 +27,9 @@ import {
   Upload,
   Percent,
   Wrench,
+  ClipboardCheck,
+  PackageCheck,
+  Gauge,
   History,
   Settings as SettingsIcon,
   type LucideIcon,
@@ -92,6 +95,15 @@ export const NAV_GROUPS: NavGroup[] = [
     items: [
       { to: '/app/jobs', label: 'Job Orders', icon: ClipboardList, short: 'Jobs' },
       { to: '/app/production', label: 'Production', icon: Factory, short: 'Floor' },
+      { to: '/app/qc', label: 'Quality Control', icon: ClipboardCheck, short: 'QC' },
+      { to: '/app/finished-goods', label: 'Finished Goods', icon: PackageCheck, short: 'FG' },
+      {
+        to: '/app/ready-for-dispatch',
+        label: 'Ready for Dispatch',
+        icon: Truck,
+        short: 'Dispatch',
+      },
+      { to: '/app/production-control', label: 'Control Tower', icon: Gauge, short: 'Control' },
       {
         to: '/app/production-planning/materials',
         label: 'Raw Materials',

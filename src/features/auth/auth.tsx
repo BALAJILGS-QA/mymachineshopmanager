@@ -20,7 +20,7 @@ import {
   type ReactNode,
 } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
-import { supabase, isSupabaseEnabled, makeAnonClient } from '@/data/supabase'
+import { supabase, isSupabaseEnabled } from '@/data/supabase'
 import { userRepo, BusinessRuleError } from '@/data/repo'
 import type { AppUser } from '@/types'
 
@@ -46,6 +46,10 @@ interface AuthResult {
   ok: boolean
   message?: string
   pending?: boolean
+  /** Set when the failure was a CAPTCHA/verification problem (not credentials),
+   *  so the UI can reset the widget and ask for re-verification without implying
+   *  the password was wrong. */
+  captcha?: boolean
 }
 
 interface AuthApi {
@@ -53,8 +57,8 @@ interface AuthApi {
   loading: boolean
   supabaseMode: boolean
   isSuperAdmin: boolean
-  login: (username: string, password: string) => Promise<AuthResult>
-  register: (input: RegisterInput) => Promise<AuthResult>
+  login: (username: string, password: string, captchaToken?: string) => Promise<AuthResult>
+  register: (input: RegisterInput, captchaToken?: string) => Promise<AuthResult>
   logout: () => void
   changePassword: (current: string, next: string) => Promise<boolean>
 }
@@ -107,10 +111,6 @@ async function fetchRemoteUsers(): Promise<AppUser[]> {
   const { data } = await supabase.rpc('list_app_users')
   return Array.isArray(data) ? (data as AppUser[]) : []
 }
-
-// While a registration is in flight we briefly hold a session to write the
-// profile; suppress the approval gate so it isn't signed out mid-write.
-let suppressGate = false
 
 async function resolveSupabaseSession(
   s: { user: { email?: string | null } } | null,
@@ -169,14 +169,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     supabase!.auth.getSession().then(async ({ data }) => {
       if (!active) return
       const resolved = await resolveSupabaseSession(data.session)
-      if (!resolved && data.session && !suppressGate) await supabase!.auth.signOut()
+      if (!resolved && data.session) await supabase!.auth.signOut()
       if (active) {
         setSession(resolved)
         setLoading(false)
       }
     })
     const { data: sub } = supabase!.auth.onAuthStateChange((_event, s) => {
-      if (suppressGate) return
       resolveSupabaseSession(s).then((resolved) => {
         if (!resolved && s) void supabase!.auth.signOut()
         setSession(resolved)
@@ -195,14 +194,53 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       supabaseMode,
       isSuperAdmin: session?.role === 'SuperAdmin',
 
-      async login(username, password) {
+      async login(username, password, captchaToken) {
         if (supabaseMode) {
           const email = username.trim()
-          const { error } = await supabase!.auth.signInWithPassword({
-            email,
-            password,
-          })
-          if (error) return { ok: false, message: 'Invalid email or password' }
+          // reCAPTCHA is verified SERVER-SIDE by /api/auth/login BEFORE Supabase
+          // is touched (Supabase can't verify reCAPTCHA). On success the route
+          // returns a session we install here; the approval gate then runs on it.
+          let res: Response
+          let data: { session?: { access_token: string; refresh_token: string }; error?: string }
+          try {
+            res = await fetch('/api/auth/login', {
+              method: 'POST',
+              headers: { 'content-type': 'application/json' },
+              body: JSON.stringify({ email, password, captchaToken }),
+            })
+            data = await res.json().catch(() => ({}))
+          } catch {
+            return {
+              ok: false,
+              message: 'Request failed. Please check your connection and try again.',
+            }
+          }
+          if (!res.ok || !data.session) {
+            if (data.error === 'captcha_failed') {
+              return {
+                ok: false,
+                captcha: true,
+                message: 'Verification failed. Please complete the verification again.',
+              }
+            }
+            if (res.status === 429) {
+              return {
+                ok: false,
+                message: 'Too many attempts. Please wait a minute and try again.',
+              }
+            }
+            if (data.error === 'server_misconfigured') {
+              return {
+                ok: false,
+                message: 'Sign-in is temporarily unavailable. Please try again later.',
+              }
+            }
+            // 401 / anything else — stay generic, never reveal account existence.
+            return { ok: false, message: 'Invalid email or password' }
+          }
+          const { error: setErr } = await supabase!.auth.setSession(data.session)
+          if (setErr) return { ok: false, message: 'Invalid email or password' }
+
           if (isSuperAdminEmail(email)) return { ok: true }
           const users = await fetchRemoteUsers()
           const u = users.find((x) => x.email.toLowerCase() === email.toLowerCase())
@@ -263,46 +301,52 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return { ok: true }
       },
 
-      async register(input) {
+      async register(input, captchaToken) {
         const email = input.email.trim()
         if (!email) return { ok: false, message: 'Email is required' }
         if (isSuperAdminEmail(email)) return { ok: false, message: 'This email is reserved.' }
 
         if (supabaseMode) {
-          suppressGate = true
+          // reCAPTCHA is verified SERVER-SIDE by /api/auth/signup BEFORE Supabase
+          // is touched; the route also merges the applicant's profile via the
+          // register_pending_user RPC. It does NOT sign the user in (pending
+          // approval), so no client session is created here.
+          let res: Response
+          let data: { ok?: boolean; error?: string; message?: string }
           try {
-            const { error } = await supabase!.auth.signUp({
-              email,
-              password: input.password,
+            res = await fetch('/api/auth/signup', {
+              method: 'POST',
+              headers: { 'content-type': 'application/json' },
+              body: JSON.stringify({
+                email,
+                password: input.password,
+                fullName: input.fullName.trim(),
+                companyName: input.companyName.trim(),
+                phone: input.phone.trim(),
+                address: input.address.trim(),
+                gstin: input.gstin.trim(),
+                captchaToken,
+              }),
             })
-            if (error) return { ok: false, message: error.message }
-            // Record the applicant's profile via a SECURITY DEFINER RPC — app_state
-            // is approval-gated, so a still-pending applicant cannot write it
-            // directly. A DB trigger already inserts a bare pending row on sign-up;
-            // the RPC merges the form details into it (migration 0018) and can never
-            // set status to approved, so the approval gate is intact.
-            //
-            // Call it on a sessionless anon client: the just-issued session token's
-            // `iat` can momentarily be ahead of the DB clock ("JWT issued at
-            // future"); the static anon key avoids that skew.
-            const anon = makeAnonClient() ?? supabase!
-            const { error: rpcErr } = await anon.rpc('register_pending_user', {
-              p_email: email,
-              p_full_name: input.fullName.trim(),
-              p_company: input.companyName.trim(),
-              p_phone: input.phone.trim(),
-              p_address: input.address.trim(),
-              p_gstin: input.gstin.trim(),
-            })
-            if (rpcErr) return { ok: false, message: rpcErr.message }
-            return { ok: true, pending: true }
-          } catch (e) {
-            return { ok: false, message: e instanceof Error ? e.message : 'Registration failed' }
-          } finally {
-            await supabase!.auth.signOut()
-            suppressGate = false
-            setSession(null)
+            data = await res.json().catch(() => ({}))
+          } catch {
+            return {
+              ok: false,
+              message: 'Request failed. Please check your connection and try again.',
+            }
           }
+          if (res.ok && data.ok) return { ok: true, pending: true }
+          if (data.error === 'captcha_failed') {
+            return {
+              ok: false,
+              captcha: true,
+              message: 'Verification failed. Please complete the verification again.',
+            }
+          }
+          if (res.status === 429) {
+            return { ok: false, message: 'Too many attempts. Please wait a minute and try again.' }
+          }
+          return { ok: false, message: data.message || 'Registration failed' }
         }
 
         // Local mode — store a pending user; do NOT sign in.

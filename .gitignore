@@ -38,3 +38,6 @@ vite.config.d.ts
 supabase-backup-*.json
 preview.log
 .vercel
+
+# Supabase CLI local temp
+supabase/.temp/

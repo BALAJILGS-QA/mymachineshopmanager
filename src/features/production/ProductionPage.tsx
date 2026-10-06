@@ -11,6 +11,7 @@ import { CompanyFilter, DateRangeFilter, FilterBar, SearchBox } from '@/componen
 import { JobStatusBadge, PriorityBadge } from '@/components/common/status'
 import { Modal } from '@/components/ui/Modal'
 import { useToast } from '@/components/ui/Toast'
+import { useAppNavigate } from '@/components/nav/app-link'
 import { useCompanyName } from '@/features/shared/lookups'
 
 const ACTIVE_STATUSES: JobStatus[] = ['Pending', 'In Progress', 'On Hold']
@@ -18,6 +19,7 @@ const ACTIVE_STATUSES: JobStatus[] = ['Pending', 'In Progress', 'On Hold']
 export function ProductionPage() {
   const { data: jobs = [] } = useJobs()
   const companyName = useCompanyName()
+  const nav = useAppNavigate()
   const [search, setSearch] = useState('')
   const [company, setCompany] = useState('')
   const [from, setFrom] = useState('')
@@ -163,6 +165,12 @@ export function ProductionPage() {
                   )}
                   <button className="btn-ghost btn-sm" onClick={() => setHistoryJob(job)}>
                     <History size={14} /> History
+                  </button>
+                  <button
+                    className="btn-ghost btn-sm"
+                    onClick={() => nav(`/app/production/${job.id}`)}
+                  >
+                    Open
                   </button>
                 </div>
               </Card>

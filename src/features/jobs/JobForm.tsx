@@ -12,7 +12,7 @@ import { Field, Input, Select, Textarea } from '@/components/ui/primitives'
 import { DateInput } from '@/components/ui/DateInput'
 import { Modal } from '@/components/ui/Modal'
 import { useToast } from '@/components/ui/Toast'
-import { JOB_PRIORITIES as PRIORITIES, JOB_STATUSES as STATUSES } from '@/constants/domain'
+import { JOB_PRIORITIES as PRIORITIES, JOB_FORM_STATUSES as STATUSES } from '@/constants/domain'
 
 // Section wrapper — keeps the MSMS design language, just adds clear grouping.
 function Section({
@@ -310,6 +310,9 @@ export function JobForm({ job, onClose }: { job: JobOrder | null; onClose: () =>
           {form.materialId && (
             <>
               <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
+                <ReadOnly label="Part Number" value={selectedMaterial?.partNumber || '—'} />
+                <ReadOnly label="HSN Code" value={selectedMaterial?.hsn || '—'} />
+                <ReadOnly label="Bin No" value={selectedMaterial?.binNo || '—'} />
                 <ReadOnly label="Material Grade" value={selectedMaterial?.type || '—'} />
                 <ReadOnly label="Unit" value={selectedMaterial?.unit || '—'} />
                 <ReadOnly

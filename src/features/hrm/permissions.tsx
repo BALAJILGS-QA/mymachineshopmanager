@@ -89,6 +89,26 @@ export type PermKey =
   | 'INVENTORY_ADJUST'
   | 'INVENTORY_TRANSFER'
   | 'INVENTORY_REPORT'
+  // Production Module (catalog seeded in migration 0071)
+  | 'JOB_ORDER_VIEW'
+  | 'JOB_ORDER_CREATE'
+  | 'JOB_ORDER_UPDATE'
+  | 'PRODUCTION_VIEW'
+  | 'PRODUCTION_EXECUTE'
+  | 'PRODUCTION_COMPLETE'
+  | 'PRODUCTION_VIEW_DRAWING'
+  | 'PRODUCTION_VIEW_PROGRAM'
+  | 'PRODUCTION_UPLOAD_PROGRAM'
+  | 'PRODUCTION_APPROVE_PROGRAM'
+  | 'QC_VIEW'
+  | 'QC_INSPECT'
+  | 'QC_APPROVE'
+  | 'QC_REJECT'
+  | 'QC_REWORK'
+  | 'FG_VIEW'
+  | 'FG_MOVE'
+  | 'DISPATCH_VIEW'
+  | 'DISPATCH_EXECUTE'
 
 export interface AccessRow {
   permission_key: PermKey

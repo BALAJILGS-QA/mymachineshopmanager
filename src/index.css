@@ -100,6 +100,11 @@
       focus:border-brand-600 focus:ring-2 focus:ring-brand-600/25
       disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-500;
   }
+  /* Compact input used inside dense grids (e.g. QC 10-sample table). */
+  .input-cell {
+    @apply rounded border border-slate-300 bg-white px-1.5 py-1 text-xs text-slate-900
+      outline-none transition focus:border-brand-600 focus:ring-1 focus:ring-brand-600/25;
+  }
   .btn {
     @apply inline-flex select-none items-center justify-center gap-1.5 rounded-lg
       px-3.5 py-2 text-sm font-semibold transition-colors
