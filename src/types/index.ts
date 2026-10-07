@@ -158,6 +158,7 @@ export interface WorkCenter extends AuditFields {
   code?: string
   name: string
   description?: string
+  capacityHoursPerDay?: number // available production hours/day (null = uncapped)
   active: boolean
   tenantId?: ID
 }

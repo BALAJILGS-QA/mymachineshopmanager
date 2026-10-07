@@ -1,7 +1,7 @@
 'use client'
 
 import { useMemo } from 'react'
-import { CalendarClock, Clock, Cpu, Factory, Layers } from 'lucide-react'
+import { AlertTriangle, CalendarClock, Clock, Cpu, Factory, Layers } from 'lucide-react'
 import type { JobOperation, JobOrder } from '@/types'
 import { useJobs } from '@/features/jobs/hooks/useJobs'
 import { useAllJobOperations } from '@/features/jobs/hooks/useJobOperations'
@@ -52,6 +52,17 @@ export function ProductionSchedulePage() {
     return m
   }, [jobs])
 
+  // Capacity (hours/day) keyed by work-centre name — ops snapshot the name, not id.
+  const capByName = useMemo(() => {
+    const m = new Map<string, number>()
+    for (const wc of workCenters) {
+      if (wc.capacityHoursPerDay != null && wc.capacityHoursPerDay > 0) {
+        m.set(wc.name.toLowerCase(), wc.capacityHoursPerDay)
+      }
+    }
+    return m
+  }, [workCenters])
+
   // Pending/in-progress operations on active orders.
   const scheduled = useMemo<ScheduledOp[]>(() => {
     return allOps
@@ -91,9 +102,16 @@ export function ProductionSchedulePage() {
   const kpis = useMemo(() => {
     const totalMin = scheduled.reduce((sum, s) => sum + s.estMin, 0)
     const inProgress = scheduled.filter((s) => s.op.status === 'In Progress').length
-    const loadedWcs = new Set(scheduled.map((s) => s.op.workCenterName || 'Unassigned')).size
-    return { ops: scheduled.length, totalMin, inProgress, loadedWcs }
-  }, [scheduled])
+    // Over capacity = cells whose remaining load exceeds one day's capacity.
+    let overCapacity = 0
+    for (const [name, ops] of groups) {
+      const cap = capByName.get(name.toLowerCase())
+      if (!cap) continue
+      const loadHours = ops.reduce((sum, s) => sum + s.estMin, 0) / 60
+      if (loadHours > cap) overCapacity += 1
+    }
+    return { ops: scheduled.length, totalMin, inProgress, overCapacity }
+  }, [scheduled, groups, capByName])
 
   const isLoading = lj || lo
 
@@ -125,10 +143,11 @@ export function ProductionSchedulePage() {
           value={kpis.inProgress}
         />
         <StatTile
-          icon={<Factory size={18} />}
-          tone="green"
-          label="Work centres loaded"
-          value={kpis.loadedWcs}
+          icon={<AlertTriangle size={18} />}
+          tone={kpis.overCapacity > 0 ? 'red' : 'green'}
+          label="Over capacity"
+          value={kpis.overCapacity}
+          hint="cells past one day's capacity"
         />
       </div>
 
@@ -150,9 +169,15 @@ export function ProductionSchedulePage() {
         <div className="space-y-4">
           {groups.map(([wcName, ops]) => {
             const load = ops.reduce((sum, s) => sum + s.estMin, 0)
+            const loadHours = load / 60
+            const cap = capByName.get(wcName.toLowerCase())
+            const days = cap ? loadHours / cap : null
+            const over = days != null && days > 1
+            // Utilization bar vs one day's capacity (clamped at 100%).
+            const util = cap ? Math.min(100, Math.round((loadHours / cap) * 100)) : null
             return (
               <Card key={wcName}>
-                <div className="mb-2 flex items-center justify-between">
+                <div className="mb-2 flex items-center justify-between gap-3">
                   <h3 className="flex items-center gap-2 text-sm font-semibold text-slate-800">
                     <Factory className="h-4 w-4 text-slate-400" />
                     {wcName}
@@ -160,7 +185,27 @@ export function ProductionSchedulePage() {
                       {ops.length} op{ops.length === 1 ? '' : 's'}
                     </span>
                   </h3>
-                  <span className="text-xs font-semibold text-slate-600">{fmtHours(load)}</span>
+                  <div className="flex items-center gap-3 text-right">
+                    {cap != null ? (
+                      <div className="min-w-[9rem]">
+                        <div className="flex items-center justify-end gap-1.5 text-xs">
+                          <span className="font-semibold text-slate-700">{fmtHours(load)}</span>
+                          <span className="text-2xs text-slate-400">/ {cap}h·day</span>
+                          <Badge tone={over ? 'red' : days! > 0.8 ? 'amber' : 'green'}>
+                            {days! < 0.1 ? '<0.1' : days!.toFixed(1)}d
+                          </Badge>
+                        </div>
+                        <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-slate-100">
+                          <div
+                            className={`h-full rounded-full ${over ? 'bg-red-500' : util! > 80 ? 'bg-amber-500' : 'bg-emerald-500'}`}
+                            style={{ width: `${util}%` }}
+                          />
+                        </div>
+                      </div>
+                    ) : (
+                      <span className="text-xs font-semibold text-slate-600">{fmtHours(load)}</span>
+                    )}
+                  </div>
                 </div>
                 <div className="overflow-x-auto">
                   <table className="min-w-full text-sm">

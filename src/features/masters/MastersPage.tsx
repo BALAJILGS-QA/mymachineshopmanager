@@ -130,6 +130,13 @@ function WorkCentersTab({ canManage }: { canManage: boolean }) {
       cellClassName: 'font-semibold text-slate-800',
       render: (r) => r.name,
     },
+    {
+      key: 'capacity',
+      header: 'Capacity/day',
+      headerClassName: 'text-right',
+      cellClassName: 'text-right tabular-nums',
+      render: (r) => (r.capacityHoursPerDay != null ? `${r.capacityHoursPerDay}h` : '—'),
+    },
     { key: 'description', header: 'Description', render: (r) => r.description || '—' },
     {
       key: 'status',
@@ -197,6 +204,7 @@ function WorkCentersTab({ canManage }: { canManage: boolean }) {
             else await create.mutateAsync(vals)
           }}
           fields="basic"
+          capacity
         />
       )}
     </Card>
@@ -558,33 +566,52 @@ function SimpleMasterModal({
   initial,
   onClose,
   onSave,
+  capacity = false,
 }: {
   title: string
-  initial: { code?: string; name?: string; description?: string; active?: boolean } | null
+  initial: {
+    code?: string
+    name?: string
+    description?: string
+    capacityHoursPerDay?: number
+    active?: boolean
+  } | null
   onClose: () => void
   onSave: (vals: {
     code?: string
     name: string
     description?: string
+    capacityHoursPerDay?: number
     active: boolean
   }) => Promise<void>
   fields: 'basic'
+  /** Show the work-centre capacity (hours/day) field. */
+  capacity?: boolean
 }) {
   const toast = useToast()
   const [code, setCode] = useState(initial?.code ?? '')
   const [name, setName] = useState(initial?.name ?? '')
   const [description, setDescription] = useState(initial?.description ?? '')
+  const [capacityHrs, setCapacityHrs] = useState(
+    initial?.capacityHoursPerDay != null ? String(initial.capacityHoursPerDay) : '',
+  )
   const [active, setActive] = useState(initial?.active ?? true)
   const [saving, setSaving] = useState(false)
 
   async function save() {
     if (!name.trim()) return toast.error('Name is required')
+    if (capacity && capacityHrs.trim() !== '') {
+      const n = Number(capacityHrs)
+      if (!Number.isFinite(n) || n < 0) return toast.error('Capacity must be a positive number')
+    }
     setSaving(true)
     try {
       await onSave({
         code: code.trim() || undefined,
         name: name.trim(),
         description: description.trim() || undefined,
+        capacityHoursPerDay:
+          capacity && capacityHrs.trim() !== '' ? Number(capacityHrs) : undefined,
         active,
       })
       toast.success('Saved')
@@ -605,6 +632,17 @@ function SimpleMasterModal({
         <Field label="Name" required>
           <Input autoFocus value={name} onChange={(e) => setName(e.target.value)} />
         </Field>
+        {capacity && (
+          <Field label="Capacity (hours/day)" hint="For schedule load — leave blank if uncapped">
+            <Input
+              type="number"
+              min={0}
+              step="0.5"
+              value={capacityHrs}
+              onChange={(e) => setCapacityHrs(e.target.value)}
+            />
+          </Field>
+        )}
         <ActiveField checked={active} onChange={setActive} />
         <Field label="Description" className="sm:col-span-2">
           <Textarea rows={2} value={description} onChange={(e) => setDescription(e.target.value)} />

@@ -144,12 +144,13 @@ export const maps = {
   // ---- Production masters (migration 0075) ----
   workCenters: {
     table: 'work_centers',
-    numeric: [],
+    numeric: ['capacityHoursPerDay'],
     fields: {
       id: 'id',
       code: 'code',
       name: 'name',
       description: 'description',
+      capacityHoursPerDay: 'capacity_hours_per_day',
       active: 'active',
       tenantId: 'tenant_id',
       createdAt: 'created_at',
