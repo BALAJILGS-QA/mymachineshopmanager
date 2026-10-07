@@ -23,7 +23,15 @@ import {
   useTransitionJob,
 } from './hooks/useJobs'
 import { JobForm } from './JobForm'
-import { useMaterials, useMaterialBalance } from '@/features/materials/hooks/useMaterials'
+import {
+  useJobMaterialStatus,
+  useReservationsForJob,
+  useSetMaterialRequirement,
+  useReserveMaterial,
+  useReleaseMaterial,
+  useConsumeMaterial,
+} from './hooks/useReservations'
+import { useMaterials } from '@/features/materials/hooks/useMaterials'
 import { useJobInspections } from '@/features/qc/hooks/useQc'
 import { useFgForJob } from '@/features/finishedgoods/hooks/useFinishedGoods'
 import { usePermissions } from '@/features/hrm/permissions'
@@ -46,7 +54,7 @@ import { useToast } from '@/components/ui/Toast'
 import { useConfirm } from '@/components/ui/ConfirmDialog'
 import { useAppNavigate, AppLink } from '@/components/nav/app-link'
 import { toUserMessage } from '@/lib/api/errors'
-import { SHOP_SCOPE, jobPendingQty } from '@/data/computations'
+import { materialAvailability, jobPendingQty } from '@/data/computations'
 import { fmtDate, fmtDateTime, qty } from '@/lib/format'
 
 // ---- Production Order object page (Phase 2) --------------------------------
@@ -518,38 +526,344 @@ function OperationsTab() {
   )
 }
 
+type ReserveAction = 'Reserve' | 'Release' | 'Consume' | 'Requirement'
+
+const STATUS_TONE: Record<string, 'green' | 'amber' | 'red' | 'slate'> = {
+  Ready: 'green',
+  Partial: 'amber',
+  Shortage: 'red',
+  None: 'slate',
+}
+
 function MaterialsTab({ job }: { job: JobOrder }) {
+  const perms = usePermissions()
+  const companyName = useCompanyName()
   const { data: materials = [] } = useMaterials()
   const material = materials.find((m) => m.id === job.materialId)
-  const { data: available = 0 } = useMaterialBalance(job.materialId ?? '', SHOP_SCOPE)
+  const { data: status } = useJobMaterialStatus(job.id)
+  const { data: ledger = [] } = useReservationsForJob(job.id)
+  const [action, setAction] = useState<ReserveAction | null>(null)
+
   if (!job.materialId)
     return (
       <Card>
         <EmptyState
           icon={<ClipboardList size={36} />}
           title="No raw material linked"
-          description="Link a raw material on the order to track availability. Reservation, consumption and shortage handling arrive in Phase 3."
+          description="Link a raw material to this production order (via Edit) to plan its requirement, reserve stock and consume it on the floor."
         />
       </Card>
     )
+
+  const unit = material?.unit ?? status?.unit ?? ''
+  const required = status?.required ?? job.materialRequiredQty ?? 0
+  const reserved = status?.reserved ?? 0
+  const consumed = status?.consumed ?? 0
+  const free = status?.free ?? 0
+  const balance = status?.balance ?? 0
+  const { remaining, status: avail } = materialAvailability(required, reserved, consumed, free)
+  const poolLabel =
+    status?.ownerScope == null ? 'Own (shop) stock' : `${companyName(status.ownerScope)} stock`
+
+  const canReserve = perms.can('PRODUCTION_RESERVE')
+  const canConsume = perms.can('PRODUCTION_CONSUME')
+  const canOverride = perms.can('PRODUCTION_RESERVE_OVERRIDE')
+
+  const stats: [string, string][] = [
+    ['Required', `${qty(required)} ${unit}`],
+    ['Reserved', `${qty(reserved)} ${unit}`],
+    ['Consumed', `${qty(consumed)} ${unit}`],
+    ['Remaining', `${qty(remaining)} ${unit}`],
+    ['Free to reserve', `${qty(free)} ${unit}`],
+    ['On-hand balance', `${qty(balance)} ${unit}`],
+  ]
+
   return (
-    <Card>
-      <p className="mb-3 text-xs text-slate-500">
-        Live availability from the existing raw-material stock ledger. Required / reserved /
-        consumed quantities and shortage gating are introduced in Phase 3.
-      </p>
-      <dl className="grid grid-cols-2 gap-x-6 gap-y-3 sm:grid-cols-3">
-        <Row label="Material" value={material?.name || '—'} />
-        <Row label="Part Number" value={material?.partNumber || '—'} />
-        <Row label="Bin" value={material?.binNo || '—'} />
-        <Row label="Available (own stock)" value={qty(available)} />
-      </dl>
-      <div className="mt-3">
-        <Badge tone={available > 0 ? 'green' : 'red'}>
-          {available > 0 ? 'In stock' : 'No stock'}
-        </Badge>
+    <div className="space-y-4">
+      <Card>
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <p className="text-sm font-semibold text-slate-800">{material?.name || 'Material'}</p>
+            <p className="text-2xs text-slate-500">
+              {poolLabel}
+              {material?.partNumber ? ` · ${material.partNumber}` : ''}
+              {material?.binNo ? ` · Bin ${material.binNo}` : ''}
+            </p>
+          </div>
+          <Badge tone={STATUS_TONE[avail]}>{avail === 'None' ? 'No requirement' : avail}</Badge>
+        </div>
+
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+          {stats.map(([k, v]) => (
+            <div key={k} className="rounded-lg bg-slate-50 px-3 py-2">
+              <p className="text-2xs uppercase tracking-wide text-slate-400">{k}</p>
+              <p className="text-sm font-semibold text-slate-800">{v}</p>
+            </div>
+          ))}
+        </div>
+
+        {avail === 'Shortage' && (
+          <p className="mt-3 rounded-lg bg-red-50 px-3 py-2 text-xs text-red-700">
+            Shortage — {qty(remaining)} {unit} still required but only {qty(free)} {unit} free to
+            reserve. Replenish stock, or an authorised user can reserve beyond availability
+            (override).
+          </p>
+        )}
+
+        <div className="mt-4 flex flex-wrap gap-2">
+          {canReserve && (
+            <button className="btn-secondary btn-sm" onClick={() => setAction('Requirement')}>
+              {required > 0 ? 'Edit requirement' : 'Set requirement'}
+            </button>
+          )}
+          {canReserve && (
+            <button className="btn-primary btn-sm" onClick={() => setAction('Reserve')}>
+              Reserve
+            </button>
+          )}
+          {canReserve && reserved > 0 && (
+            <button className="btn-secondary btn-sm" onClick={() => setAction('Release')}>
+              Release
+            </button>
+          )}
+          {canConsume && reserved > 0 && (
+            <button className="btn-secondary btn-sm" onClick={() => setAction('Consume')}>
+              Consume
+            </button>
+          )}
+        </div>
+        {!canReserve && !canConsume && (
+          <p className="mt-3 text-2xs text-slate-400">
+            You don’t have permission to reserve or consume material for this order.
+          </p>
+        )}
+      </Card>
+
+      <Card>
+        <p className="mb-2 text-xs font-bold uppercase tracking-wide text-slate-500">
+          Reservation ledger
+        </p>
+        {ledger.length === 0 ? (
+          <p className="text-sm text-slate-500">No reservation movements yet.</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="min-w-full text-sm">
+              <thead>
+                <tr className="text-left text-2xs uppercase tracking-wide text-slate-400">
+                  <th className="py-1 pr-4">Date</th>
+                  <th className="py-1 pr-4">Movement</th>
+                  <th className="py-1 pr-4 text-right">Qty</th>
+                  <th className="py-1 pr-4">By</th>
+                  <th className="py-1">Note</th>
+                </tr>
+              </thead>
+              <tbody>
+                {ledger.map((r) => (
+                  <tr key={r.id} className="border-t border-slate-100">
+                    <td className="py-1.5 pr-4 text-slate-500">{fmtDateTime(r.createdAt)}</td>
+                    <td className="py-1.5 pr-4">
+                      <Badge
+                        tone={
+                          r.kind === 'Reserve' ? 'blue' : r.kind === 'Consume' ? 'green' : 'slate'
+                        }
+                      >
+                        {r.kind}
+                      </Badge>
+                    </td>
+                    <td className="py-1.5 pr-4 text-right font-medium">
+                      {qty(r.quantity)} {r.unit || unit}
+                    </td>
+                    <td className="py-1.5 pr-4 text-slate-500">{r.actorEmail || '—'}</td>
+                    <td className="py-1.5 text-slate-500">{r.note || '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Card>
+
+      {action && (
+        <ReservationActionModal
+          job={job}
+          action={action}
+          unit={unit}
+          reserved={reserved}
+          free={free}
+          required={required}
+          ownerScope={status?.ownerScope ?? null}
+          canOverride={canOverride}
+          onClose={() => setAction(null)}
+        />
+      )}
+    </div>
+  )
+}
+
+function ReservationActionModal({
+  job,
+  action,
+  unit,
+  reserved,
+  free,
+  required,
+  ownerScope,
+  canOverride,
+  onClose,
+}: {
+  job: JobOrder
+  action: ReserveAction
+  unit: string
+  reserved: number
+  free: number
+  required: number
+  ownerScope: string | null
+  canOverride: boolean
+  onClose: () => void
+}) {
+  const toast = useToast()
+  const setRequirement = useSetMaterialRequirement()
+  const reserveMaterial = useReserveMaterial()
+  const releaseMaterial = useReleaseMaterial()
+  const consumeMaterial = useConsumeMaterial()
+  const companyName = useCompanyName()
+
+  // Default: Requirement prefilled to current required; moves prefilled to the
+  // obvious amount (remaining-to-reserve / full reserved).
+  const defaultQty =
+    action === 'Requirement'
+      ? required || job.orderedQty || 0
+      : action === 'Reserve'
+        ? Math.max(0, (required || 0) - reserved)
+        : reserved
+  const [value, setValue] = useState(String(defaultQty || ''))
+  const [scope, setScope] = useState<string>(ownerScope ?? '')
+  const [override, setOverride] = useState(false)
+  const num = Number(value) || 0
+  const busy =
+    setRequirement.isPending ||
+    reserveMaterial.isPending ||
+    releaseMaterial.isPending ||
+    consumeMaterial.isPending
+
+  const shortageReserve = action === 'Reserve' && num > free
+
+  async function submit() {
+    if (action !== 'Requirement' && !(num > 0)) {
+      toast.error('Enter a quantity greater than zero.')
+      return
+    }
+    try {
+      if (action === 'Requirement') {
+        await setRequirement.mutateAsync({
+          jobId: job.id,
+          requiredQty: num,
+          ownerScope: scope || null,
+        })
+        toast.success('Material requirement updated')
+      } else if (action === 'Reserve') {
+        await reserveMaterial.mutateAsync({ jobId: job.id, quantity: num, override })
+        toast.success(`Reserved ${qty(num)} ${unit}`)
+      } else if (action === 'Release') {
+        await releaseMaterial.mutateAsync({ jobId: job.id, quantity: num })
+        toast.success(`Released ${qty(num)} ${unit}`)
+      } else {
+        await consumeMaterial.mutateAsync({ jobId: job.id, quantity: num })
+        toast.success(`Consumed ${qty(num)} ${unit}`)
+      }
+      onClose()
+    } catch (e) {
+      toast.error(toUserMessage(e, 'Action failed'))
+    }
+  }
+
+  const title =
+    action === 'Requirement'
+      ? 'Set material requirement'
+      : action === 'Reserve'
+        ? 'Reserve material'
+        : action === 'Release'
+          ? 'Release reservation'
+          : 'Consume reserved material'
+
+  return (
+    <Modal
+      open
+      onClose={onClose}
+      size="sm"
+      title={title}
+      footer={
+        <>
+          <button className="btn-secondary" onClick={onClose} disabled={busy}>
+            Cancel
+          </button>
+          <button className="btn-primary" onClick={submit} disabled={busy}>
+            {busy ? 'Saving…' : 'Confirm'}
+          </button>
+        </>
+      }
+    >
+      <div className="space-y-3">
+        <Field label={action === 'Requirement' ? 'Required quantity' : 'Quantity'}>
+          <Input
+            type="number"
+            step="0.001"
+            min={0}
+            value={value}
+            onChange={(e) => setValue(e.target.value)}
+          />
+        </Field>
+
+        {action === 'Requirement' && (
+          <Field label="Stock pool" hint="Which stock this order draws from">
+            <select className="input" value={scope} onChange={(e) => setScope(e.target.value)}>
+              <option value="">Own (shop) stock</option>
+              <option value={job.companyId}>{companyName(job.companyId)} stock</option>
+            </select>
+          </Field>
+        )}
+
+        {action === 'Release' && (
+          <p className="text-2xs text-slate-500">
+            Reserved now: {qty(reserved)} {unit}.
+          </p>
+        )}
+        {action === 'Consume' && (
+          <p className="text-2xs text-slate-500">
+            Issues material from stock against this order’s reservation. Reserved now:{' '}
+            {qty(reserved)} {unit}.
+          </p>
+        )}
+
+        {action === 'Reserve' && (
+          <>
+            <p className="text-2xs text-slate-500">
+              Free to reserve: {qty(free)} {unit}.
+            </p>
+            {shortageReserve &&
+              (canOverride ? (
+                <label className="flex items-start gap-2 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                  <input
+                    type="checkbox"
+                    className="mt-0.5"
+                    checked={override}
+                    onChange={(e) => setOverride(e.target.checked)}
+                  />
+                  <span>
+                    Reserve beyond available stock (shortage override). This is recorded in the
+                    audit log.
+                  </span>
+                </label>
+              ) : (
+                <p className="rounded-lg bg-red-50 px-3 py-2 text-xs text-red-700">
+                  {qty(num)} {unit} exceeds the {qty(free)} {unit} free to reserve, and you’re not
+                  authorised to override a shortage.
+                </p>
+              ))}
+          </>
+        )}
       </div>
-    </Card>
+    </Modal>
   )
 }
 

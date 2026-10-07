@@ -390,3 +390,50 @@ export function companyMaterialValue(db: StockDb, companyId: string): number {
 export function jobPendingQty(orderedQty: number, completedQty: number): number {
   return roundMoney(Math.max(0, orderedQty - completedQty))
 }
+
+// ----------------------------------------------------------------------------
+// Production material reservation / availability (Phase 3)
+// ----------------------------------------------------------------------------
+// A production order reserves raw material at planning and consumes (issues) it
+// on the floor. These pure helpers derive the per-order picture the DB RPCs
+// (material_reserved / material_free / job_material_status) expose, so the UI and
+// the server agree on the same math.
+//   covered   = reserved (outstanding hold) + consumed (already issued)
+//   remaining = how much of the requirement is still uncovered
+//   status    = None      → no requirement set
+//               Ready     → requirement fully covered
+//               Partial   → gap remains but enough FREE stock to cover it
+//               Shortage  → gap remains and NOT enough free stock (release-gated)
+export type MaterialAvailabilityStatus = 'None' | 'Ready' | 'Partial' | 'Shortage'
+
+export function materialAvailability(
+  required: number,
+  reserved: number,
+  consumed: number,
+  free: number,
+): { covered: number; remaining: number; status: MaterialAvailabilityStatus } {
+  const req = roundMoney(required || 0)
+  const covered = roundMoney((reserved || 0) + (consumed || 0))
+  const remaining = roundMoney(Math.max(req - covered, 0))
+  let status: MaterialAvailabilityStatus
+  if (req <= 0) status = 'None'
+  else if (covered >= req) status = 'Ready'
+  // 1e-6 tolerance so float dust never flips an exactly-coverable line to Shortage.
+  else if ((free || 0) + 1e-6 >= remaining) status = 'Partial'
+  else status = 'Shortage'
+  return { covered, remaining, status }
+}
+
+// Outstanding reservation from a set of ledger rows (mirrors the SQL
+// material_reserved): Reserve adds, Release/Consume subtract. Pass jobId to scope
+// to a single order, omit for the whole material/scope.
+export function reservedFromRows(
+  rows: { kind: 'Reserve' | 'Release' | 'Consume'; quantity: number; jobId?: string }[],
+  jobId?: string,
+): number {
+  return roundMoney(
+    rows
+      .filter((r) => (jobId == null ? true : r.jobId === jobId))
+      .reduce((s, r) => s + (r.kind === 'Reserve' ? r.quantity : -r.quantity), 0),
+  )
+}

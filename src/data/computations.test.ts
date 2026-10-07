@@ -9,6 +9,8 @@ import {
   materialStock,
   receiptStock,
   jobPendingQty,
+  materialAvailability,
+  reservedFromRows,
   SHOP_SCOPE,
 } from './computations'
 import type {
@@ -797,5 +799,67 @@ describe('receivablesSummary — advances from partial/excess allocation', () =>
     const s = receivablesSummary([inv], pays, {}, allocs)
     expect(s.totalAdvances).toBe(500)
     expect(s.totalOutstanding).toBe(600)
+  })
+})
+
+describe('materialAvailability — production reservation status', () => {
+  it('no requirement set → None', () => {
+    const r = materialAvailability(0, 0, 0, 500)
+    expect(r.status).toBe('None')
+    expect(r.remaining).toBe(0)
+  })
+
+  it('fully reserved → Ready with zero remaining', () => {
+    const r = materialAvailability(1000, 1000, 0, 200)
+    expect(r.status).toBe('Ready')
+    expect(r.covered).toBe(1000)
+    expect(r.remaining).toBe(0)
+  })
+
+  it('reserved + consumed together cover the requirement → Ready', () => {
+    const r = materialAvailability(1000, 400, 600, 0)
+    expect(r.status).toBe('Ready')
+    expect(r.covered).toBe(1000)
+  })
+
+  it('gap with enough free stock to cover it → Partial', () => {
+    const r = materialAvailability(1000, 300, 0, 800)
+    expect(r.status).toBe('Partial')
+    expect(r.remaining).toBe(700)
+  })
+
+  it('gap with insufficient free stock → Shortage', () => {
+    const r = materialAvailability(1000, 300, 0, 200)
+    expect(r.status).toBe('Shortage')
+    expect(r.remaining).toBe(700)
+  })
+
+  it('exactly-coverable gap (free == remaining) is Partial, not Shortage', () => {
+    const r = materialAvailability(1000, 0, 0, 1000)
+    expect(r.status).toBe('Partial')
+  })
+
+  it('over-reserved (override) still reads Ready', () => {
+    const r = materialAvailability(1000, 1200, 0, -200)
+    expect(r.status).toBe('Ready')
+    expect(r.remaining).toBe(0)
+  })
+})
+
+describe('reservedFromRows — outstanding reservation from the ledger', () => {
+  const rows = [
+    { kind: 'Reserve' as const, quantity: 1000, jobId: 'job_a' },
+    { kind: 'Release' as const, quantity: 200, jobId: 'job_a' },
+    { kind: 'Consume' as const, quantity: 300, jobId: 'job_a' },
+    { kind: 'Reserve' as const, quantity: 500, jobId: 'job_b' },
+  ]
+
+  it('nets Reserve − Release − Consume per order', () => {
+    expect(reservedFromRows(rows, 'job_a')).toBe(500)
+    expect(reservedFromRows(rows, 'job_b')).toBe(500)
+  })
+
+  it('sums across all orders when no jobId is given', () => {
+    expect(reservedFromRows(rows)).toBe(1000)
   })
 })

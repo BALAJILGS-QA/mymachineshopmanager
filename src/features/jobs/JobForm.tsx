@@ -3,6 +3,7 @@ import { clsx } from 'clsx'
 import type { JobOrder, JobPriority, JobStatus, MaterialOwnerType } from '@/types'
 import { SHOP_SCOPE } from '@/data/computations'
 import { useCreateJob, useUpdateJob } from './hooks/useJobs'
+import { useSetMaterialRequirement, useReserveMaterial } from './hooks/useReservations'
 import { useCompanies } from '@/features/companies/hooks/useCompanies'
 import { useMaterials, useMaterialBalance } from '@/features/materials/hooks/useMaterials'
 import { usePreviewNo } from '@/features/shared/usePreviewNo'
@@ -51,7 +52,13 @@ export function JobForm({ job, onClose }: { job: JobOrder | null; onClose: () =>
   const toast = useToast()
   const createJob = useCreateJob()
   const updateJob = useUpdateJob()
-  const saving = createJob.isPending || updateJob.isPending
+  const setRequirement = useSetMaterialRequirement()
+  const reserveMaterial = useReserveMaterial()
+  const saving =
+    createJob.isPending ||
+    updateJob.isPending ||
+    setRequirement.isPending ||
+    reserveMaterial.isPending
   const { data: allCompanies = [] } = useCompanies()
   const companies = allCompanies.filter((c) => c.active || c.id === job?.companyId)
   const {
@@ -97,7 +104,7 @@ export function JobForm({ job, onClose }: { job: JobOrder | null; onClose: () =>
 
   const orderedNum = Number(form.orderedQty) || 0
   const plannedNum = form.plannedQty === '' ? orderedNum : Number(form.plannedQty)
-  const consumeNum = form.materialQty === '' ? 0 : Number(form.materialQty) || 0
+  const reserveNum = form.materialQty === '' ? 0 : Number(form.materialQty) || 0
   // Business rule (confirmed with the codebase): MSMS has no finished-goods stock —
   // a job manufactures the full ordered quantity; raw material is consumed from
   // inventory. So Production Required = Ordered Quantity.
@@ -108,7 +115,7 @@ export function JobForm({ job, onClose }: { job: JobOrder | null; onClose: () =>
     ? null
     : available <= 0
       ? 'red'
-      : consumeNum > 0 && available < consumeNum
+      : reserveNum > 0 && available < reserveNum
         ? 'orange'
         : 'green'
 
@@ -158,20 +165,38 @@ export function JobForm({ job, onClose }: { job: JobOrder | null; onClose: () =>
         await updateJob.mutateAsync({ id: job.id, patch: { ...payload, plannedQty: plannedNum } })
         toast.success('Job order updated')
       } else {
-        // Create: create_job (unchanged — handles material auto-issue atomically).
+        // Create: reserve-then-consume. The order is created WITHOUT an auto-issue
+        // (materialQty 0); raw material is RESERVED at planning and consumed on the
+        // shop floor. Server derives scope from the order's chosen pool.
         const created = await createJob.mutateAsync({
           ...payload,
           completedQty: 0,
-          materialQty: consumeNum || undefined,
-          materialOwner: form.materialOwner,
         })
         // Persist a non-default planned qty without touching the create_job RPC.
         if (plannedNum !== orderedNum) {
           await updateJob.mutateAsync({ id: created.id, patch: { plannedQty: plannedNum } })
         }
-        toast.success(
-          consumeNum ? 'Job order created — material issued from stock' : 'Job order created',
-        )
+        // Record the material requirement + chosen pool, then try to reserve it.
+        if (form.materialId && reserveNum > 0) {
+          const ownerScope = form.materialOwner === 'Company' ? form.companyId : null
+          await setRequirement.mutateAsync({
+            jobId: created.id,
+            requiredQty: reserveNum,
+            ownerScope,
+          })
+          try {
+            await reserveMaterial.mutateAsync({ jobId: created.id, quantity: reserveNum })
+            toast.success('Production order created — material reserved from stock')
+          } catch (re) {
+            // Keep the order (requirement is set); surface the shortage so the user
+            // can reserve later / override from the order's Materials tab.
+            toast.error(
+              toUserMessage(re, 'Order created, but material could not be fully reserved'),
+            )
+          }
+        } else {
+          toast.success('Production order created')
+        }
       }
       onClose()
     } catch (e) {
@@ -364,7 +389,7 @@ export function JobForm({ job, onClose }: { job: JobOrder | null; onClose: () =>
                   )}
                 </div>
                 <div className="grid grid-cols-2 gap-3 sm:grid-cols-2">
-                  <Field label="Consume from stock">
+                  <Field label="Reserve from stock">
                     <Select
                       value={form.materialOwner}
                       onChange={(e) => set('materialOwner', e.target.value as MaterialOwnerType)}
@@ -377,8 +402,8 @@ export function JobForm({ job, onClose }: { job: JobOrder | null; onClose: () =>
                 </div>
                 {!job && (
                   <Field
-                    label="Material Qty to Consume"
-                    hint="Issued from stock on create (reduces available stock)"
+                    label="Material Qty to Reserve"
+                    hint="Held against stock at planning — issued later when consumed on the floor"
                     className="mt-3"
                   >
                     <Input
@@ -391,9 +416,10 @@ export function JobForm({ job, onClose }: { job: JobOrder | null; onClose: () =>
                     />
                   </Field>
                 )}
-                {!job && consumeNum > available && (
-                  <p className="mt-2 text-2xs text-red-600">
-                    Consuming more than available ({qty(available)} {unit}).
+                {!job && reserveNum > available && (
+                  <p className="mt-2 text-2xs text-amber-600">
+                    Reserving more than available ({qty(available)} {unit}) needs a shortage
+                    override.
                   </p>
                 )}
               </div>

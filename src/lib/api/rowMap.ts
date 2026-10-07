@@ -74,6 +74,7 @@ export const maps = {
       'acceptedQty',
       'reworkQty',
       'rate',
+      'materialRequiredQty',
     ],
     fields: {
       id: 'id',
@@ -90,6 +91,7 @@ export const maps = {
       acceptedQty: 'accepted_qty',
       reworkQty: 'rework_qty',
       rate: 'rate',
+      materialRequiredQty: 'material_required_qty',
       orderDate: 'order_date',
       dueDate: 'due_date',
       priority: 'priority',
@@ -117,6 +119,26 @@ export const maps = {
       note: 'note',
       operator: 'operator',
       at: 'at',
+    },
+  },
+  // Material reservation ledger (migration 0074). Soft holds on free stock per
+  // production order: Reserve / Release / Consume movements.
+  materialReservations: {
+    table: 'material_reservations',
+    numeric: ['quantity'],
+    fields: {
+      id: 'id',
+      jobId: 'job_id',
+      materialId: 'material_id',
+      ownerScope: 'owner_scope',
+      kind: 'kind',
+      quantity: 'quantity',
+      unit: 'unit',
+      issueId: 'issue_id',
+      note: 'note',
+      actorEmail: 'actor_email',
+      tenantId: 'tenant_id',
+      createdAt: 'created_at',
     },
   },
   // ---- Production Module (migrations 0070) ----

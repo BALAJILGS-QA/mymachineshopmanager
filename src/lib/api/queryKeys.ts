@@ -29,6 +29,12 @@ export const qk = {
     all: ['jobs'] as const,
     detail: (id: string) => ['jobs', id] as const,
   },
+  // Material reservations (ledger) + per-order material status (0074).
+  reservations: {
+    all: ['reservations'] as const,
+    forJob: (jobId: string) => ['reservations', 'job', jobId] as const,
+    status: (jobId: string) => ['reservations', 'status', jobId] as const,
+  },
   production: {
     // Production events for a single job.
     events: (jobId: string) => ['production', 'events', jobId] as const,

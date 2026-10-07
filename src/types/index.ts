@@ -88,6 +88,7 @@ export interface JobOrder extends AuditFields {
   partName: string
   partNumber?: string
   materialId?: ID
+  materialRequiredQty?: number // raw-material requirement for this order (reserve-then-consume)
   orderedQty: number
   plannedQty?: number // planned production quantity (defaults to orderedQty)
   completedQty: number // = produced quantity
@@ -117,6 +118,35 @@ export interface ProductionEvent {
   note?: string
   operator?: string
   at: ISODateTime
+}
+
+// ---- Material reservation (migration 0074) ----
+export type MaterialReservationKind = 'Reserve' | 'Release' | 'Consume'
+
+export interface MaterialReservation {
+  id: ID
+  jobId: ID
+  materialId: ID
+  ownerScope?: string | null // null = own/shop stock; company_id = that customer's stock
+  kind: MaterialReservationKind
+  quantity: number
+  unit?: string
+  issueId?: ID // the physical material_issue created when kind = 'Consume'
+  note?: string
+  actorEmail?: string
+  createdAt?: ISODateTime
+}
+
+// Per-order material status returned by the job_material_status RPC.
+export interface JobMaterialStatus {
+  materialId: ID
+  ownerScope?: string | null
+  unit?: string
+  required: number
+  reserved: number
+  consumed: number
+  free: number
+  balance: number
 }
 
 // ---- Production Module (migrations 0070/0072) ----
