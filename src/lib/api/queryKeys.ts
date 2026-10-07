@@ -47,6 +47,11 @@ export const qk = {
     forJob: (jobId: string) => ['jobOperations', jobId] as const,
     all: ['jobOperations', 'all'] as const,
   },
+  labor: {
+    open: ['labor', 'open'] as const,
+    forJob: (jobId: string) => ['labor', 'job', jobId] as const,
+    all: ['labor', 'all'] as const,
+  },
   production: {
     // Production events for a single job.
     events: (jobId: string) => ['production', 'events', jobId] as const,

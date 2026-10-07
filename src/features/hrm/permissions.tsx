@@ -105,6 +105,8 @@ export type PermKey =
   | 'PRODUCTION_RESERVE_OVERRIDE'
   | 'MASTERS_VIEW'
   | 'MASTERS_MANAGE'
+  | 'LABOR_LOG'
+  | 'RESOURCE_ASSIGN'
   | 'QC_VIEW'
   | 'QC_INSPECT'
   | 'QC_APPROVE'

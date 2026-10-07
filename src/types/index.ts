@@ -230,8 +230,31 @@ export interface JobOperation extends AuditFields {
   startedAt?: string
   completedAt?: string
   operator?: string
+  operatorEmployeeId?: ID // HRM employee assigned as operator (0080)
   qtyCompleted?: number
   actualMinutes?: number
+  tenantId?: ID
+}
+
+// ---- Labor / resource time tracking (migration 0080) ----
+export type LaborActivity = 'Run' | 'Setup' | 'Idle' | 'Downtime' | 'QC' | 'Rework'
+
+export interface LaborTimeLog {
+  id: ID
+  jobId?: ID
+  jobOperationId?: ID
+  employeeId: ID
+  machineId?: ID
+  activity: LaborActivity
+  qcInspectionId?: ID
+  startedAt: ISODateTime
+  endedAt?: ISODateTime
+  minutes?: number
+  downtimeReason?: string
+  note?: string
+  loggedBy?: string
+  createdAt: ISODateTime
+  updatedAt: ISODateTime
   tenantId?: ID
 }
 
@@ -245,6 +268,7 @@ export interface QcInspection {
   inspectionNo?: string
   jobId: ID
   inspector?: string
+  inspectorEmployeeId?: ID // HRM employee who inspected (0080)
   inspectedAt: ISODateTime
   producedQty: number
   acceptedQty: number

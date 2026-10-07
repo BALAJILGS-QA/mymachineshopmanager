@@ -31,6 +31,7 @@ import {
   PackageCheck,
   Gauge,
   CalendarClock,
+  Timer,
   History,
   Cog,
   Settings as SettingsIcon,
@@ -97,6 +98,7 @@ export const NAV_GROUPS: NavGroup[] = [
     items: [
       { to: '/app/jobs', label: 'Production Orders', icon: ClipboardList, short: 'Orders' },
       { to: '/app/production', label: 'Production', icon: Factory, short: 'Floor' },
+      { to: '/app/shop-floor', label: 'Shop Floor', icon: Timer, short: 'Live' },
       { to: '/app/qc', label: 'Quality Control', icon: ClipboardCheck, short: 'QC' },
       { to: '/app/finished-goods', label: 'Finished Goods', icon: PackageCheck, short: 'FG' },
       {
