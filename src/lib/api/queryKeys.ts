@@ -35,6 +35,17 @@ export const qk = {
     forJob: (jobId: string) => ['reservations', 'job', jobId] as const,
     status: (jobId: string) => ['reservations', 'status', jobId] as const,
   },
+  // Production masters + per-order operation sequence (0075).
+  masters: {
+    workCenters: ['masters', 'workCenters'] as const,
+    machines: ['masters', 'machines'] as const,
+    operations: ['masters', 'operations'] as const,
+    routings: ['masters', 'routings'] as const,
+    routingSteps: (routingId: string) => ['masters', 'routingSteps', routingId] as const,
+  },
+  jobOperations: {
+    forJob: (jobId: string) => ['jobOperations', jobId] as const,
+  },
   production: {
     // Production events for a single job.
     events: (jobId: string) => ['production', 'events', jobId] as const,

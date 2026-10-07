@@ -31,6 +31,7 @@ import {
   PackageCheck,
   Gauge,
   History,
+  Cog,
   Settings as SettingsIcon,
   type LucideIcon,
 } from 'lucide-react'
@@ -110,6 +111,7 @@ export const NAV_GROUPS: NavGroup[] = [
         icon: Boxes,
         short: 'Material',
       },
+      { to: '/app/masters', label: 'Masters', icon: Cog, short: 'Masters' },
       // Tool Room is specialized production tool management; its own multi-screen
       // area lives under /app/tool-room (that page is the hub for its sub-screens).
       { to: '/app/tool-room', label: 'Tool Room', icon: Wrench, short: 'Tools' },

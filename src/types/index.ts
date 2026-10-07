@@ -149,6 +149,85 @@ export interface JobMaterialStatus {
   balance: number
 }
 
+// ---- Production masters (migration 0075) ----
+export type MachineStatus = 'Active' | 'Maintenance' | 'Inactive'
+export type JobOperationStatus = 'Planned' | 'In Progress' | 'Completed' | 'Skipped'
+
+export interface WorkCenter extends AuditFields {
+  id: ID
+  code?: string
+  name: string
+  description?: string
+  active: boolean
+  tenantId?: ID
+}
+
+export interface Machine extends AuditFields {
+  id: ID
+  code?: string
+  name: string
+  machineType?: string
+  workCenterId?: ID
+  status: MachineStatus
+  hourlyRate?: number
+  notes?: string
+  active: boolean
+  tenantId?: ID
+}
+
+export interface Operation extends AuditFields {
+  id: ID
+  code?: string
+  name: string
+  description?: string
+  defaultWorkCenterId?: ID
+  active: boolean
+  tenantId?: ID
+}
+
+export interface Routing extends AuditFields {
+  id: ID
+  code?: string
+  name: string
+  materialId?: ID
+  description?: string
+  active: boolean
+  tenantId?: ID
+}
+
+export interface RoutingStep extends AuditFields {
+  id: ID
+  routingId: ID
+  seq: number
+  operationId?: ID
+  workCenterId?: ID
+  machineId?: ID
+  setupMin?: number
+  cycleMin?: number
+  notes?: string
+  tenantId?: ID
+}
+
+// Operation sequence attached to a single production order (snapshots the
+// master names at attach time so the order's plan is stable).
+export interface JobOperation extends AuditFields {
+  id: ID
+  jobId: ID
+  seq: number
+  operationId?: ID
+  operationName?: string
+  workCenterId?: ID
+  workCenterName?: string
+  machineId?: ID
+  machineName?: string
+  setupMin?: number
+  cycleMin?: number
+  status: JobOperationStatus
+  notes?: string
+  sourceRoutingId?: ID
+  tenantId?: ID
+}
+
 // ---- Production Module (migrations 0070/0072) ----
 
 export type QcDecision = 'Approved' | 'Rejected' | 'Rework'

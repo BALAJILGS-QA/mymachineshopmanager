@@ -12,9 +12,11 @@ import {
   Pause,
   Pencil,
   Play,
+  Plus,
+  Route,
   Trash2,
 } from 'lucide-react'
-import type { JobOrder, JobStatus } from '@/types'
+import type { JobOrder, JobStatus, Routing } from '@/types'
 import {
   useJobs,
   useJobEvents,
@@ -31,6 +33,18 @@ import {
   useReleaseMaterial,
   useConsumeMaterial,
 } from './hooks/useReservations'
+import {
+  useJobOperations,
+  useCreateJobOperation,
+  useDeleteJobOperation,
+  useInstantiateRouting,
+} from './hooks/useJobOperations'
+import {
+  useRoutings,
+  useOperations,
+  useWorkCenters,
+  useMachines,
+} from '@/features/masters/hooks/useMasters'
 import { useMaterials } from '@/features/materials/hooks/useMaterials'
 import { useJobInspections } from '@/features/qc/hooks/useQc'
 import { useFgForJob } from '@/features/finishedgoods/hooks/useFinishedGoods'
@@ -39,7 +53,7 @@ import { useCompanyName } from '@/features/shared/lookups'
 import { JobDrawingsPanel } from '@/features/production/components/JobDrawingsPanel'
 import { MachineProgramPanel } from '@/features/production/components/MachineProgramPanel'
 import { Breadcrumb } from '@/components/common/Breadcrumb'
-import { Card, EmptyState, Field, Input, Badge } from '@/components/ui/primitives'
+import { Card, EmptyState, Field, Input, Select, Badge } from '@/components/ui/primitives'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/shadcn/tabs'
 import { Modal } from '@/components/ui/Modal'
 import { JobStatusBadge, PriorityBadge } from '@/components/common/status'
@@ -209,7 +223,7 @@ export function ProductionOrderPage({ jobId }: { jobId: string }) {
           <OverviewTab job={job} customer={companyName(job.companyId)} />
         </TabsContent>
         <TabsContent value="operations">
-          <OperationsTab />
+          <OperationsTab job={job} />
         </TabsContent>
         <TabsContent value="materials">
           <MaterialsTab job={job} />
@@ -514,15 +528,321 @@ function OverviewTab({ job, customer }: { job: JobOrder; customer: string }) {
   )
 }
 
-function OperationsTab() {
+function OperationsTab({ job }: { job: JobOrder }) {
+  const perms = usePermissions()
+  const canManage = perms.can('MASTERS_MANAGE')
+  const { data: ops = [], isLoading } = useJobOperations(job.id)
+  const { data: routings = [] } = useRoutings()
+  const removeOp = useDeleteJobOperation(job.id)
+  const instantiate = useInstantiateRouting(job.id)
+  const toast = useToast()
+  const confirm = useConfirm()
+  const [attaching, setAttaching] = useState(false)
+  const [addingStep, setAddingStep] = useState(false)
+
+  // Routings tied to this order's material float to the top of the picker.
+  const sortedRoutings = useMemo(() => {
+    const matched = routings.filter(
+      (r) => r.active && r.materialId && r.materialId === job.materialId,
+    )
+    const rest = routings.filter((r) => r.active && !matched.includes(r))
+    return [...matched, ...rest]
+  }, [routings, job.materialId])
+
+  const statusTone = (s: string) =>
+    s === 'Completed' ? 'green' : s === 'In Progress' ? 'blue' : s === 'Skipped' ? 'gray' : 'slate'
+
   return (
     <Card>
-      <EmptyState
-        icon={<Factory size={36} />}
-        title="Operations & routing not yet available"
-        description="Operation sequences, work centers, machines and routings are planned for Phase 4. The underlying masters do not exist in MSM today, so no operation data is shown here yet."
-      />
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+        <p className="text-xs text-slate-500">
+          Operation sequence for this production order. Plan it from a routing or add steps ad-hoc;
+          per-operation execution lands in a later phase.
+        </p>
+        {canManage && (
+          <div className="flex gap-2">
+            <button className="btn-secondary btn-sm" onClick={() => setAttaching(true)}>
+              <Route size={15} /> Attach routing
+            </button>
+            <button className="btn-primary btn-sm" onClick={() => setAddingStep(true)}>
+              <Plus size={15} /> Add step
+            </button>
+          </div>
+        )}
+      </div>
+
+      {isLoading ? (
+        <p className="text-sm text-slate-500">Loading…</p>
+      ) : ops.length === 0 ? (
+        <EmptyState
+          icon={<Factory size={36} />}
+          title="No operations planned"
+          description={
+            canManage
+              ? 'Attach a routing to copy its steps, or add operations one at a time.'
+              : 'No operation sequence has been planned for this order yet.'
+          }
+        />
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="min-w-full text-sm">
+            <thead>
+              <tr className="text-left text-2xs uppercase tracking-wide text-slate-400">
+                <th className="py-1 pr-3">Seq</th>
+                <th className="py-1 pr-3">Operation</th>
+                <th className="py-1 pr-3">Work Centre</th>
+                <th className="py-1 pr-3">Machine</th>
+                <th className="py-1 pr-3 text-right">Setup</th>
+                <th className="py-1 pr-3 text-right">Cycle</th>
+                <th className="py-1 pr-3">Status</th>
+                <th className="py-1" />
+              </tr>
+            </thead>
+            <tbody>
+              {ops.map((o) => (
+                <tr key={o.id} className="border-t border-slate-100">
+                  <td className="py-1.5 pr-3 font-mono text-xs text-slate-500">{o.seq}</td>
+                  <td className="py-1.5 pr-3 font-medium text-slate-800">
+                    {o.operationName || '—'}
+                  </td>
+                  <td className="py-1.5 pr-3 text-slate-600">{o.workCenterName || '—'}</td>
+                  <td className="py-1.5 pr-3 text-slate-600">{o.machineName || '—'}</td>
+                  <td className="py-1.5 pr-3 text-right">{o.setupMin ?? '—'}</td>
+                  <td className="py-1.5 pr-3 text-right">{o.cycleMin ?? '—'}</td>
+                  <td className="py-1.5 pr-3">
+                    <Badge tone={statusTone(o.status)}>{o.status}</Badge>
+                  </td>
+                  <td className="py-1.5 text-right">
+                    {canManage && (
+                      <button
+                        className="btn-ghost btn-sm text-red-500"
+                        title="Remove"
+                        onClick={async () => {
+                          if (
+                            !(await confirm({
+                              title: 'Remove operation',
+                              message: `Remove "${o.operationName}" from this order?`,
+                              danger: true,
+                              confirmLabel: 'Remove',
+                            }))
+                          )
+                            return
+                          try {
+                            await removeOp.mutateAsync(o.id)
+                          } catch (e) {
+                            toast.error(toUserMessage(e, 'Remove failed'))
+                          }
+                        }}
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {attaching && (
+        <AttachRoutingModal
+          routings={sortedRoutings}
+          hasExisting={ops.length > 0}
+          busy={instantiate.isPending}
+          onClose={() => setAttaching(false)}
+          onAttach={async (routingId) => {
+            try {
+              await instantiate.mutateAsync({ routingId, replace: true })
+              toast.success('Routing attached')
+              setAttaching(false)
+            } catch (e) {
+              toast.error(toUserMessage(e, 'Could not attach routing'))
+            }
+          }}
+        />
+      )}
+      {addingStep && (
+        <AddJobOperationModal
+          job={job}
+          nextSeq={ops.length ? Math.max(...ops.map((o) => o.seq)) + 10 : 10}
+          onClose={() => setAddingStep(false)}
+        />
+      )}
     </Card>
+  )
+}
+
+function AttachRoutingModal({
+  routings,
+  hasExisting,
+  busy,
+  onClose,
+  onAttach,
+}: {
+  routings: Routing[]
+  hasExisting: boolean
+  busy: boolean
+  onClose: () => void
+  onAttach: (routingId: string) => void
+}) {
+  const [routingId, setRoutingId] = useState('')
+  return (
+    <Modal
+      open
+      onClose={onClose}
+      size="sm"
+      title="Attach routing"
+      footer={
+        <>
+          <button className="btn-secondary" onClick={onClose} disabled={busy}>
+            Cancel
+          </button>
+          <button
+            className="btn-primary"
+            onClick={() => routingId && onAttach(routingId)}
+            disabled={busy || !routingId}
+          >
+            {busy ? 'Attaching…' : 'Attach'}
+          </button>
+        </>
+      }
+    >
+      <Field label="Routing">
+        <Select value={routingId} onChange={(e) => setRoutingId(e.target.value)}>
+          <option value="">— select a routing —</option>
+          {routings.map((r) => (
+            <option key={r.id} value={r.id}>
+              {r.name}
+              {r.code ? ` (${r.code})` : ''}
+            </option>
+          ))}
+        </Select>
+      </Field>
+      {hasExisting && (
+        <p className="mt-2 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-700">
+          This replaces the current operation sequence on the order.
+        </p>
+      )}
+      {routings.length === 0 && (
+        <p className="mt-2 text-2xs text-slate-500">
+          No active routings yet — create one under Masters.
+        </p>
+      )}
+    </Modal>
+  )
+}
+
+function AddJobOperationModal({
+  job,
+  nextSeq,
+  onClose,
+}: {
+  job: JobOrder
+  nextSeq: number
+  onClose: () => void
+}) {
+  const { data: ops = [] } = useOperations()
+  const { data: centres = [] } = useWorkCenters()
+  const { data: machines = [] } = useMachines()
+  const create = useCreateJobOperation(job.id)
+  const toast = useToast()
+  const [operationId, setOp] = useState('')
+  const [workCenterId, setWc] = useState('')
+  const [machineId, setMc] = useState('')
+  const [setupMin, setSetup] = useState('')
+  const [cycleMin, setCycle] = useState('')
+
+  async function save() {
+    if (!operationId) return toast.error('Pick an operation')
+    const op = ops.find((o) => o.id === operationId)
+    const wc = centres.find((c) => c.id === workCenterId)
+    const mc = machines.find((m) => m.id === machineId)
+    try {
+      await create.mutateAsync({
+        seq: nextSeq,
+        operationId,
+        operationName: op?.name,
+        workCenterId: workCenterId || undefined,
+        workCenterName: wc?.name,
+        machineId: machineId || undefined,
+        machineName: mc?.name,
+        setupMin: setupMin === '' ? undefined : Number(setupMin),
+        cycleMin: cycleMin === '' ? undefined : Number(cycleMin),
+      })
+      toast.success('Operation added')
+      onClose()
+    } catch (e) {
+      toast.error(toUserMessage(e, 'Could not add operation'))
+    }
+  }
+
+  return (
+    <Modal
+      open
+      onClose={onClose}
+      size="sm"
+      title={`Add operation (seq ${nextSeq})`}
+      footer={
+        <>
+          <button className="btn-secondary" onClick={onClose} disabled={create.isPending}>
+            Cancel
+          </button>
+          <button className="btn-primary" onClick={save} disabled={create.isPending}>
+            {create.isPending ? 'Saving…' : 'Add'}
+          </button>
+        </>
+      }
+    >
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <Field label="Operation" required className="sm:col-span-2">
+          <Select value={operationId} onChange={(e) => setOp(e.target.value)}>
+            <option value="">— select —</option>
+            {ops.map((o) => (
+              <option key={o.id} value={o.id}>
+                {o.name}
+              </option>
+            ))}
+          </Select>
+        </Field>
+        <Field label="Work Centre">
+          <Select value={workCenterId} onChange={(e) => setWc(e.target.value)}>
+            <option value="">— none —</option>
+            {centres.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
+            ))}
+          </Select>
+        </Field>
+        <Field label="Machine">
+          <Select value={machineId} onChange={(e) => setMc(e.target.value)}>
+            <option value="">— none —</option>
+            {machines.map((m) => (
+              <option key={m.id} value={m.id}>
+                {m.name}
+              </option>
+            ))}
+          </Select>
+        </Field>
+        <Field label="Setup (min)">
+          <Input
+            type="number"
+            step="0.1"
+            value={setupMin}
+            onChange={(e) => setSetup(e.target.value)}
+          />
+        </Field>
+        <Field label="Cycle (min/pc)">
+          <Input
+            type="number"
+            step="0.1"
+            value={cycleMin}
+            onChange={(e) => setCycle(e.target.value)}
+          />
+        </Field>
+      </div>
+    </Modal>
   )
 }
 

@@ -106,5 +106,40 @@ begin
 end $$;
 
 reset role;
+
+-- ===========================================================================
+-- Super-admin scoping (regression for 0076: the cross-tenant READ leak where a
+-- super admin saw every tenant's rows pooled together).
+-- is_super_admin() keys off the email allow-list, so we simulate the real super
+-- admin email and vary only the app_metadata.active_tenant claim.
+-- ===========================================================================
+
+-- 8. Super admin WITH active_tenant = ten_c sees ONLY tenant C (never B).
+set local role authenticated;
+set local request.jwt.claims = '{"email":"admin@sreebalajiindustries.com","app_metadata":{"active_tenant":"ten_c"}}';
+do $$
+declare nb int; nc int;
+begin
+  select count(*) into nb from public.invoices where id = 'inv_b';
+  select count(*) into nc from public.invoices where id = 'inv_c';
+  if nc <> 1 then raise exception 'FAIL 8a: super admin scoped to ten_c cannot see C (got %)', nc; end if;
+  if nb <> 0 then raise exception 'FAIL 8b: super admin scoped to ten_c still sees ten_b - leak! saw % rows', nb; end if;
+  raise notice 'PASS 8: super admin is scoped to its active tenant (no cross-tenant pooling)';
+end $$;
+reset role;
+
+-- 9. Super admin with NO active_tenant and NO membership sees NOTHING
+--    (god-mode-over-all-tenants is gone; reads fall back to own memberships).
+set local role authenticated;
+set local request.jwt.claims = '{"email":"admin@sreebalajiindustries.com"}';
+do $$
+declare n int;
+begin
+  select count(*) into n from public.invoices where id in ('inv_b','inv_c');
+  if n <> 0 then raise exception 'FAIL 9: unscoped super admin saw % cross-tenant rows (expected 0)', n; end if;
+  raise notice 'PASS 9: unscoped super admin sees no tenant it is not a member of';
+end $$;
+reset role;
+
 \echo 'ALL TENANT-ISOLATION CHECKS PASSED (rolling back fixtures)'
 rollback;
