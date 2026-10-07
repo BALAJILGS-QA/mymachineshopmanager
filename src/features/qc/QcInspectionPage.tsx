@@ -5,6 +5,7 @@ import { ArrowLeft, ClipboardCheck, ExternalLink, Plus, Trash2 } from 'lucide-re
 import type { JobOrder, QcDecision, QcDimensionInput } from '@/types'
 import { useJobs, useTransitionJob } from '@/features/jobs/hooks/useJobs'
 import { useRecordInspection, useJobInspections } from './hooks/useQc'
+import { useEmployees } from '@/features/hrm/hooks/useHrm'
 import { usePermissions } from '@/features/hrm/permissions'
 import { useCompanyName } from '@/features/shared/lookups'
 import { JobDrawingsPanel } from '@/features/production/components/JobDrawingsPanel'
@@ -117,8 +118,15 @@ function InspectTab({ job, perms }: { job: JobOrder; perms: ReturnType<typeof us
   const record = useRecordInspection()
   const toast = useToast()
   const nav = useAppNavigate()
+  const { data: employees = [] } = useEmployees()
+  // Active employees are eligible inspectors.
+  const inspectors = useMemo(
+    () => employees.filter((e) => String(e.status).toLowerCase() === 'active'),
+    [employees],
+  )
 
   const [dimensions, setDimensions] = useState<QcDimensionInput[]>([newDimension(1)])
+  const [inspectorEmployeeId, setInspector] = useState('')
   const [producedQty, setProducedQty] = useState(String(job.completedQty ?? 0))
   const [acceptedQty, setAcceptedQty] = useState('')
   const [rejectedQty, setRejectedQty] = useState('')
@@ -161,8 +169,14 @@ function InspectTab({ job, perms }: { job: JobOrder; perms: ReturnType<typeof us
       return
     }
     try {
+      const insp = inspectors.find((e) => e.id === inspectorEmployeeId)
+      const inspectorName = insp
+        ? insp.displayName || [insp.firstName, insp.lastName].filter(Boolean).join(' ')
+        : undefined
       await record.mutateAsync({
         jobId: job.id,
+        inspector: inspectorName || undefined,
+        inspectorEmployeeId: inspectorEmployeeId || undefined,
         producedQty: prod,
         acceptedQty: acc,
         rejectedQty: rej,
@@ -377,7 +391,17 @@ function InspectTab({ job, perms }: { job: JobOrder; perms: ReturnType<typeof us
               : `✕ must equal produced (${prod}) before you can record`}
           </span>
         </div>
-        <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-3">
+          <Field label="Inspector" hint="HRM employee">
+            <Select value={inspectorEmployeeId} onChange={(e) => setInspector(e.target.value)}>
+              <option value="">— select inspector —</option>
+              {inspectors.map((e) => (
+                <option key={e.id} value={e.id}>
+                  {e.displayName || [e.firstName, e.lastName].filter(Boolean).join(' ')}
+                </option>
+              ))}
+            </Select>
+          </Field>
           <Field label="Decision" required>
             <Select value={decision} onChange={(e) => setDecision(e.target.value as QcDecision)}>
               {perms.can('QC_APPROVE') && <option value="Approved">Approve</option>}

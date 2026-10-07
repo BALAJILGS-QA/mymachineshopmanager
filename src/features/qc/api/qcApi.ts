@@ -58,6 +58,7 @@ export async function getInspectionDetail(inspectionId: string): Promise<Inspect
 export interface RecordInspectionInput {
   jobId: string
   inspector?: string
+  inspectorEmployeeId?: string
   producedQty: number
   acceptedQty: number
   rejectedQty: number
@@ -72,6 +73,7 @@ export async function recordInspection(input: RecordInspectionInput): Promise<Qc
     p_inspection_id: uid('qci_'),
     p_job_id: input.jobId,
     p_inspector: input.inspector ?? null,
+    p_inspector_employee_id: input.inspectorEmployeeId ?? null,
     p_produced: input.producedQty,
     p_accepted: input.acceptedQty,
     p_rejected: input.rejectedQty,
