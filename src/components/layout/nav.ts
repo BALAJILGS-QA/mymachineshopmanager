@@ -105,6 +105,12 @@ export const NAV_GROUPS: NavGroup[] = [
         icon: Truck,
         short: 'Dispatch',
       },
+      {
+        to: '/app/dispatch-reconciliation',
+        label: 'Dispatch Reconciliation',
+        icon: Scale,
+        short: 'Reconcile',
+      },
       { to: '/app/production-control', label: 'Control Tower', icon: Gauge, short: 'Control' },
       {
         to: '/app/production-schedule',

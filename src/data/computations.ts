@@ -437,3 +437,71 @@ export function reservedFromRows(
       .reduce((s, r) => s + (r.kind === 'Reserve' ? r.quantity : -r.quantity), 0),
   )
 }
+
+// ---- Dispatch reconciliation ----------------------------------------------
+// Two independent systems record a dispatch: the Finished-Goods ledger (a
+// `Dispatch` txn draws stock down — summed as FinishedGoodsBalance.dispatched)
+// and the Delivery Challan (the physical document raised to the customer).
+// They SHOULD agree per production order; this reconciles them by quantity and
+// flags the gaps so nothing ships unrecorded or gets double-counted.
+//
+//   Matched          → both sides equal and > 0
+//   Over-dispatched  → more drawn from FG than challaned (variance > 0)
+//   Under-dispatched → challaned more than drawn from FG (variance < 0)
+//   No challan       → FG dispatched but no delivery challan raised
+//   Not from FG      → challan raised but nothing drawn from Finished Goods
+export type DispatchReconStatus =
+  'Matched' | 'Over-dispatched' | 'Under-dispatched' | 'No challan' | 'Not from FG'
+
+export interface DispatchReconRow {
+  jobId: string
+  fgDispatched: number
+  challanQty: number
+  variance: number // fgDispatched − challanQty
+  status: DispatchReconStatus
+}
+
+// Challan quantity is attributed to a job per LINE (line.jobId), falling back to
+// the challan header jobId. Cancelled challans are excluded. Rows with no
+// activity on either side are omitted.
+export function dispatchReconciliation(
+  fgBalances: { jobId: string; dispatched: number }[],
+  challans: {
+    jobId?: string
+    status: string
+    lines: { jobId?: string; quantity: number }[]
+  }[],
+): DispatchReconRow[] {
+  const fgByJob = new Map<string, number>()
+  for (const b of fgBalances) {
+    if (!b.jobId) continue
+    fgByJob.set(b.jobId, roundMoney((fgByJob.get(b.jobId) ?? 0) + (b.dispatched || 0)))
+  }
+
+  const challanByJob = new Map<string, number>()
+  for (const c of challans) {
+    if (c.status === 'Cancelled') continue
+    for (const line of c.lines ?? []) {
+      const jobId = line.jobId || c.jobId
+      if (!jobId) continue
+      challanByJob.set(jobId, roundMoney((challanByJob.get(jobId) ?? 0) + (line.quantity || 0)))
+    }
+  }
+
+  const jobIds = new Set<string>([...fgByJob.keys(), ...challanByJob.keys()])
+  const rows: DispatchReconRow[] = []
+  for (const jobId of jobIds) {
+    const fgDispatched = roundMoney(fgByJob.get(jobId) ?? 0)
+    const challanQty = roundMoney(challanByJob.get(jobId) ?? 0)
+    if (fgDispatched === 0 && challanQty === 0) continue
+    const variance = roundMoney(fgDispatched - challanQty)
+    let status: DispatchReconStatus
+    if (fgDispatched > 0 && challanQty === 0) status = 'No challan'
+    else if (challanQty > 0 && fgDispatched === 0) status = 'Not from FG'
+    else if (variance === 0) status = 'Matched'
+    else if (variance > 0) status = 'Over-dispatched'
+    else status = 'Under-dispatched'
+    rows.push({ jobId, fgDispatched, challanQty, variance, status })
+  }
+  return rows
+}

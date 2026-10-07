@@ -11,6 +11,7 @@ import {
   jobPendingQty,
   materialAvailability,
   reservedFromRows,
+  dispatchReconciliation,
   SHOP_SCOPE,
 } from './computations'
 import type {
@@ -861,5 +862,54 @@ describe('reservedFromRows — outstanding reservation from the ledger', () => {
 
   it('sums across all orders when no jobId is given', () => {
     expect(reservedFromRows(rows)).toBe(1000)
+  })
+})
+
+describe('dispatchReconciliation — FG ledger vs delivery challans', () => {
+  it('classifies matched, variance, and one-sided dispatches', () => {
+    const fg = [
+      { jobId: 'job_match', dispatched: 100 },
+      { jobId: 'job_over', dispatched: 120 },
+      { jobId: 'job_under', dispatched: 80 },
+      { jobId: 'job_nochallan', dispatched: 50 },
+      { jobId: 'job_idle', dispatched: 0 },
+    ]
+    const challans = [
+      // matched (line-level jobId)
+      { status: 'Open', lines: [{ jobId: 'job_match', quantity: 100 }] },
+      // over-dispatched: challan < FG
+      { status: 'Open', lines: [{ jobId: 'job_over', quantity: 100 }] },
+      // under-dispatched: challan > FG, header jobId fallback
+      { jobId: 'job_under', status: 'Open', lines: [{ quantity: 100 }] },
+      // not from FG: challan only
+      { jobId: 'job_challan_only', status: 'Open', lines: [{ quantity: 30 }] },
+      // cancelled challan is ignored entirely
+      { jobId: 'job_match', status: 'Cancelled', lines: [{ quantity: 999 }] },
+    ]
+    const byJob = Object.fromEntries(dispatchReconciliation(fg, challans).map((r) => [r.jobId, r]))
+
+    expect(byJob['job_match']).toMatchObject({
+      fgDispatched: 100,
+      challanQty: 100,
+      status: 'Matched',
+    })
+    expect(byJob['job_over']).toMatchObject({ variance: 20, status: 'Over-dispatched' })
+    expect(byJob['job_under']).toMatchObject({ variance: -20, status: 'Under-dispatched' })
+    expect(byJob['job_nochallan']).toMatchObject({ challanQty: 0, status: 'No challan' })
+    expect(byJob['job_challan_only']).toMatchObject({ fgDispatched: 0, status: 'Not from FG' })
+    // No activity on either side → omitted.
+    expect(byJob['job_idle']).toBeUndefined()
+  })
+
+  it('sums multiple challan lines/challans for the same job', () => {
+    const rows = dispatchReconciliation(
+      [{ jobId: 'j1', dispatched: 50 }],
+      [
+        { jobId: 'j1', status: 'Open', lines: [{ quantity: 20 }, { quantity: 10 }] },
+        { jobId: 'j1', status: 'Invoiced', lines: [{ quantity: 20 }] },
+      ],
+    )
+    expect(rows).toHaveLength(1)
+    expect(rows[0]).toMatchObject({ fgDispatched: 50, challanQty: 50, status: 'Matched' })
   })
 })
