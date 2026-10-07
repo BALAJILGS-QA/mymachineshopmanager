@@ -536,6 +536,7 @@ function OperationsTab({ job }: { job: JobOrder }) {
   const perms = usePermissions()
   const canManage = perms.can('MASTERS_MANAGE')
   const canExecute = perms.can('PRODUCTION_EXECUTE')
+  const canComplete = perms.can('PRODUCTION_COMPLETE')
   const { data: ops = [], isLoading } = useJobOperations(job.id)
   const { data: routings = [] } = useRoutings()
   const removeOp = useDeleteJobOperation(job.id)
@@ -571,6 +572,10 @@ function OperationsTab({ job }: { job: JobOrder }) {
   const done = ops.filter((o) => o.status === 'Completed').length
   const skipped = ops.filter((o) => o.status === 'Skipped').length
   const jobRunning = job.status === 'In Progress'
+  // Order still In Progress but every op is terminal (≥1 completed) → the
+  // completion rollup didn't fire (caller lacks PRODUCTION_COMPLETE). Surface it.
+  const allOpsDone = ops.length > 0 && firstOpenSeq === null && done > 0
+  const awaitingCompletion = jobRunning && allOpsDone && !canComplete
 
   async function handleStart(o: JobOperation) {
     try {
@@ -625,6 +630,14 @@ function OperationsTab({ job }: { job: JobOrder }) {
           </div>
         )}
       </div>
+
+      {awaitingCompletion && (
+        <div className="mb-3 flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-700">
+          <Check size={15} />
+          All operations are complete — awaiting production completion by a supervisor (requires the
+          Complete-production permission).
+        </div>
+      )}
 
       {isLoading ? (
         <p className="text-sm text-slate-500">Loading…</p>

@@ -11,6 +11,18 @@ export function useJobOperations(jobId: string) {
   })
 }
 
+// Execution mutations can roll the order forward (auto-complete when the last
+// operation finishes), so they refresh the order list + its event history too.
+function useInvalidateExecution(jobId: string) {
+  const client = useQueryClient()
+  return () => {
+    client.invalidateQueries({ queryKey: qk.jobOperations.forJob(jobId) })
+    client.invalidateQueries({ queryKey: qk.jobOperations.all })
+    client.invalidateQueries({ queryKey: qk.jobs.all })
+    client.invalidateQueries({ queryKey: qk.production.events(jobId) })
+  }
+}
+
 export function useAllJobOperations() {
   return useQuery({
     queryKey: qk.jobOperations.all,
@@ -58,7 +70,7 @@ export function useInstantiateRouting(jobId: string) {
 }
 
 export function useStartJobOperation(jobId: string) {
-  const invalidate = useInvalidate(jobId)
+  const invalidate = useInvalidateExecution(jobId)
   return useMutation({
     mutationFn: ({ id, operator }: { id: string; operator?: string }) =>
       api.startJobOperation(id, operator),
@@ -67,7 +79,7 @@ export function useStartJobOperation(jobId: string) {
 }
 
 export function useCompleteJobOperation(jobId: string) {
-  const invalidate = useInvalidate(jobId)
+  const invalidate = useInvalidateExecution(jobId)
   return useMutation({
     mutationFn: ({
       id,
@@ -85,7 +97,7 @@ export function useCompleteJobOperation(jobId: string) {
 }
 
 export function useSkipJobOperation(jobId: string) {
-  const invalidate = useInvalidate(jobId)
+  const invalidate = useInvalidateExecution(jobId)
   return useMutation({
     mutationFn: ({ id, note }: { id: string; note?: string }) => api.skipJobOperation(id, note),
     onSuccess: invalidate,
