@@ -224,7 +224,7 @@ export const maps = {
   },
   jobOperations: {
     table: 'job_operations',
-    numeric: ['seq', 'setupMin', 'cycleMin'],
+    numeric: ['seq', 'setupMin', 'cycleMin', 'qtyCompleted', 'actualMinutes'],
     fields: {
       id: 'id',
       jobId: 'job_id',
@@ -240,6 +240,11 @@ export const maps = {
       status: 'status',
       notes: 'notes',
       sourceRoutingId: 'source_routing_id',
+      startedAt: 'started_at',
+      completedAt: 'completed_at',
+      operator: 'operator',
+      qtyCompleted: 'qty_completed',
+      actualMinutes: 'actual_minutes',
       tenantId: 'tenant_id',
       createdAt: 'created_at',
       updatedAt: 'updated_at',

@@ -14,9 +14,10 @@ import {
   Play,
   Plus,
   Route,
+  SkipForward,
   Trash2,
 } from 'lucide-react'
-import type { JobOrder, JobStatus, Routing } from '@/types'
+import type { JobOperation, JobOrder, JobStatus, Routing } from '@/types'
 import {
   useJobs,
   useJobEvents,
@@ -38,6 +39,9 @@ import {
   useCreateJobOperation,
   useDeleteJobOperation,
   useInstantiateRouting,
+  useStartJobOperation,
+  useCompleteJobOperation,
+  useSkipJobOperation,
 } from './hooks/useJobOperations'
 import {
   useRoutings,
@@ -531,14 +535,18 @@ function OverviewTab({ job, customer }: { job: JobOrder; customer: string }) {
 function OperationsTab({ job }: { job: JobOrder }) {
   const perms = usePermissions()
   const canManage = perms.can('MASTERS_MANAGE')
+  const canExecute = perms.can('PRODUCTION_EXECUTE')
   const { data: ops = [], isLoading } = useJobOperations(job.id)
   const { data: routings = [] } = useRoutings()
   const removeOp = useDeleteJobOperation(job.id)
   const instantiate = useInstantiateRouting(job.id)
+  const startOp = useStartJobOperation(job.id)
+  const skipOp = useSkipJobOperation(job.id)
   const toast = useToast()
   const confirm = useConfirm()
   const [attaching, setAttaching] = useState(false)
   const [addingStep, setAddingStep] = useState(false)
+  const [completing, setCompleting] = useState<JobOperation | null>(null)
 
   // Routings tied to this order's material float to the top of the picker.
   const sortedRoutings = useMemo(() => {
@@ -552,13 +560,60 @@ function OperationsTab({ job }: { job: JobOrder }) {
   const statusTone = (s: string) =>
     s === 'Completed' ? 'green' : s === 'In Progress' ? 'blue' : s === 'Skipped' ? 'gray' : 'slate'
 
+  // Sequential routing: an op can start only when every earlier-seq op is done/skipped.
+  const firstOpenSeq = useMemo(() => {
+    const open = ops
+      .filter((o) => o.status !== 'Completed' && o.status !== 'Skipped')
+      .map((o) => o.seq)
+    return open.length ? Math.min(...open) : null
+  }, [ops])
+
+  const done = ops.filter((o) => o.status === 'Completed').length
+  const skipped = ops.filter((o) => o.status === 'Skipped').length
+  const jobRunning = job.status === 'In Progress'
+
+  async function handleStart(o: JobOperation) {
+    try {
+      await startOp.mutateAsync({ id: o.id })
+    } catch (e) {
+      toast.error(toUserMessage(e, 'Could not start operation'))
+    }
+  }
+
+  async function handleSkip(o: JobOperation) {
+    if (
+      !(await confirm({
+        title: 'Skip operation',
+        message: `Skip "${o.operationName}" for this order? It will not be run.`,
+        confirmLabel: 'Skip',
+      }))
+    )
+      return
+    try {
+      await skipOp.mutateAsync({ id: o.id })
+    } catch (e) {
+      toast.error(toUserMessage(e, 'Could not skip operation'))
+    }
+  }
+
   return (
     <Card>
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-        <p className="text-xs text-slate-500">
-          Operation sequence for this production order. Plan it from a routing or add steps ad-hoc;
-          per-operation execution lands in a later phase.
-        </p>
+        <div>
+          <p className="text-xs text-slate-500">
+            Operation sequence for this production order. Plan it from a routing or add steps
+            ad-hoc, then run each operation on the floor.
+          </p>
+          {ops.length > 0 && (
+            <p className="mt-0.5 text-2xs text-slate-400">
+              {done} of {ops.length} completed
+              {skipped > 0 ? ` · ${skipped} skipped` : ''}
+              {!jobRunning && canExecute
+                ? ' · start production on the order to run operations'
+                : ''}
+            </p>
+          )}
+        </div>
         {canManage && (
           <div className="flex gap-2">
             <button className="btn-secondary btn-sm" onClick={() => setAttaching(true)}>
@@ -592,59 +647,104 @@ function OperationsTab({ job }: { job: JobOrder }) {
                 <th className="py-1 pr-3">Operation</th>
                 <th className="py-1 pr-3">Work Centre</th>
                 <th className="py-1 pr-3">Machine</th>
-                <th className="py-1 pr-3 text-right">Setup</th>
-                <th className="py-1 pr-3 text-right">Cycle</th>
+                <th className="py-1 pr-3 text-right">Done</th>
+                <th className="py-1 pr-3 text-right">Actual</th>
+                <th className="py-1 pr-3">Operator</th>
                 <th className="py-1 pr-3">Status</th>
                 <th className="py-1" />
               </tr>
             </thead>
             <tbody>
-              {ops.map((o) => (
-                <tr key={o.id} className="border-t border-slate-100">
-                  <td className="py-1.5 pr-3 font-mono text-xs text-slate-500">{o.seq}</td>
-                  <td className="py-1.5 pr-3 font-medium text-slate-800">
-                    {o.operationName || '—'}
-                  </td>
-                  <td className="py-1.5 pr-3 text-slate-600">{o.workCenterName || '—'}</td>
-                  <td className="py-1.5 pr-3 text-slate-600">{o.machineName || '—'}</td>
-                  <td className="py-1.5 pr-3 text-right">{o.setupMin ?? '—'}</td>
-                  <td className="py-1.5 pr-3 text-right">{o.cycleMin ?? '—'}</td>
-                  <td className="py-1.5 pr-3">
-                    <Badge tone={statusTone(o.status)}>{o.status}</Badge>
-                  </td>
-                  <td className="py-1.5 text-right">
-                    {canManage && (
-                      <button
-                        className="btn-ghost btn-sm text-red-500"
-                        title="Remove"
-                        onClick={async () => {
-                          if (
-                            !(await confirm({
-                              title: 'Remove operation',
-                              message: `Remove "${o.operationName}" from this order?`,
-                              danger: true,
-                              confirmLabel: 'Remove',
-                            }))
-                          )
-                            return
-                          try {
-                            await removeOp.mutateAsync(o.id)
-                          } catch (e) {
-                            toast.error(toUserMessage(e, 'Remove failed'))
-                          }
-                        }}
-                      >
-                        <Trash2 size={14} />
-                      </button>
-                    )}
-                  </td>
-                </tr>
-              ))}
+              {ops.map((o) => {
+                const terminal = o.status === 'Completed' || o.status === 'Skipped'
+                const isNext = o.seq === firstOpenSeq
+                const canStart = canExecute && jobRunning && o.status === 'Planned' && isNext
+                const canComplete = canExecute && o.status === 'In Progress'
+                const canSkip = canExecute && !terminal
+                return (
+                  <tr key={o.id} className="border-t border-slate-100">
+                    <td className="py-1.5 pr-3 font-mono text-xs text-slate-500">{o.seq}</td>
+                    <td className="py-1.5 pr-3 font-medium text-slate-800">
+                      {o.operationName || '—'}
+                    </td>
+                    <td className="py-1.5 pr-3 text-slate-600">{o.workCenterName || '—'}</td>
+                    <td className="py-1.5 pr-3 text-slate-600">{o.machineName || '—'}</td>
+                    <td className="py-1.5 pr-3 text-right tabular-nums">
+                      {o.qtyCompleted ? qty(o.qtyCompleted) : '—'}
+                    </td>
+                    <td className="py-1.5 pr-3 text-right tabular-nums text-slate-600">
+                      {o.actualMinutes != null ? `${qty(o.actualMinutes)}m` : '—'}
+                    </td>
+                    <td className="py-1.5 pr-3 text-slate-600">{o.operator || '—'}</td>
+                    <td className="py-1.5 pr-3">
+                      <Badge tone={statusTone(o.status)}>{o.status}</Badge>
+                    </td>
+                    <td className="py-1.5 text-right whitespace-nowrap">
+                      {canStart && (
+                        <button
+                          className="btn-ghost btn-sm text-emerald-600"
+                          title="Start operation"
+                          disabled={startOp.isPending}
+                          onClick={() => handleStart(o)}
+                        >
+                          <Play size={14} />
+                        </button>
+                      )}
+                      {canComplete && (
+                        <button
+                          className="btn-ghost btn-sm text-blue-600"
+                          title="Complete operation"
+                          onClick={() => setCompleting(o)}
+                        >
+                          <Check size={14} />
+                        </button>
+                      )}
+                      {canSkip && (
+                        <button
+                          className="btn-ghost btn-sm text-slate-400"
+                          title="Skip operation"
+                          disabled={skipOp.isPending}
+                          onClick={() => handleSkip(o)}
+                        >
+                          <SkipForward size={14} />
+                        </button>
+                      )}
+                      {canManage && !terminal && o.status === 'Planned' && (
+                        <button
+                          className="btn-ghost btn-sm text-red-500"
+                          title="Remove"
+                          onClick={async () => {
+                            if (
+                              !(await confirm({
+                                title: 'Remove operation',
+                                message: `Remove "${o.operationName}" from this order?`,
+                                danger: true,
+                                confirmLabel: 'Remove',
+                              }))
+                            )
+                              return
+                            try {
+                              await removeOp.mutateAsync(o.id)
+                            } catch (e) {
+                              toast.error(toUserMessage(e, 'Remove failed'))
+                            }
+                          }}
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                )
+              })}
             </tbody>
           </table>
         </div>
       )}
 
+      {completing && (
+        <CompleteOperationModal job={job} op={completing} onClose={() => setCompleting(null)} />
+      )}
       {attaching && (
         <AttachRoutingModal
           routings={sortedRoutings}
@@ -840,6 +940,85 @@ function AddJobOperationModal({
             value={cycleMin}
             onChange={(e) => setCycle(e.target.value)}
           />
+        </Field>
+      </div>
+    </Modal>
+  )
+}
+
+function CompleteOperationModal({
+  job,
+  op,
+  onClose,
+}: {
+  job: JobOrder
+  op: JobOperation
+  onClose: () => void
+}) {
+  const complete = useCompleteJobOperation(job.id)
+  const toast = useToast()
+  const [qtyDone, setQtyDone] = useState(op.qtyCompleted ? String(op.qtyCompleted) : '')
+  const [actualMin, setActualMin] = useState('')
+  const [note, setNote] = useState('')
+
+  async function save() {
+    try {
+      await complete.mutateAsync({
+        id: op.id,
+        qty: qtyDone === '' ? undefined : Number(qtyDone),
+        actualMin: actualMin === '' ? undefined : Number(actualMin),
+        note: note.trim() || undefined,
+      })
+      toast.success('Operation completed')
+      onClose()
+    } catch (e) {
+      toast.error(toUserMessage(e, 'Could not complete operation'))
+    }
+  }
+
+  return (
+    <Modal
+      open
+      onClose={onClose}
+      size="sm"
+      title={`Complete: ${op.operationName || `operation ${op.seq}`}`}
+      footer={
+        <>
+          <button className="btn-secondary" onClick={onClose} disabled={complete.isPending}>
+            Cancel
+          </button>
+          <button className="btn-primary" onClick={save} disabled={complete.isPending}>
+            {complete.isPending ? 'Saving…' : 'Complete'}
+          </button>
+        </>
+      }
+    >
+      <p className="mb-3 text-xs text-slate-500">
+        Record how many pieces this operation finished and the time taken. Leave time blank to use
+        the elapsed time since it was started.
+      </p>
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <Field label="Qty completed">
+          <Input
+            type="number"
+            step="1"
+            min="0"
+            value={qtyDone}
+            onChange={(e) => setQtyDone(e.target.value)}
+          />
+        </Field>
+        <Field label="Actual (min)">
+          <Input
+            type="number"
+            step="0.1"
+            min="0"
+            placeholder="auto"
+            value={actualMin}
+            onChange={(e) => setActualMin(e.target.value)}
+          />
+        </Field>
+        <Field label="Note" className="sm:col-span-2">
+          <Input value={note} onChange={(e) => setNote(e.target.value)} />
         </Field>
       </div>
     </Modal>

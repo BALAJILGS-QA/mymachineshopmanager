@@ -49,3 +49,38 @@ export function useInstantiateRouting(jobId: string) {
     onSuccess: invalidate,
   })
 }
+
+export function useStartJobOperation(jobId: string) {
+  const invalidate = useInvalidate(jobId)
+  return useMutation({
+    mutationFn: ({ id, operator }: { id: string; operator?: string }) =>
+      api.startJobOperation(id, operator),
+    onSuccess: invalidate,
+  })
+}
+
+export function useCompleteJobOperation(jobId: string) {
+  const invalidate = useInvalidate(jobId)
+  return useMutation({
+    mutationFn: ({
+      id,
+      qty,
+      actualMin,
+      note,
+    }: {
+      id: string
+      qty?: number
+      actualMin?: number
+      note?: string
+    }) => api.completeJobOperation(id, { qty, actualMin, note }),
+    onSuccess: invalidate,
+  })
+}
+
+export function useSkipJobOperation(jobId: string) {
+  const invalidate = useInvalidate(jobId)
+  return useMutation({
+    mutationFn: ({ id, note }: { id: string; note?: string }) => api.skipJobOperation(id, note),
+    onSuccess: invalidate,
+  })
+}

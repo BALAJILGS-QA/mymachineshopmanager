@@ -50,3 +50,37 @@ export async function instantiateRouting(
   if (error) throw error
   return (data as Row[]).map((r) => fromRow<JobOperation>(r, maps.jobOperations))
 }
+
+// ---- Per-operation execution (Phase 5) — rule-bearing, go through RPCs ----
+
+export async function startJobOperation(id: string, operator?: string): Promise<JobOperation> {
+  const { data, error } = await sb().rpc('job_operation_start', {
+    p_id: id,
+    p_operator: operator ?? null,
+  })
+  if (error) throw error
+  return fromRow<JobOperation>(data as Row, maps.jobOperations)
+}
+
+export async function completeJobOperation(
+  id: string,
+  opts: { qty?: number; actualMin?: number; note?: string } = {},
+): Promise<JobOperation> {
+  const { data, error } = await sb().rpc('job_operation_complete', {
+    p_id: id,
+    p_qty: opts.qty ?? null,
+    p_actual_min: opts.actualMin ?? null,
+    p_note: opts.note ?? null,
+  })
+  if (error) throw error
+  return fromRow<JobOperation>(data as Row, maps.jobOperations)
+}
+
+export async function skipJobOperation(id: string, note?: string): Promise<JobOperation> {
+  const { data, error } = await sb().rpc('job_operation_skip', {
+    p_id: id,
+    p_note: note ?? null,
+  })
+  if (error) throw error
+  return fromRow<JobOperation>(data as Row, maps.jobOperations)
+}

@@ -225,6 +225,12 @@ export interface JobOperation extends AuditFields {
   status: JobOperationStatus
   notes?: string
   sourceRoutingId?: ID
+  // Execution (Phase 5)
+  startedAt?: string
+  completedAt?: string
+  operator?: string
+  qtyCompleted?: number
+  actualMinutes?: number
   tenantId?: ID
 }
 
