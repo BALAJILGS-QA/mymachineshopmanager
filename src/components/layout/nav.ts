@@ -30,6 +30,7 @@ import {
   ClipboardCheck,
   PackageCheck,
   Gauge,
+  CalendarClock,
   History,
   Cog,
   Settings as SettingsIcon,
@@ -105,6 +106,12 @@ export const NAV_GROUPS: NavGroup[] = [
         short: 'Dispatch',
       },
       { to: '/app/production-control', label: 'Control Tower', icon: Gauge, short: 'Control' },
+      {
+        to: '/app/production-schedule',
+        label: 'Schedule',
+        icon: CalendarClock,
+        short: 'Schedule',
+      },
       {
         to: '/app/production-planning/materials',
         label: 'Raw Materials',

@@ -17,6 +17,17 @@ export async function listJobOperations(jobId: string): Promise<JobOperation[]> 
   return (data ?? []).map((r) => fromRow<JobOperation>(r as Row, maps.jobOperations))
 }
 
+// Every operation across the tenant's orders (RLS-scoped). Used by the
+// Production Schedule to build a per-work-centre capacity view.
+export async function listAllJobOperations(): Promise<JobOperation[]> {
+  const { data, error } = await sb()
+    .from('job_operations')
+    .select('*')
+    .order('seq', { ascending: true })
+  if (error) throw error
+  return (data ?? []).map((r) => fromRow<JobOperation>(r as Row, maps.jobOperations))
+}
+
 export async function createJobOperation(input: Partial<JobOperation>): Promise<JobOperation> {
   return insertRow<JobOperation>(maps.jobOperations, {
     id: uid('jop_'),

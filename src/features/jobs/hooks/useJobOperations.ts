@@ -11,6 +11,13 @@ export function useJobOperations(jobId: string) {
   })
 }
 
+export function useAllJobOperations() {
+  return useQuery({
+    queryKey: qk.jobOperations.all,
+    queryFn: () => api.listAllJobOperations(),
+  })
+}
+
 function useInvalidate(jobId: string) {
   const client = useQueryClient()
   return () => client.invalidateQueries({ queryKey: qk.jobOperations.forJob(jobId) })
