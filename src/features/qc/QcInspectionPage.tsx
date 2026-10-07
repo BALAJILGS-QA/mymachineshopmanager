@@ -1,7 +1,7 @@
 'use client'
 
 import { useMemo, useState } from 'react'
-import { ArrowLeft, ClipboardCheck, Plus, Trash2 } from 'lucide-react'
+import { ArrowLeft, ClipboardCheck, ExternalLink, Plus, Trash2 } from 'lucide-react'
 import type { JobOrder, QcDecision, QcDimensionInput } from '@/types'
 import { useJobs, useTransitionJob } from '@/features/jobs/hooks/useJobs'
 import { useRecordInspection, useJobInspections } from './hooks/useQc'
@@ -13,7 +13,7 @@ import { Card, EmptyState, Field, Input, Select, Badge } from '@/components/ui/p
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/shadcn/tabs'
 import { JobStatusBadge } from '@/components/common/status'
 import { useToast } from '@/components/ui/Toast'
-import { useAppNavigate } from '@/components/nav/app-link'
+import { useAppNavigate, AppLink } from '@/components/nav/app-link'
 import { toUserMessage } from '@/lib/api/errors'
 import { fmtDateTime, qty } from '@/lib/format'
 
@@ -51,7 +51,13 @@ export function QcInspectionPage({ jobId }: { jobId: string }) {
   const job = useMemo(() => jobs.find((j) => j.id === jobId), [jobs, jobId])
 
   if (isLoading) return <p className="p-6 text-sm text-slate-500">Loading job…</p>
-  if (isError) return <p className="p-6 text-sm text-red-600">{toUserMessage(error)}</p>
+  if (isError) {
+    return (
+      <Card className="m-4 border-red-200 bg-red-50">
+        <p className="text-sm font-medium text-red-700">{toUserMessage(error)}</p>
+      </Card>
+    )
+  }
   if (!job) {
     return (
       <EmptyState
@@ -75,7 +81,15 @@ export function QcInspectionPage({ jobId }: { jobId: string }) {
       <PageHeader
         title={`QC · ${job.jobNo}`}
         subtitle={`${companyName(job.companyId)} · ${job.partName}${job.partNumber ? ` · ${job.partNumber}` : ''}`}
-        actions={<JobStatusBadge status={job.status} />}
+        actions={
+          <div className="flex items-center gap-2">
+            <JobStatusBadge status={job.status} />
+            <AppLink to={`/app/jobs/${job.id}`} className="btn-secondary btn-sm">
+              <ExternalLink className="mr-1 h-4 w-4" />
+              Open order
+            </AppLink>
+          </div>
+        }
       />
 
       <Tabs defaultValue="inspect">
@@ -347,10 +361,21 @@ function InspectTab({ job, perms }: { job: JobOrder; perms: ReturnType<typeof us
             />
           </Field>
         </div>
-        <div className="mt-2 text-xs">
-          <Badge tone={balanced ? 'green' : 'red'}>
-            {acc} + {rej} + {rew} = {sum} {balanced ? '= Produced ✓' : `≠ Produced (${prod})`}
-          </Badge>
+        <div
+          className={`mt-2 flex items-center gap-2 rounded-lg border px-3 py-2 text-xs font-medium ${
+            balanced
+              ? 'border-green-200 bg-green-50 text-green-700'
+              : 'border-red-200 bg-red-50 text-red-700'
+          }`}
+        >
+          <span className="tabular-nums">
+            Accepted {acc} + Rejected {rej} + Rework {rew} = {sum}
+          </span>
+          <span>
+            {balanced
+              ? `✓ matches produced (${prod})`
+              : `✕ must equal produced (${prod}) before you can record`}
+          </span>
         </div>
         <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
           <Field label="Decision" required>

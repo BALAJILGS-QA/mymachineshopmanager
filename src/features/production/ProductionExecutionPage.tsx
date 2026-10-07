@@ -1,19 +1,30 @@
 'use client'
 
 import { useMemo, useState } from 'react'
-import { ArrowLeft, Pause, Play, CheckCircle2, ClipboardCheck } from 'lucide-react'
+import {
+  ArrowLeft,
+  CheckCircle2,
+  ClipboardCheck,
+  ClipboardList,
+  ExternalLink,
+  Factory,
+  Package,
+  Pause,
+  Play,
+} from 'lucide-react'
 import type { JobOrder, JobStatus } from '@/types'
 import { useJobs, useTransitionJob } from '@/features/jobs/hooks/useJobs'
 import { useMaterials } from '@/features/materials/hooks/useMaterials'
 import { usePermissions } from '@/features/hrm/permissions'
 import { useCompanyName } from '@/features/shared/lookups'
 import { PageHeader } from '@/components/common/PageHeader'
+import { StatTile } from '@/components/common/StatTile'
 import { Card, EmptyState, Field, Input, Textarea } from '@/components/ui/primitives'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/shadcn/tabs'
 import { JobStatusBadge, PriorityBadge } from '@/components/common/status'
 import { Modal } from '@/components/ui/Modal'
 import { useToast } from '@/components/ui/Toast'
-import { useAppNavigate } from '@/components/nav/app-link'
+import { useAppNavigate, AppLink } from '@/components/nav/app-link'
 import { toUserMessage } from '@/lib/api/errors'
 import { fmtDate, qty } from '@/lib/format'
 import { JobDrawingsPanel } from './components/JobDrawingsPanel'
@@ -37,7 +48,13 @@ export function ProductionExecutionPage({ jobId }: { jobId: string }) {
   const material = useMemo(() => materials.find((m) => m.id === job?.materialId), [materials, job])
 
   if (isLoading) return <p className="p-6 text-sm text-slate-500">Loading job…</p>
-  if (isError) return <p className="p-6 text-sm text-red-600">{toUserMessage(error)}</p>
+  if (isError) {
+    return (
+      <Card className="m-4 border-red-200 bg-red-50">
+        <p className="text-sm font-medium text-red-700">{toUserMessage(error)}</p>
+      </Card>
+    )
+  }
   if (!job) {
     return (
       <EmptyState
@@ -66,6 +83,10 @@ export function ProductionExecutionPage({ jobId }: { jobId: string }) {
           <div className="flex items-center gap-2">
             <PriorityBadge priority={job.priority} />
             <JobStatusBadge status={job.status} />
+            <AppLink to={`/app/jobs/${job.id}`} className="btn-secondary btn-sm">
+              <ExternalLink className="mr-1 h-4 w-4" />
+              Open order
+            </AppLink>
           </div>
         }
       />
@@ -209,11 +230,32 @@ function ExecutePanel({
   const s = job.status
   return (
     <Card>
-      <div className="mb-3 grid grid-cols-2 gap-4 sm:grid-cols-4">
-        <Stat label="Ordered" value={qty(job.orderedQty)} />
-        <Stat label="Produced" value={qty(produced(job))} />
-        <Stat label="Remaining" value={qty(remaining(job))} />
-        <Stat label="Status" value={job.status} />
+      <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <StatTile
+          icon={<ClipboardList size={18} />}
+          tone="blue"
+          label="Ordered"
+          value={qty(job.orderedQty)}
+        />
+        <StatTile
+          icon={<Factory size={18} />}
+          tone="purple"
+          label="Produced"
+          value={qty(produced(job))}
+        />
+        <StatTile
+          icon={<CheckCircle2 size={18} />}
+          tone="green"
+          label="Accepted"
+          value={qty(job.acceptedQty ?? 0)}
+        />
+        <StatTile
+          icon={<Package size={18} />}
+          tone="orange"
+          label="Remaining"
+          value={qty(remaining(job))}
+          hint="to produce"
+        />
       </div>
 
       {!canExecute && !canComplete && (
@@ -294,27 +336,32 @@ function ExecutePanel({
               Cancel
             </button>
             <button className="btn-primary" onClick={submitModal} disabled={transition.isPending}>
-              Confirm
+              {transition.isPending ? 'Saving…' : 'Confirm'}
             </button>
           </>
         }
       >
         <Field label="Produced quantity" required hint={`Ordered ${qty(job.orderedQty)}`}>
-          <Input type="number" min={0} value={qtyVal} onChange={(e) => setQtyVal(e.target.value)} />
+          <div className="flex items-center gap-2">
+            <Input
+              type="number"
+              min={0}
+              value={qtyVal}
+              onChange={(e) => setQtyVal(e.target.value)}
+            />
+            <button
+              type="button"
+              className="btn-ghost btn-sm shrink-0"
+              onClick={() => setQtyVal(String(job.orderedQty))}
+            >
+              Max
+            </button>
+          </div>
         </Field>
         <Field label="Note" className="mt-3">
           <Textarea rows={2} value={note} onChange={(e) => setNote(e.target.value)} />
         </Field>
       </Modal>
     </Card>
-  )
-}
-
-function Stat({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-lg bg-slate-50 p-3">
-      <p className="text-2xs uppercase tracking-wide text-slate-400">{label}</p>
-      <p className="text-sm font-semibold text-slate-800">{value}</p>
-    </div>
   )
 }

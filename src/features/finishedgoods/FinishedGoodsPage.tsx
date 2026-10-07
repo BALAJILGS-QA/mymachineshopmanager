@@ -1,18 +1,21 @@
 'use client'
 
 import { useMemo, useState } from 'react'
-import { PackageCheck } from 'lucide-react'
+import { Layers, PackageCheck, PackagePlus } from 'lucide-react'
 import type { FinishedGoodsBalance, JobOrder } from '@/types'
 import { useJobs } from '@/features/jobs/hooks/useJobs'
 import { usePermissions } from '@/features/hrm/permissions'
 import { useCompanyName } from '@/features/shared/lookups'
 import { useFgBalances, useReceiveFg } from './hooks/useFinishedGoods'
 import { PageHeader } from '@/components/common/PageHeader'
+import { StatTile } from '@/components/common/StatTile'
 import { DataTable, type DataTableColumn } from '@/components/common/DataTable'
 import { JobStatusBadge } from '@/components/common/status'
+import { SearchBox } from '@/components/common/Filters'
 import { Field, Input } from '@/components/ui/primitives'
 import { Modal } from '@/components/ui/Modal'
 import { useToast } from '@/components/ui/Toast'
+import { AppLink } from '@/components/nav/app-link'
 import { toUserMessage } from '@/lib/api/errors'
 import { qty } from '@/lib/format'
 
@@ -23,6 +26,7 @@ export function FinishedGoodsPage() {
   const perms = usePermissions()
   const receive = useReceiveFg()
   const toast = useToast()
+  const [search, setSearch] = useState('')
 
   const balById = useMemo(() => {
     const m = new Map<string, FinishedGoodsBalance>()
@@ -30,24 +34,40 @@ export function FinishedGoodsPage() {
     return m
   }, [balances])
 
-  const rows = useMemo(
-    () =>
-      jobs.filter(
+  function receivable(j: JobOrder): number {
+    return Math.max(0, (j.acceptedQty ?? 0) - (balById.get(j.id)?.received ?? 0))
+  }
+
+  const rows = useMemo(() => {
+    const s = search.toLowerCase()
+    return jobs
+      .filter(
         (j) =>
           (j.acceptedQty ?? 0) > 0 ||
           (balById.get(j.id)?.received ?? 0) > 0 ||
           ['QC Approved', 'Rework', 'Ready for Dispatch'].includes(j.status),
-      ),
-    [jobs, balById],
-  )
+      )
+      .filter(
+        (j) =>
+          !s ||
+          j.jobNo.toLowerCase().includes(s) ||
+          j.partName.toLowerCase().includes(s) ||
+          companyName(j.companyId).toLowerCase().includes(s),
+      )
+  }, [jobs, balById, search, companyName])
+
+  const kpis = useMemo(() => {
+    const readyToReceive = jobs.filter(
+      (j) => Math.max(0, (j.acceptedQty ?? 0) - (balById.get(j.id)?.received ?? 0)) > 0,
+    ).length
+    const inFg = balances.reduce((sum, b) => sum + (b.balance ?? 0), 0)
+    const accepted = jobs.reduce((sum, j) => sum + (j.acceptedQty ?? 0), 0)
+    return { readyToReceive, inFg, accepted }
+  }, [jobs, balances, balById])
 
   const [modal, setModal] = useState<JobOrder | null>(null)
   const [qtyVal, setQtyVal] = useState('')
   const [bin, setBin] = useState('')
-
-  function receivable(j: JobOrder): number {
-    return Math.max(0, (j.acceptedQty ?? 0) - (balById.get(j.id)?.received ?? 0))
-  }
 
   async function submit() {
     if (!modal) return
@@ -74,7 +94,11 @@ export function FinishedGoodsPage() {
       key: 'jobNo',
       header: 'Job Order',
       cellClassName: 'font-mono text-xs',
-      render: (j) => j.jobNo,
+      render: (j) => (
+        <AppLink to={`/app/jobs/${j.id}`} className="text-brand-600 hover:underline">
+          {j.jobNo}
+        </AppLink>
+      ),
     },
     { key: 'company', header: 'Company', render: (j) => companyName(j.companyId) },
     { key: 'item', header: 'Item', render: (j) => j.partName },
@@ -126,6 +150,31 @@ export function FinishedGoodsPage() {
         title="Finished Goods"
         subtitle="QC-accepted quantities ready to be stocked and dispatched"
       />
+      <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <StatTile
+          icon={<PackagePlus size={18} />}
+          tone="orange"
+          label="Ready to receive"
+          value={kpis.readyToReceive}
+          hint="QC-accepted, not yet in FG"
+        />
+        <StatTile
+          icon={<PackageCheck size={18} />}
+          tone="green"
+          label="In FG balance"
+          value={qty(kpis.inFg)}
+          hint="on hand, undispatched"
+        />
+        <StatTile
+          icon={<Layers size={18} />}
+          tone="blue"
+          label="Total accepted"
+          value={qty(kpis.accepted)}
+        />
+      </div>
+      <div className="mb-3">
+        <SearchBox value={search} onChange={setSearch} placeholder="Search job, item, company…" />
+      </div>
       <DataTable
         columns={columns}
         rows={rows}
@@ -160,14 +209,23 @@ export function FinishedGoodsPage() {
               Rejected quantity cannot be moved to finished goods.
             </p>
             <Field label="Quantity to move" required>
-              <Input
-                type="number"
-                min={0}
-                value={qtyVal}
-                onChange={(e) => setQtyVal(e.target.value)}
-              />
+              <div className="flex items-center gap-2">
+                <Input
+                  type="number"
+                  min={0}
+                  value={qtyVal}
+                  onChange={(e) => setQtyVal(e.target.value)}
+                />
+                <button
+                  type="button"
+                  className="btn-ghost btn-sm shrink-0"
+                  onClick={() => setQtyVal(String(receivable(modal)))}
+                >
+                  Max
+                </button>
+              </div>
             </Field>
-            <Field label="Bin / location" className="mt-3">
+            <Field label="Bin / location (optional)" className="mt-3">
               <Input
                 value={bin}
                 onChange={(e) => setBin(e.target.value)}

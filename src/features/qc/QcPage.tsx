@@ -1,12 +1,13 @@
 'use client'
 
 import { useMemo, useState } from 'react'
-import { ClipboardCheck } from 'lucide-react'
+import { ClipboardCheck, Hourglass, RotateCcw } from 'lucide-react'
 import type { JobOrder, JobStatus } from '@/types'
 import { useJobs } from '@/features/jobs/hooks/useJobs'
 import { usePermissions } from '@/features/hrm/permissions'
 import { useCompanyName } from '@/features/shared/lookups'
 import { PageHeader } from '@/components/common/PageHeader'
+import { StatTile } from '@/components/common/StatTile'
 import { DataTable, type DataTableColumn } from '@/components/common/DataTable'
 import { JobStatusBadge } from '@/components/common/status'
 import { SearchBox } from '@/components/common/Filters'
@@ -37,6 +38,15 @@ export function QcPage() {
   }, [jobs, search])
 
   const canInspect = perms.can('QC_INSPECT')
+
+  const kpis = useMemo(
+    () => ({
+      awaiting: jobs.filter((j) => j.status === 'Completed').length,
+      underQc: jobs.filter((j) => j.status === 'Quality Control').length,
+      rework: jobs.filter((j) => j.status === 'Rework').length,
+    }),
+    [jobs],
+  )
 
   const columns: DataTableColumn<JobOrder>[] = [
     {
@@ -74,6 +84,28 @@ export function QcPage() {
         title="Quality Control"
         subtitle="Production-completed jobs awaiting / under inspection"
       />
+      <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <StatTile
+          icon={<ClipboardCheck size={18} />}
+          tone="orange"
+          label="Awaiting QC"
+          value={kpis.awaiting}
+          hint="production completed"
+        />
+        <StatTile
+          icon={<Hourglass size={18} />}
+          tone="blue"
+          label="Under inspection"
+          value={kpis.underQc}
+        />
+        <StatTile
+          icon={<RotateCcw size={18} />}
+          tone="purple"
+          label="Rework"
+          value={kpis.rework}
+          hint="sent back from QC"
+        />
+      </div>
       <div className="mb-3">
         <SearchBox value={search} onChange={setSearch} placeholder="Search job, item, part no…" />
       </div>
