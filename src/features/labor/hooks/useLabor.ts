@@ -20,6 +20,13 @@ export function useLaborForJob(jobId: string) {
   })
 }
 
+export function useAllLabor(from?: string, to?: string) {
+  return useQuery({
+    queryKey: [...qk.labor.all, from ?? '', to ?? ''],
+    queryFn: () => api.listAllLabor(from, to),
+  })
+}
+
 function useInvalidateLabor(jobId?: string) {
   const qc = useQueryClient()
   return () => {

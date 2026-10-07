@@ -20,6 +20,17 @@ export async function listOpenLabor(): Promise<LaborTimeLog[]> {
   return (data ?? []).map(map)
 }
 
+// All sessions in a date window (by start date), for reporting. from/to are
+// inclusive ISO dates (YYYY-MM-DD); omit for everything.
+export async function listAllLabor(from?: string, to?: string): Promise<LaborTimeLog[]> {
+  let q = sb().from('labor_time_logs').select('*').order('started_at', { ascending: false })
+  if (from) q = q.gte('started_at', `${from}T00:00:00`)
+  if (to) q = q.lte('started_at', `${to}T23:59:59`)
+  const { data, error } = await q
+  if (error) throw error
+  return (data ?? []).map(map)
+}
+
 // Full session history for one order (open + closed).
 export async function listLaborForJob(jobId: string): Promise<LaborTimeLog[]> {
   const { data, error } = await sb()

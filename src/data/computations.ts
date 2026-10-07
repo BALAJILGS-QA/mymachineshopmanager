@@ -505,3 +505,81 @@ export function dispatchReconciliation(
   }
   return rows
 }
+
+// ---- Labor / utilization aggregation --------------------------------------
+// A session's worked minutes: the stored `minutes` once closed, else the live
+// elapsed from started_at to `nowMs` for an open session.
+export function laborMinutes(
+  log: { startedAt: string; endedAt?: string; minutes?: number },
+  nowMs: number,
+): number {
+  if (log.minutes != null && log.endedAt) return Math.max(0, log.minutes)
+  const start = new Date(log.startedAt).getTime()
+  if (!Number.isFinite(start)) return 0
+  return roundMoney(Math.max(0, (nowMs - start) / 60000))
+}
+
+export interface LaborSummary {
+  totalMin: number
+  runMin: number
+  downtimeMin: number
+  setupMin: number
+  byActivity: Record<string, number>
+  // keyed rollups (id → minutes); labels resolved by the caller
+  byEmployee: Record<string, number>
+  byMachine: Record<string, number>
+  byDowntimeReason: Record<string, number>
+  sessions: number
+  openSessions: number
+}
+
+export function summarizeLabor(
+  logs: {
+    employeeId: string
+    machineId?: string
+    activity: string
+    startedAt: string
+    endedAt?: string
+    minutes?: number
+    downtimeReason?: string
+  }[],
+  nowMs: number,
+): LaborSummary {
+  const s: LaborSummary = {
+    totalMin: 0,
+    runMin: 0,
+    downtimeMin: 0,
+    setupMin: 0,
+    byActivity: {},
+    byEmployee: {},
+    byMachine: {},
+    byDowntimeReason: {},
+    sessions: logs.length,
+    openSessions: 0,
+  }
+  for (const l of logs) {
+    const m = laborMinutes(l, nowMs)
+    s.totalMin += m
+    if (!l.endedAt) s.openSessions += 1
+    s.byActivity[l.activity] = (s.byActivity[l.activity] ?? 0) + m
+    s.byEmployee[l.employeeId] = (s.byEmployee[l.employeeId] ?? 0) + m
+    if (l.machineId) s.byMachine[l.machineId] = (s.byMachine[l.machineId] ?? 0) + m
+    if (l.activity === 'Run') s.runMin += m
+    else if (l.activity === 'Downtime') {
+      s.downtimeMin += m
+      const r = l.downtimeReason || 'Unspecified'
+      s.byDowntimeReason[r] = (s.byDowntimeReason[r] ?? 0) + m
+    } else if (l.activity === 'Setup') s.setupMin += m
+  }
+  // round the accumulators
+  s.totalMin = roundMoney(s.totalMin)
+  s.runMin = roundMoney(s.runMin)
+  s.downtimeMin = roundMoney(s.downtimeMin)
+  s.setupMin = roundMoney(s.setupMin)
+  for (const k of Object.keys(s.byActivity)) s.byActivity[k] = roundMoney(s.byActivity[k])
+  for (const k of Object.keys(s.byEmployee)) s.byEmployee[k] = roundMoney(s.byEmployee[k])
+  for (const k of Object.keys(s.byMachine)) s.byMachine[k] = roundMoney(s.byMachine[k])
+  for (const k of Object.keys(s.byDowntimeReason))
+    s.byDowntimeReason[k] = roundMoney(s.byDowntimeReason[k])
+  return s
+}

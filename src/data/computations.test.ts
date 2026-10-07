@@ -12,6 +12,8 @@ import {
   materialAvailability,
   reservedFromRows,
   dispatchReconciliation,
+  summarizeLabor,
+  laborMinutes,
   SHOP_SCOPE,
 } from './computations'
 import type {
@@ -911,5 +913,61 @@ describe('dispatchReconciliation — FG ledger vs delivery challans', () => {
     )
     expect(rows).toHaveLength(1)
     expect(rows[0]).toMatchObject({ fgDispatched: 50, challanQty: 50, status: 'Matched' })
+  })
+})
+
+describe('summarizeLabor — hours/utilization rollup', () => {
+  const NOW = new Date('2026-10-08T10:00:00Z').getTime()
+
+  it('uses stored minutes when closed and live elapsed when open', () => {
+    const closed = {
+      startedAt: '2026-10-08T08:00:00Z',
+      endedAt: '2026-10-08T09:00:00Z',
+      minutes: 60,
+    }
+    const open = { startedAt: '2026-10-08T09:30:00Z' } // 30 min to NOW
+    expect(laborMinutes(closed, NOW)).toBe(60)
+    expect(laborMinutes(open, NOW)).toBe(30)
+  })
+
+  it('aggregates by activity, employee, machine and downtime reason', () => {
+    const logs = [
+      {
+        employeeId: 'e1',
+        machineId: 'm1',
+        activity: 'Run',
+        startedAt: '2026-10-08T06:00:00Z',
+        endedAt: '2026-10-08T08:00:00Z',
+        minutes: 120,
+      },
+      {
+        employeeId: 'e1',
+        machineId: 'm1',
+        activity: 'Setup',
+        startedAt: '2026-10-08T08:00:00Z',
+        endedAt: '2026-10-08T08:30:00Z',
+        minutes: 30,
+      },
+      {
+        employeeId: 'e2',
+        machineId: 'm2',
+        activity: 'Downtime',
+        startedAt: '2026-10-08T06:00:00Z',
+        endedAt: '2026-10-08T06:45:00Z',
+        minutes: 45,
+        downtimeReason: 'Tool change',
+      },
+      { employeeId: 'e2', activity: 'Run', startedAt: '2026-10-08T09:00:00Z' }, // open, 60 min
+    ]
+    const s = summarizeLabor(logs, NOW)
+    expect(s.totalMin).toBe(255)
+    expect(s.runMin).toBe(180)
+    expect(s.setupMin).toBe(30)
+    expect(s.downtimeMin).toBe(45)
+    expect(s.byEmployee['e1']).toBe(150)
+    expect(s.byEmployee['e2']).toBe(105)
+    expect(s.byMachine['m1']).toBe(150)
+    expect(s.byDowntimeReason['Tool change']).toBe(45)
+    expect(s.openSessions).toBe(1)
   })
 })
