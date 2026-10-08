@@ -5,6 +5,7 @@ import { SHOP_SCOPE } from '@/data/computations'
 import { useCreateJob, useUpdateJob } from './hooks/useJobs'
 import { useSetMaterialRequirement, useReserveMaterial } from './hooks/useReservations'
 import { useCompanies } from '@/features/companies/hooks/useCompanies'
+import { EmployeePicker } from '@/features/hrm/components/EmployeePicker'
 import { useMaterials, useMaterialBalance } from '@/features/materials/hooks/useMaterials'
 import { usePreviewNo } from '@/features/shared/usePreviewNo'
 import { toUserMessage } from '@/lib/api/errors'
@@ -84,6 +85,7 @@ export function JobForm({ job, onClose }: { job: JobOrder | null; onClose: () =>
     dueDate: job?.dueDate ?? '',
     priority: job?.priority ?? ('Normal' as JobPriority),
     status: job?.status ?? ('Pending' as JobStatus),
+    ownerEmployeeId: job?.ownerEmployeeId ?? '',
     notes: job?.notes ?? '',
   })
 
@@ -158,6 +160,7 @@ export function JobForm({ job, onClose }: { job: JobOrder | null; onClose: () =>
         dueDate: form.dueDate || undefined,
         priority: form.priority,
         status: form.status,
+        ownerEmployeeId: form.ownerEmployeeId || undefined,
         notes: form.notes || undefined,
       }
       if (job) {
@@ -172,9 +175,13 @@ export function JobForm({ job, onClose }: { job: JobOrder | null; onClose: () =>
           ...payload,
           completedQty: 0,
         })
-        // Persist a non-default planned qty without touching the create_job RPC.
-        if (plannedNum !== orderedNum) {
-          await updateJob.mutateAsync({ id: created.id, patch: { plannedQty: plannedNum } })
+        // Persist fields the create_job RPC doesn't take (planned qty, owner)
+        // via the normal direct update path.
+        const postPatch: Partial<JobOrder> = {}
+        if (plannedNum !== orderedNum) postPatch.plannedQty = plannedNum
+        if (form.ownerEmployeeId) postPatch.ownerEmployeeId = form.ownerEmployeeId
+        if (Object.keys(postPatch).length > 0) {
+          await updateJob.mutateAsync({ id: created.id, patch: postPatch })
         }
         // Record the material requirement + chosen pool, then try to reserve it.
         if (form.materialId && reserveNum > 0) {
@@ -277,6 +284,12 @@ export function JobForm({ job, onClose }: { job: JobOrder | null; onClose: () =>
                   <option key={s}>{s}</option>
                 ))}
               </Select>
+            </Field>
+            <Field label="Owner / Planner" hint="HRM employee">
+              <EmployeePicker
+                value={form.ownerEmployeeId}
+                onChange={(id) => set('ownerEmployeeId', id)}
+              />
             </Field>
           </div>
         </Section>

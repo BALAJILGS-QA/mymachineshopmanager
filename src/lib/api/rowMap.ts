@@ -101,6 +101,7 @@ export const maps = {
       completedAt: 'completed_at',
       deliveredAt: 'delivered_at',
       operator: 'operator',
+      ownerEmployeeId: 'owner_employee_id',
       tenantId: 'tenant_id',
       createdAt: 'created_at',
       updatedAt: 'updated_at',

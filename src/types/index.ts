@@ -105,6 +105,7 @@ export interface JobOrder extends AuditFields {
   completedAt?: ISODateTime
   deliveredAt?: ISODateTime
   operator?: string
+  ownerEmployeeId?: ID // HRM employee who owns / plans this order (HRM-C, 0085)
   tenantId?: ID // stamped server-side; used for tenant-scoped storage paths
 }
 

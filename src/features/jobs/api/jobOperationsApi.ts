@@ -64,10 +64,15 @@ export async function instantiateRouting(
 
 // ---- Per-operation execution (Phase 5) — rule-bearing, go through RPCs ----
 
-export async function startJobOperation(id: string, operator?: string): Promise<JobOperation> {
+export async function startJobOperation(
+  id: string,
+  operator?: string,
+  operatorEmployeeId?: string,
+): Promise<JobOperation> {
   const { data, error } = await sb().rpc('job_operation_start', {
     p_id: id,
     p_operator: operator ?? null,
+    p_operator_employee_id: operatorEmployeeId ?? null,
   })
   if (error) throw error
   return fromRow<JobOperation>(data as Row, maps.jobOperations)

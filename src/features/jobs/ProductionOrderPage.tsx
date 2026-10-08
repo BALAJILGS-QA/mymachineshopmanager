@@ -53,6 +53,8 @@ import { useMaterials } from '@/features/materials/hooks/useMaterials'
 import { useJobInspections } from '@/features/qc/hooks/useQc'
 import { useFgForJob } from '@/features/finishedgoods/hooks/useFinishedGoods'
 import { usePermissions } from '@/features/hrm/permissions'
+import { useEmployees } from '@/features/hrm/hooks/useHrm'
+import { EmployeePicker, employeeName } from '@/features/hrm/components/EmployeePicker'
 import { useCompanyName } from '@/features/shared/lookups'
 import { JobDrawingsPanel } from '@/features/production/components/JobDrawingsPanel'
 import { MachineProgramPanel } from '@/features/production/components/MachineProgramPanel'
@@ -504,6 +506,10 @@ function Row({ label, value }: { label: string; value: string }) {
 function OverviewTab({ job, customer }: { job: JobOrder; customer: string }) {
   const { data: materials = [] } = useMaterials()
   const material = materials.find((m) => m.id === job.materialId)
+  const { data: employees = [] } = useEmployees()
+  const owner = job.ownerEmployeeId
+    ? employeeName(employees.find((e) => e.id === job.ownerEmployeeId))
+    : '—'
   return (
     <Card>
       <dl className="grid grid-cols-2 gap-x-6 gap-y-3 sm:grid-cols-3">
@@ -520,6 +526,7 @@ function OverviewTab({ job, customer }: { job: JobOrder; customer: string }) {
         <Row label="Order Date" value={fmtDate(job.orderDate)} />
         <Row label="Due Date" value={fmtDate(job.dueDate)} />
         <Row label="Created" value={fmtDateTime(job.createdAt)} />
+        <Row label="Owner / Planner" value={owner} />
         <Row label="Operator" value={job.operator || '—'} />
       </dl>
       {job.notes && (
@@ -543,11 +550,13 @@ function OperationsTab({ job }: { job: JobOrder }) {
   const instantiate = useInstantiateRouting(job.id)
   const startOp = useStartJobOperation(job.id)
   const skipOp = useSkipJobOperation(job.id)
+  const { data: employees = [] } = useEmployees()
   const toast = useToast()
   const confirm = useConfirm()
   const [attaching, setAttaching] = useState(false)
   const [addingStep, setAddingStep] = useState(false)
   const [completing, setCompleting] = useState<JobOperation | null>(null)
+  const [starting, setStarting] = useState<JobOperation | null>(null)
 
   // Routings tied to this order's material float to the top of the picker.
   const sortedRoutings = useMemo(() => {
@@ -576,14 +585,6 @@ function OperationsTab({ job }: { job: JobOrder }) {
   // completion rollup didn't fire (caller lacks PRODUCTION_COMPLETE). Surface it.
   const allOpsDone = ops.length > 0 && firstOpenSeq === null && done > 0
   const awaitingCompletion = jobRunning && allOpsDone && !canComplete
-
-  async function handleStart(o: JobOperation) {
-    try {
-      await startOp.mutateAsync({ id: o.id })
-    } catch (e) {
-      toast.error(toUserMessage(e, 'Could not start operation'))
-    }
-  }
 
   async function handleSkip(o: JobOperation) {
     if (
@@ -688,7 +689,11 @@ function OperationsTab({ job }: { job: JobOrder }) {
                     <td className="py-1.5 pr-3 text-right tabular-nums text-slate-600">
                       {o.actualMinutes != null ? `${qty(o.actualMinutes)}m` : '—'}
                     </td>
-                    <td className="py-1.5 pr-3 text-slate-600">{o.operator || '—'}</td>
+                    <td className="py-1.5 pr-3 text-slate-600">
+                      {o.operatorEmployeeId
+                        ? employeeName(employees.find((e) => e.id === o.operatorEmployeeId))
+                        : o.operator || '—'}
+                    </td>
                     <td className="py-1.5 pr-3">
                       <Badge tone={statusTone(o.status)}>{o.status}</Badge>
                     </td>
@@ -698,7 +703,7 @@ function OperationsTab({ job }: { job: JobOrder }) {
                           className="btn-ghost btn-sm text-emerald-600"
                           title="Start operation"
                           disabled={startOp.isPending}
-                          onClick={() => handleStart(o)}
+                          onClick={() => setStarting(o)}
                         >
                           <Play size={14} />
                         </button>
@@ -755,6 +760,9 @@ function OperationsTab({ job }: { job: JobOrder }) {
         </div>
       )}
 
+      {starting && (
+        <StartOperationModal job={job} op={starting} onClose={() => setStarting(null)} />
+      )}
       {completing && (
         <CompleteOperationModal job={job} op={completing} onClose={() => setCompleting(null)} />
       )}
@@ -955,6 +963,57 @@ function AddJobOperationModal({
           />
         </Field>
       </div>
+    </Modal>
+  )
+}
+
+function StartOperationModal({
+  job,
+  op,
+  onClose,
+}: {
+  job: JobOrder
+  op: JobOperation
+  onClose: () => void
+}) {
+  const start = useStartJobOperation(job.id)
+  const toast = useToast()
+  const [operatorEmployeeId, setOperator] = useState(op.operatorEmployeeId ?? '')
+
+  async function save() {
+    try {
+      await start.mutateAsync({ id: op.id, operatorEmployeeId: operatorEmployeeId || undefined })
+      toast.success('Operation started')
+      onClose()
+    } catch (e) {
+      toast.error(toUserMessage(e, 'Could not start operation'))
+    }
+  }
+
+  return (
+    <Modal
+      open
+      onClose={onClose}
+      size="sm"
+      title={`Start: ${op.operationName || `operation ${op.seq}`}`}
+      footer={
+        <>
+          <button className="btn-secondary" onClick={onClose} disabled={start.isPending}>
+            Cancel
+          </button>
+          <button className="btn-primary" onClick={save} disabled={start.isPending}>
+            {start.isPending ? 'Starting…' : 'Start operation'}
+          </button>
+        </>
+      }
+    >
+      <p className="mb-3 text-xs text-slate-500">
+        Assign the operator who will run this operation. Actual time worked is tracked separately on
+        the Shop Floor board. Leave unassigned to record it against your account.
+      </p>
+      <Field label="Operator" hint="HRM employee">
+        <EmployeePicker value={operatorEmployeeId} onChange={setOperator} />
+      </Field>
     </Modal>
   )
 }

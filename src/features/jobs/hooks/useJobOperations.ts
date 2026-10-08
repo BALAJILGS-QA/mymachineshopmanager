@@ -72,8 +72,15 @@ export function useInstantiateRouting(jobId: string) {
 export function useStartJobOperation(jobId: string) {
   const invalidate = useInvalidateExecution(jobId)
   return useMutation({
-    mutationFn: ({ id, operator }: { id: string; operator?: string }) =>
-      api.startJobOperation(id, operator),
+    mutationFn: ({
+      id,
+      operator,
+      operatorEmployeeId,
+    }: {
+      id: string
+      operator?: string
+      operatorEmployeeId?: string
+    }) => api.startJobOperation(id, operator, operatorEmployeeId),
     onSuccess: invalidate,
   })
 }
