@@ -121,6 +121,174 @@ export interface ProductionEvent {
   at: ISODateTime
 }
 
+// ---- Estimation & Quotation (migrations 0087/0088) ----
+export type EstimationStatus =
+  'Draft' | 'Under Review' | 'Approved' | 'Rejected' | 'Converted to Quotation'
+
+export type RawMaterialForm =
+  'Round Bar' | 'Square Bar' | 'Flat Bar' | 'Plate' | 'Casting' | 'Custom'
+
+export type PricingMethod = 'markup' | 'margin'
+
+// Shape-specific raw-material dimensions in mm (used for theoretical weight).
+export interface MaterialShapeDims {
+  diameter?: number // round bar
+  length?: number // bar length per blank
+  width?: number // square/flat/plate
+  thickness?: number // flat/plate
+}
+
+export interface EstimationOperation {
+  id: ID
+  estimationId: ID
+  seq: number
+  operationName: string
+  machineType?: string
+  setupTimeMin: number // total setup for the batch
+  cycleTimeMin: number // per piece
+  batchQty: number
+  machineHourRate: number
+  operatorCostHour: number
+  toolingCost: number // per batch
+  subcontractCostPc: number // per piece
+  notes?: string
+}
+
+export interface Estimation extends AuditFields {
+  id: ID
+  estimationNo: string
+  estimationDate: ISODate
+  companyId: ID
+  customerPartNumber?: string
+  partName: string
+  partDescription?: string
+  drawingNumber?: string
+  drawingRevision?: string
+  productId?: ID
+  materialId?: ID
+  materialGrade?: string
+  rawMaterialForm?: RawMaterialForm
+  materialShapeDims?: MaterialShapeDims
+  finishedDims?: string
+  materialDensity?: number // g/cc
+  materialRate?: number // per kg
+  cuttingAllowance: number // mm
+  machiningAllowance: number // mm
+  wastagePercent: number
+  scrapRecoveryPc: number // per piece
+  quantity: number
+  expectedDeliveryDate?: ISODate
+  manufacturingNotes?: string
+  drawingPath?: string
+  fixturesToolingCost: number // total for the batch
+  inspectionCostPc: number
+  overheadCostPc: number
+  labourCostPc: number
+  packingCostPc: number
+  transportCostPc: number
+  outsourceCostPc: number
+  rejectionPercent: number
+  otherCostPc: number
+  pricingMethod: PricingMethod
+  markupPercent: number
+  marginPercent: number
+  // snapshot summary (computed in computations.ts, persisted on save)
+  materialCostPc: number
+  machiningCostPc: number
+  totalCostPc: number
+  sellingPricePc: number
+  totalCost: number
+  totalSelling: number
+  marginPctEffective: number
+  status: EstimationStatus
+  approvedBy?: string
+  approvedAt?: ISODateTime
+  createdBy?: string
+  updatedBy?: string
+  operations?: EstimationOperation[]
+}
+
+export type QuotationStatus =
+  | 'Draft'
+  | 'Pending Approval'
+  | 'Approved'
+  | 'Sent'
+  | 'Accepted'
+  | 'Rejected'
+  | 'Expired'
+  | 'Cancelled'
+
+export interface QuotationLine {
+  id: ID
+  quotationId: ID
+  lineNo: number
+  partNumber?: string
+  description: string
+  hsn?: string
+  quantity: number
+  unit?: string
+  unitPrice: number
+  discountPercent: number
+  gstPercent: number
+  lineTotal: number // snapshot
+}
+
+export interface Quotation extends AuditFields {
+  id: ID
+  quotationNo: string
+  quotationDate: ISODate
+  expiryDate?: ISODate
+  companyId: ID
+  estimationId?: ID
+  billingAddress?: string
+  shippingAddress?: string
+  customerGstin?: string
+  contactPerson?: string
+  contactPhone?: string
+  contactEmail?: string
+  placeOfSupplyStateCode?: string
+  advancePercent: number
+  paymentTerms?: string
+  deliveryLeadTime?: string
+  packingCharge: number
+  freightCharge: number
+  cgstPercent: number
+  sgstPercent: number
+  igstPercent: number
+  // snapshot totals
+  subtotal: number
+  discountTotal: number
+  taxableValue: number
+  cgstAmount: number
+  sgstAmount: number
+  igstAmount: number
+  grandTotal: number
+  notes?: string
+  termsConditions?: string
+  status: QuotationStatus
+  sentAt?: ISODateTime
+  acceptedAt?: ISODateTime
+  rejectedAt?: ISODateTime
+  approvedBy?: string
+  approvedAt?: ISODateTime
+  jobOrderId?: ID
+  revisionNo: number
+  revisesQuotationId?: ID
+  createdBy?: string
+  updatedBy?: string
+  lines?: QuotationLine[]
+}
+
+export interface QuotationStatusHistory {
+  id: ID
+  quotationId: ID
+  fromStatus?: string
+  toStatus: string
+  note?: string
+  actor?: string
+  at: ISODateTime
+}
+
 // ---- Material reservation (migration 0074) ----
 export type MaterialReservationKind = 'Reserve' | 'Release' | 'Consume'
 
@@ -735,6 +903,8 @@ export interface Settings {
     payment: string
     expense: string
     dc: string
+    estimation: string
+    quotation: string
   }
   company: {
     name: string

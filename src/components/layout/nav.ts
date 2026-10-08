@@ -34,6 +34,7 @@ import {
   Timer,
   History,
   Cog,
+  Calculator,
   Settings as SettingsIcon,
   type LucideIcon,
 } from 'lucide-react'
@@ -96,6 +97,8 @@ export const NAV_GROUPS: NavGroup[] = [
     icon: Factory,
     accent: 'orange',
     items: [
+      { to: '/app/estimations', label: 'Estimation', icon: Calculator, short: 'Estimate' },
+      { to: '/app/quotations', label: 'Quotations', icon: FileText, short: 'Quotes' },
       { to: '/app/jobs', label: 'Production Orders', icon: ClipboardList, short: 'Orders' },
       { to: '/app/production', label: 'Production', icon: Factory, short: 'Floor' },
       { to: '/app/shop-floor', label: 'Shop Floor', icon: Timer, short: 'Live' },

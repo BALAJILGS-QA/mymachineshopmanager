@@ -15,14 +15,24 @@ import {
   summarizeLabor,
   laborMinutes,
   SHOP_SCOPE,
+  blankMassKg,
+  operationCostPc,
+  sellingPriceFromCost,
+  computeEstimation,
+  computeQuotation,
+  stateCodeFromGstin,
+  isQuotationExpired,
 } from './computations'
 import type {
+  Estimation,
+  EstimationOperation,
   Invoice,
   MaterialIssue,
   MaterialReceipt,
   Payment,
   PaymentAllocation,
   PaymentDeduction,
+  QuotationLine,
   StockAdjustment,
 } from '@/types'
 import type { Database } from './db'
@@ -969,5 +979,193 @@ describe('summarizeLabor — hours/utilization rollup', () => {
     expect(s.byMachine['m1']).toBe(150)
     expect(s.byDowntimeReason['Tool change']).toBe(45)
     expect(s.openSessions).toBe(1)
+  })
+})
+
+// ---- Estimation & Quotation ------------------------------------------------
+describe('estimation & quotation', () => {
+  function estimation(partial: Partial<Estimation> = {}): Estimation {
+    return {
+      id: 'est_1',
+      estimationNo: 'EST-2026-0001',
+      estimationDate: '2026-01-01',
+      companyId: 'cmp_1',
+      partName: 'Shaft',
+      cuttingAllowance: 0,
+      machiningAllowance: 0,
+      wastagePercent: 0,
+      scrapRecoveryPc: 0,
+      quantity: 1,
+      fixturesToolingCost: 0,
+      inspectionCostPc: 0,
+      overheadCostPc: 0,
+      labourCostPc: 0,
+      packingCostPc: 0,
+      transportCostPc: 0,
+      outsourceCostPc: 0,
+      rejectionPercent: 0,
+      otherCostPc: 0,
+      pricingMethod: 'margin',
+      markupPercent: 0,
+      marginPercent: 0,
+      materialCostPc: 0,
+      machiningCostPc: 0,
+      totalCostPc: 0,
+      sellingPricePc: 0,
+      totalCost: 0,
+      totalSelling: 0,
+      marginPctEffective: 0,
+      status: 'Draft',
+      createdAt: '2026-01-01T00:00:00Z',
+      updatedAt: '2026-01-01T00:00:00Z',
+      ...partial,
+    }
+  }
+  function op(partial: Partial<EstimationOperation> = {}): EstimationOperation {
+    return {
+      id: 'eop_1',
+      estimationId: 'est_1',
+      seq: 1,
+      operationName: 'Turning',
+      setupTimeMin: 0,
+      cycleTimeMin: 0,
+      batchQty: 1,
+      machineHourRate: 0,
+      operatorCostHour: 0,
+      toolingCost: 0,
+      subcontractCostPc: 0,
+      ...partial,
+    }
+  }
+  function qline(partial: Partial<QuotationLine> = {}): QuotationLine {
+    return {
+      id: 'ql_1',
+      quotationId: 'q_1',
+      lineNo: 1,
+      description: 'Part',
+      quantity: 1,
+      unitPrice: 0,
+      discountPercent: 0,
+      gstPercent: 0,
+      lineTotal: 0,
+      ...partial,
+    }
+  }
+
+  it('blankMassKg — round bar theoretical weight (Ø50 × 100mm MS)', () => {
+    // vol = π/4 × 50² × 100 = 196349.5 mm³; ×7.85/1e6 = 1.5413 kg
+    const kg = blankMassKg('Round Bar', { diameter: 50, length: 100 }, 7.85)
+    expect(kg).toBeCloseTo(1.5413, 3)
+  })
+
+  it('blankMassKg — rectangular (flat bar L×W×T) and allowances', () => {
+    // flat 100×50×10 at 7.85 = 50000 mm³ ×7.85/1e6 = 0.3925 kg
+    expect(blankMassKg('Flat Bar', { length: 100, width: 50, thickness: 10 }, 7.85)).toBeCloseTo(
+      0.3925,
+      4,
+    )
+    // cutting allowance adds to length: (100+10)×50×10 = 55000 → 0.43175
+    expect(
+      blankMassKg('Flat Bar', { length: 100, width: 50, thickness: 10 }, 7.85, 10, 0),
+    ).toBeCloseTo(0.43175, 4)
+  })
+
+  it('blankMassKg — zero when density or dims missing', () => {
+    expect(blankMassKg('Round Bar', { diameter: 50, length: 100 }, 0)).toBe(0)
+    expect(blankMassKg('Round Bar', {}, 7.85)).toBe(0)
+  })
+
+  it('operationCostPc — setup amortized, cycle per piece, tooling per batch', () => {
+    // setup 30min @ (1200+0)/hr over batch 10 = (0.5×1200)/10 = 60
+    // run 6min @1200/hr = 0.1×1200 = 120 ; tooling 500/10 = 50 ; subc 5
+    const c = operationCostPc(
+      op({
+        setupTimeMin: 30,
+        cycleTimeMin: 6,
+        batchQty: 10,
+        machineHourRate: 1200,
+        toolingCost: 500,
+        subcontractCostPc: 5,
+      }),
+    )
+    expect(c).toBe(roundMoney(60 + 120 + 50 + 5))
+  })
+
+  it('sellingPriceFromCost — markup vs margin are different and both safe', () => {
+    expect(sellingPriceFromCost(100, 'markup', 25, 0)).toBe(125) // 100×1.25
+    expect(sellingPriceFromCost(100, 'margin', 0, 20)).toBe(125) // 100/0.8
+    // markup 20 ≠ margin 20
+    expect(sellingPriceFromCost(100, 'markup', 20, 0)).toBe(120)
+    // invalid margin ≥100% → falls back to cost (no divide by ≤0)
+    expect(sellingPriceFromCost(100, 'margin', 0, 100)).toBe(100)
+    expect(sellingPriceFromCost(100, 'margin', 0, 150)).toBe(100)
+  })
+
+  it('computeEstimation — full breakdown with wastage, rejection, margin', () => {
+    const est = estimation({
+      rawMaterialForm: 'Round Bar',
+      materialShapeDims: { diameter: 50, length: 100 },
+      materialDensity: 7.85,
+      materialRate: 80, // ₹/kg
+      wastagePercent: 10,
+      scrapRecoveryPc: 5,
+      quantity: 100,
+      overheadCostPc: 10,
+      rejectionPercent: 5,
+      pricingMethod: 'margin',
+      marginPercent: 20,
+    })
+    const ops = [op({ cycleTimeMin: 6, machineHourRate: 1200 })] // run = 120/pc
+    const r = computeEstimation(est, ops)
+    // material: 1.5413kg ×80 ×1.10 − 5 = 135.63 - 5 = 130.63 (approx)
+    expect(r.materialWeightKg).toBeCloseTo(1.5413, 3)
+    expect(r.machiningCostPc).toBe(120)
+    expect(r.otherCostPc).toBe(10)
+    const base = roundMoney(r.materialCostPc + 120 + 10)
+    expect(r.baseCostPc).toBe(base)
+    expect(r.rejectionCostPc).toBe(roundMoney(base * 0.05))
+    expect(r.totalCostPc).toBe(roundMoney(base + base * 0.05))
+    expect(r.sellingPricePc).toBe(roundMoney(r.totalCostPc / 0.8))
+    expect(r.marginPctEffective).toBeCloseTo(20, 1)
+    expect(r.totalSelling).toBe(roundMoney(r.sellingPricePc * 100))
+  })
+
+  it('computeQuotation — intra-state CGST+SGST on discounted lines + charges', () => {
+    const lines = [
+      qline({ quantity: 10, unitPrice: 100, discountPercent: 10 }), // net 900
+      qline({ id: 'ql_2', quantity: 5, unitPrice: 200 }), // net 1000
+    ]
+    const r = computeQuotation(
+      { packingCharge: 100, freightCharge: 0, cgstPercent: 9, sgstPercent: 9, igstPercent: 0 },
+      lines,
+    )
+    expect(r.subtotal).toBe(2000) // 1000 + 1000
+    expect(r.discountTotal).toBe(100) // 10% of first line's 1000
+    expect(r.lineNet).toBe(1900)
+    expect(r.taxableValue).toBe(2000) // 1900 + 100 packing
+    expect(r.cgstAmount).toBe(180)
+    expect(r.sgstAmount).toBe(180)
+    expect(r.igstAmount).toBe(0)
+    expect(r.grandTotal).toBe(2360)
+  })
+
+  it('computeQuotation — inter-state IGST only', () => {
+    const r = computeQuotation(
+      { packingCharge: 0, freightCharge: 0, cgstPercent: 0, sgstPercent: 0, igstPercent: 18 },
+      [qline({ quantity: 1, unitPrice: 1000 })],
+    )
+    expect(r.taxableValue).toBe(1000)
+    expect(r.igstAmount).toBe(180)
+    expect(r.cgstAmount).toBe(0)
+    expect(r.grandTotal).toBe(1180)
+  })
+
+  it('stateCodeFromGstin + isQuotationExpired', () => {
+    expect(stateCodeFromGstin('27AABCR1234F1Z5')).toBe('27')
+    expect(stateCodeFromGstin('')).toBeUndefined()
+    expect(stateCodeFromGstin(undefined)).toBeUndefined()
+    expect(isQuotationExpired('2026-01-01', '2026-02-01')).toBe(true)
+    expect(isQuotationExpired('2026-03-01', '2026-02-01')).toBe(false)
+    expect(isQuotationExpired(undefined, '2026-02-01')).toBe(false)
   })
 })

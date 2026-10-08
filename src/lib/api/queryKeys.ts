@@ -29,6 +29,19 @@ export const qk = {
     all: ['jobs'] as const,
     detail: (id: string) => ['jobs', id] as const,
   },
+  // Estimation (costing) + per-estimation operations (0087/0088).
+  estimations: {
+    all: ['estimations'] as const,
+    detail: (id: string) => ['estimations', id] as const,
+    operations: (estimationId: string) => ['estimations', 'operations', estimationId] as const,
+  },
+  // Customer quotations + lines + status history (0087/0088).
+  quotations: {
+    all: ['quotations'] as const,
+    detail: (id: string) => ['quotations', id] as const,
+    lines: (quotationId: string) => ['quotations', 'lines', quotationId] as const,
+    history: (quotationId: string) => ['quotations', 'history', quotationId] as const,
+  },
   // Material reservations (ledger) + per-order material status (0074).
   reservations: {
     all: ['reservations'] as const,

@@ -2,16 +2,23 @@
 // from transactional data — never stored denormalised (PRD 13, 6.6, 6.4).
 
 import type {
+  Estimation,
+  EstimationOperation,
   Invoice,
   InvoiceComputed,
   Material,
   MaterialIssue,
   MaterialReceipt,
   MaterialReceiptStock,
+  MaterialShapeDims,
   MaterialStock,
   Payment,
   PaymentAllocation,
   PaymentDeduction,
+  PricingMethod,
+  Quotation,
+  QuotationLine,
+  RawMaterialForm,
   StockAdjustment,
 } from '@/types'
 
@@ -582,4 +589,252 @@ export function summarizeLabor(
   for (const k of Object.keys(s.byDowntimeReason))
     s.byDowntimeReason[k] = roundMoney(s.byDowntimeReason[k])
   return s
+}
+
+// ===========================================================================
+// Estimation & Quotation (migrations 0087/0088) — manufacturing cost model
+// ===========================================================================
+// All figures are DERIVED here (single source of truth). The estimation form
+// recomputes on every input change; the create/update RPCs persist the snapshot
+// only so the list/report pages and historical quotations stay stable.
+
+// Indicative densities (g/cc) for common machine-shop materials. These are
+// DEFAULTS that pre-fill the estimation; the user can override per estimate, so
+// nothing is hardcoded into the calculation itself.
+export const MATERIAL_DENSITY: Record<string, number> = {
+  MS: 7.85, // mild steel
+  EN8: 7.85,
+  EN24: 7.85,
+  'Carbon Steel': 7.85,
+  'Alloy Steel': 7.85,
+  'Cast Iron': 7.2,
+  SS304: 8.0,
+  SS316: 8.0,
+  'Stainless Steel': 8.0,
+  Aluminium: 2.7,
+  Brass: 8.5,
+  Bronze: 8.8,
+  Copper: 8.96,
+}
+
+// Round a raw mass to a sensible precision (kg, 4 dp) — weights are small.
+function roundKg(n: number): number {
+  return Math.round((n + Number.EPSILON) * 10000) / 10000
+}
+
+// Theoretical mass (kg) of ONE raw blank from its form + dimensions (mm) + the
+// configured density (g/cc). Cutting allowance adds to length (parting stock);
+// machining allowance adds to the cross-section (stock to be machined off).
+// Returns 0 when the required dimensions aren't provided (e.g. castings priced
+// by rate directly). 1 cc = 1000 mm³, so kg = vol(mm³) × density / 1e6.
+export function blankMassKg(
+  form: RawMaterialForm | undefined,
+  dims: MaterialShapeDims | undefined,
+  density: number | undefined,
+  cuttingAllowance = 0,
+  machiningAllowance = 0,
+): number {
+  if (!density || density <= 0) return 0
+  const d = dims ?? {}
+  const len = (d.length ?? 0) + cuttingAllowance
+  const dia = (d.diameter ?? 0) + machiningAllowance
+  const w = (d.width ?? 0) + machiningAllowance
+  const t = (d.thickness ?? 0) + machiningAllowance
+  let volMm3 = 0
+  switch (form) {
+    case 'Round Bar':
+      volMm3 = (Math.PI / 4) * dia * dia * len
+      break
+    case 'Square Bar':
+      volMm3 = w * w * len
+      break
+    case 'Flat Bar':
+    case 'Plate':
+      volMm3 = w * t * len
+      break
+    case 'Casting':
+    case 'Custom':
+    default:
+      // Best-effort: use whatever bounding dims are present.
+      if (dia > 0 && len > 0) volMm3 = (Math.PI / 4) * dia * dia * len
+      else volMm3 = w * t * len
+      break
+  }
+  if (!(volMm3 > 0)) return 0
+  return roundKg((volMm3 * density) / 1_000_000)
+}
+
+// Fully-loaded cost per piece for one machining operation. Setup + tooling are
+// batch costs amortized across batchQty; cycle is per-piece. Operator cost is an
+// optional add-on to the machine rate (leave 0 if already inside the machine
+// rate — avoids double-counting, spec §4D).
+export function operationCostPc(op: EstimationOperation): number {
+  const batch = Math.max(op.batchQty || 0, 1)
+  const rate = (op.machineHourRate || 0) + (op.operatorCostHour || 0)
+  const setupPc = (((op.setupTimeMin || 0) / 60) * rate) / batch
+  const runPc = ((op.cycleTimeMin || 0) / 60) * rate
+  const toolingPc = (op.toolingCost || 0) / batch
+  return roundMoney(setupPc + runPc + toolingPc + (op.subcontractCostPc || 0))
+}
+
+export interface EstimationComputed {
+  materialWeightKg: number
+  materialCostPc: number
+  machiningCostPc: number
+  otherCostPc: number
+  baseCostPc: number
+  rejectionCostPc: number
+  totalCostPc: number
+  sellingPricePc: number
+  profitPc: number
+  marginPctEffective: number
+  markupPctEffective: number
+  totalCost: number
+  totalSelling: number
+  totalProfit: number
+}
+
+// Selling price from cost using markup OR margin, with safe denominators.
+// markup: price = cost × (1 + m/100).  margin: price = cost / (1 − m/100).
+// An invalid margin (≥100% → non-positive denominator) falls back to cost.
+export function sellingPriceFromCost(
+  cost: number,
+  method: PricingMethod,
+  markupPercent: number,
+  marginPercent: number,
+): number {
+  if (method === 'markup') {
+    return roundMoney(cost * (1 + (markupPercent || 0) / 100))
+  }
+  const denom = 1 - (marginPercent || 0) / 100
+  if (denom <= 0) return roundMoney(cost) // invalid margin — don't divide by ≤0
+  return roundMoney(cost / denom)
+}
+
+export function computeEstimation(
+  est: Estimation,
+  ops: EstimationOperation[] = [],
+): EstimationComputed {
+  const qty = Math.max(est.quantity || 0, 0)
+  const weight = blankMassKg(
+    est.rawMaterialForm,
+    est.materialShapeDims,
+    est.materialDensity,
+    est.cuttingAllowance || 0,
+    est.machiningAllowance || 0,
+  )
+  // Material: weight × rate, inflated by wastage, less scrap recovery.
+  const grossMaterial = weight * (est.materialRate || 0) * (1 + (est.wastagePercent || 0) / 100)
+  const materialCostPc = roundMoney(Math.max(grossMaterial - (est.scrapRecoveryPc || 0), 0))
+
+  const machiningCostPc = roundMoney(ops.reduce((s, op) => s + operationCostPc(op), 0))
+
+  const fixturesPc = qty > 0 ? (est.fixturesToolingCost || 0) / qty : est.fixturesToolingCost || 0
+  const otherCostPc = roundMoney(
+    fixturesPc +
+      (est.inspectionCostPc || 0) +
+      (est.overheadCostPc || 0) +
+      (est.labourCostPc || 0) +
+      (est.packingCostPc || 0) +
+      (est.transportCostPc || 0) +
+      (est.outsourceCostPc || 0) +
+      (est.otherCostPc || 0),
+  )
+
+  const baseCostPc = roundMoney(materialCostPc + machiningCostPc + otherCostPc)
+  // Rejection allowance inflates cost (you must make extra to cover scrap).
+  const rejectionCostPc = roundMoney(baseCostPc * ((est.rejectionPercent || 0) / 100))
+  const totalCostPc = roundMoney(baseCostPc + rejectionCostPc)
+
+  const sellingPricePc = sellingPriceFromCost(
+    totalCostPc,
+    est.pricingMethod,
+    est.markupPercent,
+    est.marginPercent,
+  )
+  const profitPc = roundMoney(sellingPricePc - totalCostPc)
+  const marginPctEffective = sellingPricePc > 0 ? roundMoney((profitPc / sellingPricePc) * 100) : 0
+  const markupPctEffective = totalCostPc > 0 ? roundMoney((profitPc / totalCostPc) * 100) : 0
+
+  return {
+    materialWeightKg: weight,
+    materialCostPc,
+    machiningCostPc,
+    otherCostPc,
+    baseCostPc,
+    rejectionCostPc,
+    totalCostPc,
+    sellingPricePc,
+    profitPc,
+    marginPctEffective,
+    markupPctEffective,
+    totalCost: roundMoney(totalCostPc * qty),
+    totalSelling: roundMoney(sellingPricePc * qty),
+    totalProfit: roundMoney(profitPc * qty),
+  }
+}
+
+// ---- Quotation totals ------------------------------------------------------
+export function quotationLineNet(
+  line: Pick<QuotationLine, 'quantity' | 'unitPrice' | 'discountPercent'>,
+): number {
+  const gross = (line.quantity || 0) * (line.unitPrice || 0)
+  return roundMoney(gross * (1 - (line.discountPercent || 0) / 100))
+}
+
+export interface QuotationComputed {
+  subtotal: number // Σ qty×price (before discount)
+  discountTotal: number
+  lineNet: number // Σ discounted line totals
+  taxableValue: number // lineNet + packing + freight
+  cgstAmount: number
+  sgstAmount: number
+  igstAmount: number
+  totalTax: number
+  grandTotal: number
+}
+
+// Header-level GST (mirrors the invoice model): the form sets CGST+SGST (intra-
+// state) OR IGST (inter-state) percentages; tax applies to the taxable value
+// (discounted lines + packing + freight). State-based intra/inter selection is
+// done in the form from the shop vs customer state codes.
+export function computeQuotation(
+  q: Pick<
+    Quotation,
+    'packingCharge' | 'freightCharge' | 'cgstPercent' | 'sgstPercent' | 'igstPercent'
+  >,
+  lines: QuotationLine[] = [],
+): QuotationComputed {
+  const subtotal = roundMoney(lines.reduce((s, l) => s + (l.quantity || 0) * (l.unitPrice || 0), 0))
+  const lineNet = roundMoney(lines.reduce((s, l) => s + quotationLineNet(l), 0))
+  const discountTotal = roundMoney(subtotal - lineNet)
+  const taxableValue = roundMoney(lineNet + (q.packingCharge || 0) + (q.freightCharge || 0))
+  const cgstAmount = roundMoney((taxableValue * (q.cgstPercent || 0)) / 100)
+  const sgstAmount = roundMoney((taxableValue * (q.sgstPercent || 0)) / 100)
+  const igstAmount = roundMoney((taxableValue * (q.igstPercent || 0)) / 100)
+  const totalTax = roundMoney(cgstAmount + sgstAmount + igstAmount)
+  return {
+    subtotal,
+    discountTotal,
+    lineNet,
+    taxableValue,
+    cgstAmount,
+    sgstAmount,
+    igstAmount,
+    totalTax,
+    grandTotal: roundMoney(taxableValue + totalTax),
+  }
+}
+
+// GST state code = first two characters of a GSTIN (e.g. "27…" → Maharashtra).
+export function stateCodeFromGstin(gstin?: string): string | undefined {
+  if (!gstin) return undefined
+  const code = gstin.trim().slice(0, 2)
+  return /^\d{2}$/.test(code) ? code : undefined
+}
+
+// A quotation is expired when its expiry date is strictly before today.
+export function isQuotationExpired(expiryDate: string | undefined, todayIso: string): boolean {
+  if (!expiryDate) return false
+  return expiryDate < todayIso
 }

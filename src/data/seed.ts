@@ -47,6 +47,8 @@ export const DEFAULT_SETTINGS: Settings = {
     payment: 'PAY-{FY}-{####}',
     expense: 'EXP-{FY}-{####}',
     dc: 'DC-{FY}-{####}',
+    estimation: 'EST-{YYYY}-{####}',
+    quotation: 'QT-{YYYY}-{####}',
   },
   company: {
     name: 'My Machine Shop Manager',

@@ -116,6 +116,14 @@ export type PermKey =
   | 'FG_MOVE'
   | 'DISPATCH_VIEW'
   | 'DISPATCH_EXECUTE'
+  // Estimation & Quotation (migrations 0087/0088)
+  | 'ESTIMATION_VIEW'
+  | 'ESTIMATION_CREATE'
+  | 'ESTIMATION_APPROVE'
+  | 'QUOTATION_VIEW'
+  | 'QUOTATION_CREATE'
+  | 'QUOTATION_APPROVE'
+  | 'QUOTATION_CONVERT'
 
 export interface AccessRow {
   permission_key: PermKey
