@@ -482,6 +482,7 @@ export const maps = {
       jobId: 'job_id',
       reference: 'reference',
       vehicleNo: 'vehicle_no',
+      driverEmployeeId: 'driver_employee_id',
       lines: 'lines',
       notes: 'notes',
       status: 'status',

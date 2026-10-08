@@ -482,6 +482,7 @@ export interface DeliveryChallan extends AuditFields {
   jobId?: ID
   reference?: string // customer PO / reference
   vehicleNo?: string
+  driverEmployeeId?: ID // HRM employee who drove/handled the dispatch (0084)
   lines: DcLine[]
   notes?: string
   status: DcStatus

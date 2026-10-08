@@ -15,6 +15,7 @@ import {
   Truck,
 } from 'lucide-react'
 import type { DeliveryChallan, DcLine, InvoiceLine } from '@/types'
+import { EmployeePicker } from '@/features/hrm/components/EmployeePicker'
 import { downloadChallanPdf } from './challanPdf'
 import {
   useChallans,
@@ -546,6 +547,7 @@ function DcForm({ dc, onClose }: { dc: DeliveryChallan | null; onClose: () => vo
   const [jobId, setJobId] = useState(dc?.jobId ?? '')
   const [reference, setReference] = useState(dc?.reference ?? '')
   const [vehicleNo, setVehicleNo] = useState(dc?.vehicleNo ?? '')
+  const [driverEmployeeId, setDriverEmployeeId] = useState(dc?.driverEmployeeId ?? '')
   const [notes, setNotes] = useState(dc?.notes ?? '')
   // Challan number: auto (server sequential counter) by default, or a manual
   // override the user types in. Auto mode never consumes the counter early.
@@ -665,6 +667,7 @@ function DcForm({ dc, onClose }: { dc: DeliveryChallan | null; onClose: () => vo
             dcNo: editDcNo.trim(),
             reference: reference || undefined,
             vehicleNo: vehicleNo || undefined,
+            driverEmployeeId: driverEmployeeId || undefined,
             notes: notes || undefined,
           },
         })
@@ -715,10 +718,14 @@ function DcForm({ dc, onClose }: { dc: DeliveryChallan | null; onClose: () => vo
             lines: payloadLines,
           },
         })
-        // The full-edit RPC doesn't carry the challan number, so persist a change
-        // to it with a direct column update.
-        if (editDcNo.trim() !== dc.dcNo) {
-          await updateChallan.mutateAsync({ id: dc.id, patch: { dcNo: editDcNo.trim() } })
+        // The full-edit RPC doesn't carry the challan number or driver, so persist
+        // those with a direct column update.
+        const extra: Partial<DeliveryChallan> = {}
+        if (editDcNo.trim() !== dc.dcNo) extra.dcNo = editDcNo.trim()
+        if ((driverEmployeeId || undefined) !== dc.driverEmployeeId)
+          extra.driverEmployeeId = driverEmployeeId || undefined
+        if (Object.keys(extra).length) {
+          await updateChallan.mutateAsync({ id: dc.id, patch: extra })
         }
         toast.success('Challan updated — stock re-synced')
         onClose()
@@ -740,7 +747,7 @@ function DcForm({ dc, onClose }: { dc: DeliveryChallan | null; onClose: () => vo
           return
         }
       }
-      await createChallan.mutateAsync({
+      const created = await createChallan.mutateAsync({
         dcNo,
         date,
         companyId,
@@ -751,6 +758,11 @@ function DcForm({ dc, onClose }: { dc: DeliveryChallan | null; onClose: () => vo
         status: 'Open',
         lines: payloadLines,
       })
+      // Driver is a plain column set via the direct update path (the dispatch RPC
+      // doesn't carry it) once the challan exists.
+      if (driverEmployeeId && created?.id) {
+        await updateChallan.mutateAsync({ id: created.id, patch: { driverEmployeeId } })
+      }
       toast.success('Challan created — stock dispatched')
       onClose()
     } catch (e) {
@@ -884,6 +896,9 @@ function DcForm({ dc, onClose }: { dc: DeliveryChallan | null; onClose: () => vo
         </Field>
         <Field label="Vehicle No.">
           <Input value={vehicleNo} onChange={(e) => setVehicleNo(e.target.value)} />
+        </Field>
+        <Field label="Driver / Handler" hint="Optional — HRM employee">
+          <EmployeePicker value={driverEmployeeId} onChange={setDriverEmployeeId} />
         </Field>
       </div>
 
