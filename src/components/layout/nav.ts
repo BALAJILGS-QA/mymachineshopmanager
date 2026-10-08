@@ -182,6 +182,12 @@ export const NAV_GROUPS: NavGroup[] = [
       { to: '/app/hrm/performance', label: 'Performance', icon: Target, short: 'Reviews' },
       { to: '/app/hrm/training', label: 'Training', icon: GraduationCap, short: 'Training' },
       { to: '/app/hrm/reports', label: 'HR Reports', icon: BarChart3, short: 'Reports' },
+      {
+        to: '/app/hrm/department-report',
+        label: 'Department Overview',
+        icon: Building2,
+        short: 'Depts',
+      },
       { to: '/app/hrm/settings', label: 'HR Settings', icon: SettingsIcon, short: 'HR Setup' },
     ],
   },

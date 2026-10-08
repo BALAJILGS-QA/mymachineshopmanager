@@ -10,6 +10,10 @@ export function useJobInspections(jobId: string) {
   })
 }
 
+export function useAllInspections() {
+  return useQuery({ queryKey: qk.qc.all, queryFn: api.listAllInspections })
+}
+
 export function useInspectionDetail(inspectionId: string) {
   return useQuery({
     queryKey: qk.qc.inspection(inspectionId),

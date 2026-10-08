@@ -15,6 +15,16 @@ import type {
   QcMeasurement,
 } from '@/types'
 
+// All inspections across the tenant (RLS-scoped) — for department/QC reporting.
+export async function listAllInspections(): Promise<QcInspection[]> {
+  const { data, error } = await sb()
+    .from(maps.qcInspections.table)
+    .select('*')
+    .order('inspected_at', { ascending: false })
+  if (error) throw error
+  return (data ?? []).map((r) => fromRow<QcInspection>(r as Row, maps.qcInspections))
+}
+
 export async function listInspectionsForJob(jobId: string): Promise<QcInspection[]> {
   const { data, error } = await sb()
     .from(maps.qcInspections.table)
