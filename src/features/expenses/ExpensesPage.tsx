@@ -14,6 +14,8 @@ import {
   Wallet,
 } from 'lucide-react'
 import type { Expense, PaymentMethod } from '@/types'
+import { EmployeePicker, employeeName } from '@/features/hrm/components/EmployeePicker'
+import { useEmployees } from '@/features/hrm/hooks/useHrm'
 import {
   useExpenses,
   useCreateExpense,
@@ -601,6 +603,7 @@ interface ToolLine {
 }
 
 function ExpenseForm({ expense, onClose }: { expense: Expense | null; onClose: () => void }) {
+  const { data: employeesForPayee = [] } = useEmployees()
   const toast = useToast()
   const settings = useSettings().data
   // Always offer the built-in cash-withdrawal category, even on installs whose
@@ -645,6 +648,7 @@ function ExpenseForm({ expense, onClose }: { expense: Expense | null; onClose: (
     method: expense?.method ?? ('Cash' as PaymentMethod),
     vendor: expense?.vendor ?? '',
     payee: expense?.payee ?? '',
+    payeeEmployeeId: expense?.payeeEmployeeId ?? '',
     reference: expense?.reference ?? '',
     companyId: expense?.companyId ?? '',
     jobId: expense?.jobId ?? '',
@@ -782,6 +786,7 @@ function ExpenseForm({ expense, onClose }: { expense: Expense | null; onClose: (
         method: form.method,
         vendor: form.vendor || undefined,
         payee: form.payee || undefined,
+        payeeEmployeeId: form.payeeEmployeeId || undefined,
         reference: form.reference || undefined,
         companyId: form.companyId || undefined,
         jobId: form.jobId || undefined,
@@ -1248,6 +1253,22 @@ function ExpenseForm({ expense, onClose }: { expense: Expense | null; onClose: (
               value={form.payee}
               onChange={(e) => set('payee', e.target.value)}
               placeholder="e.g. Self / person or firm paid"
+            />
+          </Field>
+          <Field
+            label="Payee staff member"
+            hint="Optional — link a reimbursement/advance to an employee"
+          >
+            <EmployeePicker
+              value={form.payeeEmployeeId}
+              onChange={(employeeId) => {
+                set('payeeEmployeeId', employeeId)
+                // Auto-fill the free-text payee from the chosen employee when blank.
+                if (employeeId) {
+                  const e = employeesForPayee.find((x) => x.id === employeeId)
+                  if (e && !form.payee.trim()) set('payee', employeeName(e))
+                }
+              }}
             />
           </Field>
           <Field label="Vendor / Supplier">

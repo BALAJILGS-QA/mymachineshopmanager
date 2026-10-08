@@ -577,6 +577,7 @@ export interface Expense extends AuditFields {
   // Receiver name — who the money was paid to (e.g. self for a cash withdrawal).
   // Distinct from vendor/supplier (who a purchase was made from).
   payee?: string
+  payeeEmployeeId?: ID // optional link to the HRM employee registry (0083)
   reference?: string
   companyId?: ID
   jobId?: ID

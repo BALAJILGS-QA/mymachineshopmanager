@@ -573,6 +573,7 @@ export const maps = {
       method: 'method',
       vendor: 'vendor',
       payee: 'payee',
+      payeeEmployeeId: 'payee_employee_id',
       reference: 'reference',
       companyId: 'company_id',
       jobId: 'job_id',
