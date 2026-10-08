@@ -21,6 +21,7 @@ export interface ContactMessage {
   company?: string
   message: string
   status: ContactStatus
+  assignedToEmployeeId?: string
   createdAt: string
 }
 
@@ -46,6 +47,7 @@ function toRow(c: ContactMessage): Row {
     company: c.company ?? null,
     message: c.message,
     status: c.status,
+    assigned_to_employee_id: c.assignedToEmployeeId ?? null,
     created_at: c.createdAt,
   }
 }
@@ -59,6 +61,7 @@ function fromRow(r: Row): ContactMessage {
     company: (r.company as string) ?? undefined,
     message: String(r.message ?? ''),
     status: (r.status as ContactStatus) ?? 'new',
+    assignedToEmployeeId: (r.assigned_to_employee_id as string) ?? undefined,
     createdAt: String(r.created_at ?? new Date().toISOString()),
   }
 }
@@ -124,6 +127,23 @@ export async function updateContactStatus(id: string, status: ContactStatus): Pr
     logger.warn('Contact status update to Supabase failed — updating locally', error)
   }
   writeLocal(readLocal().map((c) => (c.id === id ? { ...c, status } : c)))
+}
+
+// Assign (or clear) the employee owner of a message.
+export async function assignContact(id: string, employeeId: string | null): Promise<void> {
+  if (isSupabaseEnabled() && supabase) {
+    const { error } = await supabase
+      .from(TABLE)
+      .update({ assigned_to_employee_id: employeeId })
+      .eq('id', id)
+    if (!error) return
+    logger.warn('Contact assign to Supabase failed — updating locally', error)
+  }
+  writeLocal(
+    readLocal().map((c) =>
+      c.id === id ? { ...c, assignedToEmployeeId: employeeId ?? undefined } : c,
+    ),
+  )
 }
 
 export async function deleteContact(id: string): Promise<void> {

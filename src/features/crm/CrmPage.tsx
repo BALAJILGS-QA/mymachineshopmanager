@@ -1,7 +1,13 @@
 import { useMemo, useState } from 'react'
 import { Mail, Phone, Search, Trash2, Users } from 'lucide-react'
 import type { ContactMessage, ContactStatus } from './contactsApi'
-import { useContacts, useDeleteContact, useUpdateContactStatus } from './hooks/useContacts'
+import {
+  useContacts,
+  useDeleteContact,
+  useUpdateContactStatus,
+  useAssignContact,
+} from './hooks/useContacts'
+import { EmployeePicker } from '@/features/hrm/components/EmployeePicker'
 import { toUserMessage } from '@/lib/api/errors'
 import { fmtDateTime } from '@/lib/format'
 import { PageHeader } from '@/components/common/PageHeader'
@@ -29,6 +35,7 @@ export function CrmPage() {
   const { data: contacts = [], isLoading } = useContacts()
   const updateStatus = useUpdateContactStatus()
   const deleteContact = useDeleteContact()
+  const assign = useAssignContact()
   const toast = useToast()
   const confirm = useConfirm()
   const [search, setSearch] = useState('')
@@ -136,6 +143,17 @@ export function CrmPage() {
             <option value="closed">Closed</option>
           </Select>
         </div>
+      ),
+    },
+    {
+      key: 'owner',
+      header: 'Owner',
+      render: (c) => (
+        <EmployeePicker
+          className="h-8 w-[9rem] py-1 text-xs"
+          value={c.assignedToEmployeeId ?? ''}
+          onChange={(employeeId) => assign.mutate({ id: c.id, employeeId: employeeId || null })}
+        />
       ),
     },
     {

@@ -18,6 +18,15 @@ export function useUpdateContactStatus() {
   })
 }
 
+export function useAssignContact() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, employeeId }: { id: string; employeeId: string | null }) =>
+      api.assignContact(id, employeeId),
+    onSuccess: () => qc.invalidateQueries({ queryKey: qk.contacts.all }),
+  })
+}
+
 export function useDeleteContact() {
   const qc = useQueryClient()
   return useMutation({
